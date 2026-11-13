@@ -1,0 +1,28 @@
+{
+  "product": "NeuroDMS",
+  "version": "1.0.0",
+  "channel": "stable",
+  "releasedAt": "2026-11-13T23:54:00+08:00",
+  "git": {
+    "tag": "v1.0.0",
+    "branch": "main",
+    "resolve": "git rev-parse v1.0.0^{commit}"
+  },
+  "image": {
+    "name": "docvault/server:v1.0.0",
+    "id": "sha256:ee39086ef063f9838dded2a329550b2754a173164ac511f512903073eb31e543",
+    "runningEnv": "dev（同一镜像 ID，即本版）"
+  },
+  "database": {
+    "engine": "PostgreSQL 18",
+    "migrationHead": "0044_space_transfer.sql",
+    "dump": "docker/data/backup/ndms-v1.0.0-20261113-2352.dump"
+  },
+  "sourceArchive": "docker/data/backup/neurodms-src-v1.0.0.tar.gz",
+  "frontend": {
+    "entry": "assets/main-B03vfT0V.js",
+    "note": "未入库，由 npm ci && npm run build 重建"
+  },
+  "toolchain": { "go": "1.26.3", "node": "22.22.2" },
+  "rollback": "docs/37-版本发布-V1.0.0-与回退手册.md"
+}
