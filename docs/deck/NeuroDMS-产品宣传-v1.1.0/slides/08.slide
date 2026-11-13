@@ -1,0 +1,62 @@
+<Slide style={{ width: 1280, height: 720, background: '#F5F7F2', padding: '60px', fontFamily: '"Source Han Sans SC", "Microsoft YaHei", Arial, sans-serif', position: 'relative' }}>
+    <Box style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 34, fontWeight: 'bold', color: '#0A120E' }}>能改配置的人，不该能改审计</Text>
+        <Text style={{ fontSize: 14, color: '#66756D', marginTop: 10 }}>方案 · 治理</Text>
+    </Box>
+    <Box style={{ width: '100%', height: 1, background: '#DDE4DC', marginTop: 14 }} />
+
+    <Box style={{ flexDirection: 'row', gap: 36, marginTop: 30, height: 440 }}>
+        <Box style={{ width: 660, flexDirection: 'column' }}>
+            <Box style={{ flexDirection: 'row', background: '#0F5C40', borderRadius: 8, padding: '12px 0' }}>
+                <Text style={{ fontSize: 16, color: '#DDE4DC', width: 180, paddingLeft: 16 }}>角色</Text>
+                <Text style={{ fontSize: 16, color: '#DDE4DC', width: 160, textAlign: 'center' }}>成员与参数</Text>
+                <Text style={{ fontSize: 16, color: '#DDE4DC', width: 160, textAlign: 'center' }}>密级与审批</Text>
+                <Text style={{ fontSize: 16, color: '#DDE4DC', width: 160, textAlign: 'center' }}>审计与证据</Text>
+            </Box>
+            {[
+                { r: '系统管理员', a: '●', b: '—', c: '—', note: '建号、角色、租户参数、目录认证' },
+                { r: '安全管理员', a: '—', b: '●', c: '—', note: '密级定义、标签策略、降密审批' },
+                { r: '审计管理员', a: '—', b: '—', c: '●', note: '只读审计、完整性校验、导出证据' },
+            ].map((x, i) => (
+                <Box key={i} style={{ flexDirection: 'row', alignItems: 'center', padding: '20px 0', borderBottom: '1px solid #DDE4DC' }}>
+                    <Box style={{ width: 180, paddingLeft: 16, flexDirection: 'column', gap: 4 }}>
+                        <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#0A120E' }}>{x.r}</Text>
+                        <Text style={{ fontSize: 14, color: '#A9B5AE' }}>{x.note}</Text>
+                    </Box>
+                    {[x.a, x.b, x.c].map((v, j) => (
+                        <Text key={j} style={{ fontSize: 20, width: 160, textAlign: 'center', color: v === '●' ? '#0F5C40' : '#A9B5AE' }}>{v}</Text>
+                    ))}
+                </Box>
+            ))}
+            <Text style={{ fontSize: 16, color: '#66756D', marginTop: 14, lineHeight: 1.5 }}>
+                管理角色管的是<span style={{ fontWeight: 'bold', color: '#0A120E' }}>配置</span>，不是<span style={{ fontWeight: 'bold', color: '#0A120E' }}>内容</span>：系统管理员默认看不到别人空间里的文件。
+            </Text>
+        </Box>
+
+        <Box style={{ flex: 1, flexDirection: 'column', gap: 14 }}>
+            <Box style={{ background: '#EEF1EA', borderRadius: 10, padding: '18px 20px', flexDirection: 'column', gap: 6 }}>
+                <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#0F5C40' }}>角色冲突直接冻结</Text>
+                <Text style={{ fontSize: 16, color: '#3F5148', lineHeight: 1.5 }}>
+                    同时持有系统管理员与审计管理员，所有管理接口返回 403 并写审计——不是隐藏按钮。
+                </Text>
+            </Box>
+            <Box style={{ background: '#EEF1EA', borderRadius: 10, padding: '18px 20px', flexDirection: 'column', gap: 6 }}>
+                <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#0F5C40' }}>不能自批</Text>
+                <Text style={{ fontSize: 16, color: '#3F5148', lineHeight: 1.5 }}>
+                    外发审批与降密审批都不能由发起人自己通过，接口层直接拒绝并留痕。
+                </Text>
+            </Box>
+            <Box style={{ background: '#EEF1EA', borderRadius: 10, padding: '18px 20px', flexDirection: 'column', gap: 6 }}>
+                <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#0F5C40' }}>审计写不进，操作就不算成功</Text>
+                <Text style={{ fontSize: 16, color: '#3F5148', lineHeight: 1.5 }}>
+                    关键操作在审计落库失败时直接报错，宁可让用户重试，也不留"做了但没记录"。
+                </Text>
+            </Box>
+        </Box>
+    </Box>
+
+    <Box style={{ position: 'absolute', left: 60, right: 60, top: 676, flexDirection: 'row', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 14, color: '#A9B5AE' }}>NeuroDMS · 产品概览</Text>
+        <Text style={{ fontSize: 14, color: '#A9B5AE' }}>08</Text>
+    </Box>
+</Slide>

@@ -1,0 +1,100 @@
+<Slide style={{ width: 1280, height: 720, background: '#F5F7F2', padding: '60px', fontFamily: '"Source Han Sans SC", "Microsoft YaHei", Arial, sans-serif', position: 'relative' }}>
+    <Box style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 34, fontWeight: 'bold', color: '#0A120E' }}>谁最需要它：按外发频次与合规强度定位</Text>
+        <Text style={{ fontSize: 14, color: '#66756D', marginTop: 10 }}>适用场景</Text>
+    </Box>
+    <Box style={{ width: '100%', height: 1, background: '#DDE4DC', marginTop: 14 }} />
+
+    <Box style={{ flexDirection: 'row', gap: 24, marginTop: 14 }}>
+        {/* 左侧：真坐标轴。两个维度是所有客户在选型时最先问的两个问题 */}
+        <Box style={{ width: 700, flexDirection: 'column' }}>
+            <svg width={700} height={430} viewBox='0 0 700 430'>
+                {/* 网格 */}
+                {[147, 224, 301, 378, 455, 532, 609].map((x) => (
+                    <line key={'v' + x} x1={x} y1='30' x2={x} y2='370' stroke='#DDE4DC' strokeWidth='0.8' strokeDasharray='3 5' />
+                ))}
+                {[98, 166, 234, 302].map((y) => (
+                    <line key={'h' + y} x1='70' y1={y} x2='665' y2={y} stroke='#DDE4DC' strokeWidth='0.8' strokeDasharray='3 5' />
+                ))}
+
+                {/* 中轴：把四象限分开 */}
+                <line x1='365' y1='30' x2='365' y2='370' stroke='#A9B5AE' strokeWidth='1' />
+                <line x1='70' y1='200' x2='665' y2='200' stroke='#A9B5AE' strokeWidth='1' />
+
+                {/* 象限标注 */}
+                <text x='80' y='44' fontSize='13' fill='#66756D'>低频 · 极敏感</text>
+                <text x='655' y='44' fontSize='13' fill='#66756D' textAnchor='end'>高频 · 高敏感</text>
+                <text x='80' y='356' fontSize='13' fill='#A9B5AE'>低频 · 低敏感</text>
+                <text x='655' y='356' fontSize='13' fill='#A9B5AE' textAnchor='end'>高频 · 低敏感</text>
+
+                {/* 轴 */}
+                <line x1='70' y1='370' x2='668' y2='370' stroke='#0A120E' strokeWidth='1.6' />
+                <line x1='70' y1='370' x2='70' y2='28' stroke='#0A120E' strokeWidth='1.6' />
+
+                {/* 行业点位 */}
+                <circle cx='176' cy='60' r='6' fill='#0F5C40' />
+                <text x='188' y='65' fontSize='15' fill='#0A120E'>政企 / 军工</text>
+
+                <circle cx='330' cy='71' r='6' fill='#0F5C40' />
+                <text x='342' y='76' fontSize='15' fill='#0A120E'>医药研发</text>
+
+                <circle cx='530' cy='91' r='6' fill='#0F5C40' />
+                <text x='542' y='96' fontSize='15' fill='#0A120E'>设计院</text>
+
+                <circle cx='613' cy='118' r='7' fill='#0F5C40' stroke='#C6EE4B' strokeWidth='2.5' />
+                <text x='601' y='123' fontSize='15' fontWeight='bold' fill='#0A120E' textAnchor='end'>律所 / 咨询</text>
+
+                <circle cx='459' cy='159' r='6' fill='#0F5C40' />
+                <text x='471' y='164' fontSize='15' fill='#0A120E'>制造业</text>
+
+                <circle cx='566' cy='254' r='6' fill='#66756D' />
+                <text x='554' y='259' fontSize='15' fill='#0A120E' textAnchor='end'>软件 / 互联网</text>
+
+                <circle cx='601' cy='302' r='6' fill='#66756D' />
+                <text x='589' y='307' fontSize='15' fill='#0A120E' textAnchor='end'>跨境电商</text>
+
+                <circle cx='294' cy='288' r='6' fill='#66756D' />
+                <text x='306' y='293' fontSize='15' fill='#0A120E'>教育培训</text>
+
+                <circle cx='153' cy='322' r='6' fill='#A9B5AE' />
+                <text x='165' y='327' fontSize='15' fill='#66756D'>内部归档</text>
+
+                {/* 轴说明 */}
+                <text x='660' y='398' fontSize='13' fill='#0F5C40' textAnchor='end'>外发频次 →　偶尔　→　每天</text>
+                <text x='70' y='18' fontSize='13' fill='#0F5C40'>↑ 合规与密级要求　低 → 高</text>
+            </svg>
+        </Box>
+
+        {/* 右侧：痛点。点的位置说明「谁需要」，右侧说明「需要什么」 */}
+        <Box style={{ flex: 1, flexDirection: 'column', gap: 12, paddingTop: 6 }}>
+            <Text style={{ fontSize: 14, color: '#66756D', letterSpacing: 2 }}>同一个问题的三种说法</Text>
+            {[
+                ['「现在还有谁能打开？」', '文件已经发给客户、供应商、离职员工，没有任何一处能回答这个问题。'],
+                ['「审批卡在微信里」', '谁批的、批的是哪一版，事后只剩聊天记录，对不上文件。'],
+                ['「审计一次要三天」', '等保与内审要「谁在什么时候下载了什么」，只能人工翻日志。'],
+            ].map(([q, d], i) => (
+                <Box key={i} style={{ background: '#FFFFFF', border: '1px solid #DDE4DC', borderRadius: 8, padding: '12px 14px', flexDirection: 'column', gap: 5 }}>
+                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#0F5C40', lineHeight: 1.4 }}>{q}</Text>
+                    <Text style={{ fontSize: 14, color: '#3F5148', lineHeight: 1.5 }}>{d}</Text>
+                </Box>
+            ))}
+            <Box style={{ background: '#C6EE4B', borderRadius: 8, padding: '10px 14px' }}>
+                <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#0A120E', lineHeight: 1.5 }}>
+                    右上角这几类客户的共同点：不是没有存文件的地方，是外发没有通道。
+                </Text>
+            </Box>
+        </Box>
+    </Box>
+
+    <Box style={{ marginTop: 6, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+        <Box style={{ width: 3, height: 20, background: '#0F5C40' }} />
+        <Text style={{ fontSize: 16, color: '#0A120E', lineHeight: 1.5 }}>
+            越靠右上，越需要把外发当成一条<Text style={{ fontWeight: 'bold' }}>有闸门、有票据、有留痕的通道</Text>，而不是一个下载按钮。
+        </Text>
+    </Box>
+
+    <Box style={{ position: 'absolute', left: 60, right: 60, top: 676, flexDirection: 'row', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 14, color: '#A9B5AE' }}>NeuroDMS · 产品概览</Text>
+        <Text style={{ fontSize: 14, color: '#A9B5AE' }}>12</Text>
+    </Box>
+</Slide>

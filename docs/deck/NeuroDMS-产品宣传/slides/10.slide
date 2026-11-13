@@ -1,0 +1,57 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', padding: '60px', fontFamily: '"Microsoft YaHei", Arial, sans-serif', position: 'relative' }}>
+    <Box style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 34, fontWeight: 'bold', color: '#16202E' }}>谁最需要它：按外发频次与密级分四类</Text>
+        <Text style={{ fontSize: 14, color: '#5B7899', marginTop: 10 }}>适用场景</Text>
+    </Box>
+    <Box style={{ width: '100%', height: 1, background: '#D8DEE7', marginTop: 14 }} />
+
+    <Box style={{ flexDirection: 'row', marginTop: 20, alignItems: 'center', gap: 10 }}>
+        <Text style={{ fontSize: 14, color: '#8A9BB2' }}>密级要求</Text>
+        <Text style={{ fontSize: 14, color: '#8A9BB2' }}>低 → 高</Text>
+    </Box>
+
+    <Box style={{ flexDirection: 'column', gap: 10, marginTop: 8 }}>
+        <Box style={{ flexDirection: 'row', gap: 10 }}>
+            {[
+                { t: '低频 · 高密', who: '医药研发 / 并购尽调', pain: '极少数文件极高敏感，一次外流就无法挽回。', how: '绝密与核心禁止外发；审批 + 只读 + 一次性链接' },
+                { t: '高频 · 高密', who: '设计院 / 制造业', pain: '一份图纸转手多次，谁看过、发给了谁说不清。', how: '外链 + 水印 + 来源网段 + 7 天有效期' },
+            ].map((q, i) => (
+                <Box key={i} style={{ flex: 1, background: i === 1 ? '#1B3B6F' : '#F4F6F9', borderRadius: 10, padding: '18px 20px', flexDirection: 'column', gap: 8 }}>
+                    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                        <Text style={{ fontSize: 14, color: i === 1 ? '#C08A3E' : '#8A9BB2', letterSpacing: 1 }}>{q.t}</Text>
+                        <Box style={{ flex: 1, height: 1, background: i === 1 ? '#2C4A75' : '#DDE4EC' }} />
+                    </Box>
+                    <Text style={{ fontSize: 22, fontWeight: 'bold', color: i === 1 ? '#FFFFFF' : '#16202E' }}>{q.who}</Text>
+                    <Text style={{ fontSize: 17, color: i === 1 ? '#C2D2E6' : '#4A5B6E', lineHeight: 1.5 }}>{q.pain}</Text>
+                    <Text style={{ fontSize: 16, color: i === 1 ? '#9FB6D4' : '#5B7899', lineHeight: 1.5 }}>{q.how}</Text>
+                </Box>
+            ))}
+        </Box>
+        <Box style={{ flexDirection: 'row', gap: 10 }}>
+            {[
+                { t: '低频 · 低密', who: '内部归档 / 合规留底', pain: '要的是找得到、不丢版本，权限别比业务复杂。', how: '版本 + 搜索 + 目录继承，先跑起来再谈策略' },
+                { t: '高频 · 低密', who: '律所 / 咨询 / 代账', pain: '每天给客户发材料，靠邮件和网盘，出事没记录。', how: '交付链接 + 有效期 + 下载开关 + 访问留痕' },
+            ].map((q, i) => (
+                <Box key={i} style={{ flex: 1, background: '#F4F6F9', borderRadius: 10, padding: '18px 20px', flexDirection: 'column', gap: 8 }}>
+                    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                        <Text style={{ fontSize: 14, color: '#8A9BB2', letterSpacing: 1 }}>{q.t}</Text>
+                        <Box style={{ flex: 1, height: 1, background: '#DDE4EC' }} />
+                    </Box>
+                    <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#16202E' }}>{q.who}</Text>
+                    <Text style={{ fontSize: 17, color: '#4A5B6E', lineHeight: 1.5 }}>{q.pain}</Text>
+                    <Text style={{ fontSize: 16, color: '#5B7899', lineHeight: 1.5 }}>{q.how}</Text>
+                </Box>
+            ))}
+        </Box>
+    </Box>
+
+    <Box style={{ marginTop: 14, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <Text style={{ fontSize: 14, color: '#8A9BB2' }}>外发频次</Text>
+        <Text style={{ fontSize: 14, color: '#8A9BB2' }}>低 → 高（从左到右）</Text>
+    </Box>
+
+    <Box style={{ position: 'absolute', left: 60, right: 60, top: 676, flexDirection: 'row', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 14, color: '#8A9BB2' }}>NeuroDMS · 产品概览</Text>
+        <Text style={{ fontSize: 14, color: '#8A9BB2' }}>10</Text>
+    </Box>
+</Slide>

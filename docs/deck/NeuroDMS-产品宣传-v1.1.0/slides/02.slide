@@ -1,0 +1,46 @@
+<Slide style={{ width: 1280, height: 720, background: '#F5F7F2', padding: '60px', fontFamily: '"Source Han Sans SC", "Microsoft YaHei", Arial, sans-serif', position: 'relative' }}>
+    <Box style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 34, fontWeight: 'bold', color: '#0A120E' }}>四类失控，都发生在文件离开系统之后</Text>
+        <Text style={{ fontSize: 14, color: '#66756D', marginTop: 10 }}>问题</Text>
+    </Box>
+    <Box style={{ width: '100%', height: 1, background: '#DDE4DC', marginTop: 14 }} />
+
+    <Box style={{ flexDirection: 'row', gap: 32, marginTop: 26, height: 470 }}>
+        <Box style={{ width: 368, height: '100%', background: '#0F5C40', borderRadius: 12, padding: '34px 30px', justifyContent: 'space-between' }}>
+            <Box style={{ flexDirection: 'column', gap: 20 }}>
+                <Text style={{ fontSize: 14, color: '#A9B5AE', letterSpacing: 3 }}>现状</Text>
+                <Text style={{ fontSize: 40, fontWeight: 'bold', color: '#FFFFFF', lineHeight: 1.25 }}>
+                    文件不缺，<br />缺的是边界
+                </Text>
+            </Box>
+            <Box style={{ flexDirection: 'column', gap: 14 }}>
+                <Box style={{ width: 48, height: 2, background: '#C6EE4B' }} />
+                <Text style={{ fontSize: 18, color: '#DDE4DC', lineHeight: 1.7 }}>
+                    四种失控最后都落到同一件事：<br />出事时没人能说清，它到底去了哪。
+                </Text>
+            </Box>
+        </Box>
+
+        <Box style={{ flex: 1, flexDirection: 'column', justifyContent: 'space-between' }}>
+            {[
+                { n: '01', t: '权限跟着文件夹走，不跟着内容走', d: '谁被拉进群谁就能看；外部顾问与离职员工，权限只增不减。' },
+                { n: '02', t: '外发靠截图和聊天工具，出去就不再受控', d: '链接一转发就扩散，没有有效期，也没有"发出去还能收回"。' },
+                { n: '03', t: '密级靠文件名，叫"机密"和真是机密没区别', d: '没有机制在打开前拦一次，敏感件与公开件走同一条通道。' },
+                { n: '04', t: '审计靠日志拼凑，说不清谁看了什么', d: '翻不出完整链条；日志可被有权限的人改写，不能对外举证。' },
+            ].map((it, i) => (
+                <Box key={i} style={{ flexDirection: 'row', gap: 20, padding: '18px 0', borderBottom: i < 3 ? '1px solid #DDE4DC' : 'none' }}>
+                    <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#0F5C40', width: 44 }}>{it.n}</Text>
+                    <Box style={{ flex: 1, flexDirection: 'column', gap: 8 }}>
+                        <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#0A120E', lineHeight: 1.35 }}>{it.t}</Text>
+                        <Text style={{ fontSize: 18, color: '#66756D', lineHeight: 1.55 }}>{it.d}</Text>
+                    </Box>
+                </Box>
+            ))}
+        </Box>
+    </Box>
+
+    <Box style={{ position: 'absolute', left: 60, right: 60, top: 676, flexDirection: 'row', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 14, color: '#A9B5AE' }}>NeuroDMS · 产品概览</Text>
+        <Text style={{ fontSize: 14, color: '#A9B5AE' }}>02</Text>
+    </Box>
+</Slide>

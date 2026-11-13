@@ -1,0 +1,51 @@
+<Slide style={{ width: 1280, height: 720, background: '#0A120E', padding: '60px', fontFamily: '"Source Han Sans SC", "Microsoft YaHei", Arial, sans-serif', position: 'relative' }}>
+    {/* 点阵母题：品牌「点阵与阶梯」的锐进调性，只在深底出现 */}
+    <Box style={{ position: 'absolute', top: 40, right: 40, width: 360, height: 360, opacity: 0.55 }}>
+        <svg width={360} height={360} viewBox='0 0 360 360'>
+            {Array.from({ length: 81 }).map((_, i) => (
+                <circle
+                    key={i}
+                    cx={20 + (i % 9) * 40}
+                    cy={20 + Math.floor(i / 9) * 40}
+                    r={1.8}
+                    fill='#C6EE4B'
+                    opacity={0.42}
+                />
+            ))}
+            {/* 阶梯：逐级抬升，对应「一株接一株长成林」 */}
+            <rect x='20' y='300' width='34' height='34' fill='#C6EE4B' opacity='0.9' />
+            <rect x='60' y='286' width='34' height='48' fill='#C6EE4B' opacity='0.62' />
+            <rect x='100' y='268' width='34' height='66' fill='#C6EE4B' opacity='0.4' />
+            <rect x='140' y='246' width='34' height='88' fill='#C6EE4B' opacity='0.24' />
+            <rect x='180' y='220' width='34' height='114' fill='#C6EE4B' opacity='0.14' />
+        </svg>
+    </Box>
+
+    <Box style={{ position: 'relative', zIndex: 1, height: '100%', flexDirection: 'column', justifyContent: 'space-between' }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+            <svg width={38} height={38} viewBox='0 0 100 100'>
+                <path d='M22 84 V20 L78 84 V32' stroke='#FFFFFF' strokeWidth='10' fill='none' strokeLinecap='round' strokeLinejoin='round' />
+                <circle cx='78' cy='20' r='10' fill='#C6EE4B' />
+            </svg>
+            <Text style={{ fontSize: 14, color: '#A9B5AE', letterSpacing: 4 }}>NEURODMS · 森莘科创</Text>
+        </Box>
+
+        <Box style={{ flexDirection: 'column' }}>
+            <Text style={{ fontSize: 66, fontWeight: 'bold', color: '#FFFFFF', lineHeight: 1.2 }}>
+                把文件管住，<br />把外发管住，把责任留痕
+            </Text>
+            <Box style={{ width: 620, height: 3, background: '#C6EE4B', marginTop: 32, marginBottom: 24 }} />
+            <Text style={{ fontSize: 21, color: '#DDE4DC', lineHeight: 1.6 }}>
+                一套文档内核，两种交付形态：SaaS 订阅与本地部署
+            </Text>
+            <Text style={{ fontSize: 15, color: '#A9B5AE', lineHeight: 1.6, marginTop: 10 }}>
+                对象级权限 · 七级密级 · 外发审批 · 不可篡改审计
+            </Text>
+        </Box>
+
+        <Box style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+            <Text style={{ fontSize: 14, color: '#A9B5AE', lineHeight: 1.4 }}>产品概览 v1.1.0 · 2026</Text>
+            <Text style={{ fontSize: 14, color: '#A9B5AE', lineHeight: 1.4 }}>SaaS / 本地部署</Text>
+        </Box>
+    </Box>
+</Slide>

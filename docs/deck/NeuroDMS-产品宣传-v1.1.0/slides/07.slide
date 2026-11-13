@@ -1,0 +1,41 @@
+<Slide style={{ width: 1280, height: 720, background: '#F5F7F2', padding: '60px', fontFamily: '"Source Han Sans SC", "Microsoft YaHei", Arial, sans-serif', position: 'relative' }}>
+    <Box style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 34, fontWeight: 'bold', color: '#0A120E' }}>一百多种格式，打开就看</Text>
+        <Text style={{ fontSize: 14, color: '#66756D', marginTop: 10 }}>方案 · 内容</Text>
+    </Box>
+    <Box style={{ width: '100%', height: 1, background: '#DDE4DC', marginTop: 14 }} />
+
+    <Box style={{ flexDirection: 'row', gap: 56, marginTop: 30, height: 460 }}>
+        <Box style={{ width: 380, flexDirection: 'column', justifyContent: 'center', gap: 6 }}>
+            <Box style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 10 }}>
+                <Text style={{ fontSize: 110, fontWeight: 'bold', color: '#0F5C40', lineHeight: 1 }}>101</Text>
+                <Text style={{ fontSize: 24, color: '#66756D', marginBottom: 14 }}>种格式</Text>
+            </Box>
+            <Text style={{ fontSize: 20, color: '#0A120E', lineHeight: 1.6, marginTop: 10 }}>
+                其中 <span style={{ fontWeight: 'bold', color: '#C6EE4B' }}>60 余种</span> 可在浏览器里直接看，
+                其余明确标注"不可预览"。
+            </Text>
+            <Text style={{ fontSize: 16, color: '#66756D', lineHeight: 1.6, marginTop: 8 }}>
+                清单由服务端按实例真实能力计算，不是前端写死的承诺。
+            </Text>
+        </Box>
+
+        <Box style={{ flex: 1, flexDirection: 'column', justifyContent: 'center' }}>
+            {[
+                { t: 'Office 文档转一次，之后百毫秒', d: 'Word / Excel / PPT 首次转换需数秒，结果按内容版本缓存，二次打开直接命中。' },
+                { t: 'iPhone 照片在浏览器里解码', d: 'HEIC 不需要服务端装解码器，原图不落地；大图会先提示"正在解码"而不是转圈。' },
+                { t: '相机 RAW 先出图，再换高清', d: '优先取相机内嵌的预览图秒开，后台渲染统一尺寸的高清版本，二次打开即高清。' },
+            ].map((it, i) => (
+                <Box key={i} style={{ padding: '22px 0', borderBottom: i < 2 ? '1px solid #DDE4DC' : 'none', flexDirection: 'column', gap: 8 }}>
+                    <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#0A120E' }}>{it.t}</Text>
+                    <Text style={{ fontSize: 18, color: '#66756D', lineHeight: 1.55 }}>{it.d}</Text>
+                </Box>
+            ))}
+        </Box>
+    </Box>
+
+    <Box style={{ position: 'absolute', left: 60, right: 60, top: 676, flexDirection: 'row', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 14, color: '#A9B5AE' }}>NeuroDMS · 产品概览</Text>
+        <Text style={{ fontSize: 14, color: '#A9B5AE' }}>07</Text>
+    </Box>
+</Slide>

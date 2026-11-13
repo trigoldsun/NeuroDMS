@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>场景操作手册 · NeuroDMS 用户手册</title>
+<meta name="description" content="NeuroDMS 用户手册场景篇：上传、检索、授权、编辑回退、外发审批、格式预览、账号交接七个场景的流程图与步骤表。">
+<link rel="stylesheet" href="assets/manual.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-in">
+    <a class="brand" href="index.html"><span class="mark"></span><b>NeuroDMS</b><span>手册</span></a>
+    <nav class="docnav">
+      <a href="index.html">手册中心</a>
+      <a href="scenarios.html" aria-current="page">场景操作</a>
+      <a href="roles.html">角色能力</a>
+      <a href="admin.html">管理员手册</a>
+    </nav>
+    <button class="toc-btn" type="button" aria-label="目录">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>目录
+    </button>
+    <div class="search">
+      <svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+      <input type="search" placeholder="搜索本节… 按 / 聚焦" aria-label="搜索手册">
+      <div class="search-res"></div>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <aside class="toc" aria-label="目录"></aside>
+  <main>
+
+    <span class="kicker">用户手册 · 场景操作</span>
+    <h1>把每一步交到对的人手上</h1>
+    <p class="subtitle">七个高频场景，每个场景讲清三件事：谁做、怎么做、什么情况下会被拦下来。</p>
+    <div class="meta">
+      <span class="chip v">V1.1.0</span>
+      <span class="chip">适用 <b>所有登录用户（含外部协作者）</b></span>
+      <span class="chip">配套 <b>角色能力</b> · <b>管理员手册</b></span>
+      <button class="chip" type="button" data-print style="cursor:pointer;font-family:inherit">打印 / 存为 PDF</button>
+    </div>
+
+    <h2 id="concepts" data-nav="0 · 开始之前：四个概念"><span class="num">0</span>开始之前：四个必须知道的概念</h2>
+    <p>不理解这四个词，后面每个页面都会看得别扭。</p>
+
+    <div class="cards c2">
+      <div class="card">
+        <span class="tag f">概念 01</span>
+        <h4>空间：文件的顶层容器</h4>
+        <p>类似"项目盘"。每个人有自己的个人空间；团队空间由管理员或所有者创建。所有文件都在某个空间里，没有例外。</p>
+        <div class="kv">在哪看：<b>左侧空间列表</b></div>
+      </div>
+      <div class="card">
+        <span class="tag f">概念 02</span>
+        <h4>权限档位：对"某一个对象"能做什么</h4>
+        <p>它不是"角色"。同一份文件，你对它是编辑者，对隔壁文件可能只是查看者。判定永远发生在具体对象上。</p>
+        <div class="kv">在哪看：<b>授权抽屉里的五个档位</b></div>
+      </div>
+      <div class="card">
+        <span class="tag f">概念 03</span>
+        <h4>密级：内容本身的敏感等级</h4>
+        <p><code>公开 → 内部 → 敏感 → 秘密 → 机密 → 绝密 → 核心</code>。<b>它先于权限生效</b>：密级不够，给了权限也打不开。</p>
+        <div class="kv">在哪看：<b>文件属性、上传时选择</b></div>
+      </div>
+      <div class="card">
+        <span class="tag f">概念 04</span>
+        <h4>外链 / 票据：发给组织外的临时通道</h4>
+        <p>链接本身是长期凭证；访客真正取文件时用的是一张 5 分钟票据。所以"链接还在"和"现在还能取到"是两件事。</p>
+        <div class="kv">在哪看：<b>分享抽屉、<code>/s/{token}</code> 页面</b></div>
+      </div>
+    </div>
+
+    <h3 id="levels">五个可用权限档位（从左到右能力递增）</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>档位</th><th>能做什么</th><th>典型给谁</th></tr></thead>
+        <tbody>
+          <tr><td><b>查看者</b></td><td>看到、在线预览</td><td>只读旁听的人</td></tr>
+          <tr><td><b>贡献者</b></td><td>+ 下载、打印、上传</td><td>往目录里交材料的人</td></tr>
+          <tr><td><b>编辑者</b></td><td>+ 在线编辑、复制、改名</td><td>一起改文档的同事</td></tr>
+          <tr><td><b>管理者</b></td><td>+ 移动、删除、内部分享、版本管理</td><td>项目负责人</td></tr>
+          <tr><td><b>所有者</b></td><td>全部能力，<b>并且可以给别人授权</b></td><td>空间 / 文件的负责人</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note"><p>后端另保留了「评论者」档位但界面未开放，当前请用「查看者」。</p></div>
+
+    <div class="tip">
+      <p><b>一条贯穿全系统的规则</b>：能力不够时，系统宁可说"不存在"，也不告诉你"你没权限"。所以你看到 404 很多时候是权限问题，不一定是文件没了。</p>
+      <p>用「权限解释」（见<a href="#s2">场景 2</a>）能看清卡在哪一步。</p>
+    </div>
+
+    <h2 id="s1" data-nav="场景 1 · 把文件存进来"><span class="num">1</span>把文件存进来</h2>
+    <div class="meta">
+      <span class="chip">适用 <b>贡献者及以上</b></span>
+      <span class="chip">入口 <b>空间 → 目标目录 → 上传 / 拖拽</b></span>
+    </div>
+
+    <div class="flow" data-flow="upload"></div>
+
+    <div class="tablewrap">
+      <table class="steps">
+        <thead><tr><th>#</th><th>谁</th><th>做什么</th><th>注意</th></tr></thead>
+        <tbody>
+          <tr><td class="n"><b>1</b></td><td><span class="who user">提交人</span></td><td>进入目标目录再上传</td><td>上传落在<b>当前目录</b>。在根目录上传想放进子文件夹，需要先双击进目录</td></tr>
+          <tr><td class="n"><b>2</b></td><td><span class="who sys">系统</span></td><td>选完文件的瞬间校验格式</td><td>不合规会立刻标红并不入队。这是租户管理员配的白名单，改不了就找管理员</td></tr>
+          <tr><td class="n"><b>3</b></td><td><span class="who sys">系统</span></td><td>大于 2MB 先算 SHA-256</td><td>这一步没有网络流量，只显示「校验 x%」。<b>不是卡住</b>，大文件可能要几十秒</td></tr>
+          <tr><td class="n"><b>4</b></td><td><span class="who sys">系统</span></td><td>命中相同内容即"秒传"</td><td>同一份文件第二次上传几乎瞬时完成，且不重复占容量</td></tr>
+          <tr><td class="n"><b>5</b></td><td><span class="who sys">系统</span></td><td>分片上传，每片 1MB</td><td>进度按"片完成"推进。1MB 在慢速上行下约 10 秒一格，数字不动就是真的没在动</td></tr>
+          <tr><td class="n"><b>6</b></td><td><span class="who user">提交人</span></td><td>中断后<b>重新选择同一个文件</b></td><td>服务端按"内容 + 目标目录 + 文件名"复用 24 小时内的会话。改文件名会变成新会话，等于从头传</td></tr>
+          <tr><td class="n"><b>7</b></td><td><span class="who user">提交人</span></td><td>需要停掉时点「取消」</td><td>取消<b>不会</b>删服务端已收的分片，重选同一文件可续传</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 id="s1-misread">三个常见误会</h3>
+    <div class="cards c3">
+      <div class="card mute">
+        <h4>"上传完但列表里看不到"</h4>
+        <p>多数是同名文件被覆盖成了新版本。点该文件 → 版本 → 看有没有 v2。系统对同名文件是<b>追加版本</b>，不是产生两个条目。</p>
+      </div>
+      <div class="card mute">
+        <h4>"别人上传同名的，把我的覆盖了"</h4>
+        <p>同上。旧内容在历史版本里，可回退（见<a href="#s4">场景 4</a>）。</p>
+      </div>
+      <div class="card mute">
+        <h4>"提示超过 20MB 不让传"</h4>
+        <p>这不是系统的硬限制，而是租户策略 <code>maxUploadMB</code>。管理员可调，见管理手册 §3.2。</p>
+      </div>
+    </div>
+
+    <h2 id="s2" data-nav="场景 2 · 找到记不清名字的文件"><span class="num">2</span>找到一份记不清名字的文件</h2>
+    <div class="meta">
+      <span class="chip">适用 <b>所有登录用户</b></span>
+      <span class="chip">入口 <b>顶部搜索框 / 空间内逐级浏览</b></span>
+    </div>
+
+    <div class="flow" data-flow="search"></div>
+
+    <div class="tablewrap">
+      <table class="steps">
+        <thead><tr><th>#</th><th>谁</th><th>做什么</th><th>注意</th></tr></thead>
+        <tbody>
+          <tr><td class="n"><b>1</b></td><td><span class="who user">用户</span></td><td>输入文件名片段即可</td><td>只搜<b>文件名</b>，不搜正文内容。正文检索不在当前版本能力内</td></tr>
+          <tr><td class="n"><b>2</b></td><td><span class="who sys">系统</span></td><td>逐条判可见性</td><td>所以"搜不到"可能是没权限，不是不存在。换一个有权限的账号试试能确认</td></tr>
+          <tr><td class="n"><b>3</b></td><td><span class="who user">用户</span></td><td>点文件名</td><td>在列表里点文件名＝点「预览」，新开页签，不打断当前列表</td></tr>
+          <tr><td class="n"><b>4</b></td><td><span class="who user">用户</span></td><td>空间名可点</td><td>点工具栏上的空间名，直接回到该空间根目录，不用逐级退</td></tr>
+          <tr><td class="n"><b>5</b></td><td><span class="who user">用户</span></td><td>拿不准为什么打不开</td><td>用「权限解释」看分步结论（见下）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 id="s2-explain">权限解释怎么读</h3>
+    <p>判定按固定顺序执行，卡在哪一步会明说：</p>
+
+    <div class="pipeline">
+      <span class="step">租户</span><span class="ar">→</span>
+      <span class="step">主体有效</span><span class="ar">→</span>
+      <span class="step">对象存在</span><span class="ar">→</span>
+      <span class="step hi">密级</span><span class="ar">→</span>
+      <span class="step">显式拒绝</span><span class="ar">→</span>
+      <span class="step">允许集合</span><span class="ar">→</span>
+      <span class="step">条件</span><span class="ar">→</span>
+      <span class="step">结果</span>
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>结论</th><th>真实含义</th><th>该找谁</th></tr></thead>
+        <tbody>
+          <tr><td><code>TENANT_MISMATCH</code></td><td>链接或账号属于另一个租户</td><td>确认登录的租户是否正确</td></tr>
+          <tr><td><code>SESSION_INVALID</code></td><td>会话被吊销（改密 / 停用 / 登出）</td><td>重新登录</td></tr>
+          <tr><td><code>CLASSIFICATION_DENIED</code></td><td>你的密级低于文件密级</td><td>安全管理员调整密级或申请人</td></tr>
+          <tr><td><code>EXPLICIT_DENY</code></td><td>有一条明确的拒绝条目</td><td>对象所有者</td></tr>
+          <tr><td><code>NO_ALLOW</code></td><td>没有任何条目给你这个权限</td><td>所有者授权</td></tr>
+          <tr><td><code>CONDITION_NOT_MET</code></td><td>条件不满足（如要求 MFA、指定网段）</td><td>按条件补齐</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 id="s3" data-nav="场景 3 · 和同事一起看/改一份文件"><span class="num">3</span>和同事一起看 / 改一份文件</h2>
+    <div class="meta">
+      <span class="chip">适用 <b>所有者（授权）、被授权人（协作）</b></span>
+      <span class="chip">入口 <b>文件行右侧「授权」/ 分享抽屉里的「内部分享」</b></span>
+    </div>
+
+    <div class="flow" data-flow="grant"></div>
+
+    <div class="tablewrap">
+      <table class="steps">
+        <thead><tr><th>#</th><th>谁</th><th>做什么</th><th>注意</th></tr></thead>
+        <tbody>
+          <tr><td class="n"><b>1</b></td><td><span class="who user">所有者</span></td><td>授权时优先选<b>部门 / 角色 / 组</b></td><td>给组授权一次，比给十个人各授一次更好维护；人员变动自动生效</td></tr>
+          <tr><td class="n"><b>2</b></td><td><span class="who user">所有者</span></td><td>授权可设到期时间</td><td>临时协作建议设到期，避免"忘了收回"</td></tr>
+          <tr><td class="n"><b>3</b></td><td><span class="who user">所有者</span></td><td>需要"这个子目录例外"时断开继承</td><td>断开后会生成祖先条目的快照。<b>快照不能单独删</b>，要先恢复继承</td></tr>
+          <tr><td class="n"><b>4</b></td><td><span class="who user">所有者</span></td><td>撤销授权</td><td>不能移除最后一个所有者——否则对象会变成没人能管</td></tr>
+          <tr><td class="n"><b>5</b></td><td><span class="who user">被授权人</span></td><td>权限变更后刷新页面</td><td>权限是每次请求实时判定的，不需要重新登录</td></tr>
+          <tr><td class="n"><b>6</b></td><td><span class="who user">所有人</span></td><td>部门授权含下级部门</td><td>给"研发部"授权，研发部下面所有子部门成员都会被覆盖到</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 id="s3-compare">内部分享 vs 直接授权</h3>
+    <p>两者最终都落到同一张权限表，区别只是入口：内部分享是"按档位批量授给一批人"的快捷方式，不产生链接。</p>
+    <div class="warn">
+      <p><b>能内部分享 ≠ 能外发</b>：前者要 <code>share_internal</code>（管理者档位起），后者要 <code>share_external</code>（仅所有者）。</p>
+    </div>
+
+    <h2 id="s4" data-nav="场景 4 · 在线编辑与版本回退"><span class="num">4</span>在线编辑与版本回退</h2>
+    <div class="meta">
+      <span class="chip">适用 <b>编辑者及以上（编辑）、管理者及以上（版本管理）</b></span>
+      <span class="chip">入口 <b>文件行「编辑」、版本抽屉</b></span>
+    </div>
+
+    <div class="flow" data-flow="edit"></div>
+
+    <div class="tablewrap">
+      <table class="steps">
+        <thead><tr><th>#</th><th>谁</th><th>做什么</th><th>注意</th></tr></thead>
+        <tbody>
+          <tr><td class="n"><b>1</b></td><td><span class="who user">编辑者</span></td><td>首次打开编辑器要等 5~15 秒</td><td>加载链路是"签发配置 → 下载组件 → 文档服务打开文档"，页面会显示已等待秒数</td></tr>
+          <tr><td class="n"><b>2</b></td><td><span class="who user">编辑者</span></td><td>长文档编辑期间不要关页面</td><td>关掉后会话 10 分钟过期，别人就能回退；重新打开即续上</td></tr>
+          <tr><td class="n"><b>3</b></td><td><span class="who user">管理者</span></td><td>回退前确认没人在编辑</td><td>抽屉会提示"N 个编辑会话进行中"。强行回退会覆盖对方保存的内容，所以系统直接拒绝</td></tr>
+          <tr><td class="n"><b>4</b></td><td><span class="who user">管理者</span></td><td>回退后告诉同事</td><td>回退是<b>追加新版本</b>，不是"时间倒流"：对方手里的旧页面再保存仍会产生更新的版本</td></tr>
+          <tr><td class="n"><b>5</b></td><td><span class="who user">管理者</span></td><td>历史版本可单独下载</td><td>下载历史版本同样需要 <code>download</code> 权限，只有预览权限的人下不了</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <p><b>为什么回退不是"删除后面的版本"</b>：审计要求"任何时刻的内容都可追溯"。删版本等于销毁证据，所以回退永远向前追加。</p>
+    </div>
+
+    <h2 id="s5" data-nav="场景 5 · 把文件发给组织外的人"><span class="num">5</span>把文件发给组织外的人</h2>
+    <div class="meta">
+      <span class="chip">适用 <b>所有者（发起）、有管理权限的同事（审批）、外部访客（接收）</b></span>
+      <span class="chip">入口 <b>文件行「分享」→ 生成链接；访客打开 <code>/s/{token}</code></b></span>
+    </div>
+
+    <div class="flow" data-flow="share-create"></div>
+
+    <div class="tablewrap">
+      <table class="steps">
+        <thead><tr><th>#</th><th>谁</th><th>做什么</th><th>注意</th></tr></thead>
+        <tbody>
+          <tr><td class="n"><b>1</b></td><td><span class="who user">所有者</span></td><td>优先设<b>有效期</b></td><td>不带有效期的链接等于永久开放。默认建议 7 天</td></tr>
+          <tr><td class="n"><b>2</b></td><td><span class="who user">所有者</span></td><td>只读交付就关掉「允许下载」</td><td>关闭后访客能在浏览器里看，但下不了原文件；Office 类会转成 PDF 展示</td></tr>
+          <tr><td class="n"><b>3</b></td><td><span class="who user">所有者</span></td><td>涉密内容打开「水印」</td><td>水印上带"链接 + 来源网段 + 时间"，截图外流时可定位到具体那条链接</td></tr>
+          <tr><td class="n"><b>4</b></td><td><span class="who user">所有者</span></td><td>需要知道"是谁在看"就开「邮箱验证」</td><td>访客必须收验证码才能进。可配邮箱白名单，限定只发给某些域名</td></tr>
+          <tr><td class="n"><b>5</b></td><td><span class="who user">所有者</span></td><td>口令要<b>另行走一条通道</b>告诉对方</td><td>系统不会把口令写进邮件。链接和口令同在一封邮件里，等于没有口令</td></tr>
+          <tr><td class="n"><b>6</b></td><td><span class="who admin">有管理权限的同事</span></td><td>审批待审批的外链</td><td>高密级（默认「秘密」及以上）自动进审批。审批人必须<b>同时</b>满足：对该文件有管理权限、密级不低于文件、不是发起人。入口在「管理台 → 外发审批」</td></tr>
+          <tr><td class="n"><b>7</b></td><td><span class="who guest">访客</span></td><td>打开链接后 5 分钟内有效</td><td>票据过期刷新页面即可重新兑换，不需要重新找分享人要链接</td></tr>
+          <tr><td class="n"><b>8</b></td><td><span class="who user">所有者</span></td><td>撤销后立即生效</td><td>撤销会连带吊销所有已发出的票据。已经下载到本地的文件收不回来——这是所有方案的共同边界</td></tr>
+          <tr><td class="n"><b>9</b></td><td><span class="who user">所有者</span></td><td>换设备 / 换网络可能被拒</td><td>票据绑定来源网段（IPv4 /24、IPv6 /64）。同一办公网内换电脑没问题，换到 4G 网络需要重新打开链接</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 id="s5-space">空间级外链的额外限制</h3>
+    <p>对"整个空间"生成外链时，系统会先检查空间内有没有<b>你自己也看不到</b>的内容：</p>
+    <ul>
+      <li>有更高密级的文件 → 拒绝，提示改为分享具体文件 / 目录；</li>
+      <li>有显式拒绝的条目（说明子树里做过例外配置）→ 同样拒绝。</li>
+    </ul>
+    <div class="warn">
+      <p>这不是刁难：空间级外链等于把整棵子树开放给匿名访客，一旦里面有例外，就会绕过那条例外。正确做法是改为分享具体文件 / 目录，而不是让管理员去删例外配置。</p>
+    </div>
+
+    <h3 id="s5-approve">审批：谁批、在哪批、没人能批怎么办</h3>
+    <p>密级达到租户阈值（默认「秘密」）时，链接自动进审批——<b>不需要你勾任何选项</b>，界面也不会问你"选谁审批"。审批人由权限决定，不由发起人指派：如果可以自己挑，谁都会挑最容易通过的那个。</p>
+
+    <p>审批人必须同时满足三个条件：</p>
+    <div class="cards c3">
+      <div class="card accent">
+        <span class="tag f">条件 1</span>
+        <h4>对该文件有管理权限</h4>
+        <p>空间「管理者」或「所有者」档位，或在文件上单独授过管理权限。</p>
+      </div>
+      <div class="card accent">
+        <span class="tag f">条件 2</span>
+        <h4>密级不低于该文件</h4>
+        <p>密级先于权限：看不到的文件批不了。</p>
+      </div>
+      <div class="card accent">
+        <span class="tag f">条件 3</span>
+        <h4>不是发起人</h4>
+        <p>系统不允许自批，会提示"请由他人复核"。</p>
+      </div>
+    </div>
+
+    <div class="tip">
+      <p><b>在哪批</b>：管理台 →「外发审批」（<code>/admin/share-approvals</code>）。列表只显示"你有权处置"的链接，所以不会出现看到了却点不动的情况。通过后链接立即可用，不用重新创建。</p>
+    </div>
+
+    <div class="note">
+      <p><b>管理角色不等于审批权</b>：系统管理员、安全管理员管的是配置，不自动获得文件的内容权限。所以"我是管理员为什么看不到待审批"是正常现象——缺的是对象级管理权限，不是角色。</p>
+    </div>
+
+    <h4>没人能批怎么办</h4>
+    <p>会发生在权限集中在一个人手里的空间（个人项目、单人负责的目录很常见）：</p>
+    <ol>
+      <li>创建时若系统判断"没有其他人能审批"，分享面板会直接亮黄条提示（接口返回 <code>approverCount = 0</code>）；</li>
+      <li>解决方式：到「文件 → 该空间 → 权限」给一位同事授「管理者」，并确认他的密级不低于这份文件；</li>
+      <li>或者把文件密级降到阈值以下（走降密审批），之后新建的链接不再需要审批——<b>已经 pending 的链接不会自动放行</b>，需要重建。</li>
+    </ol>
+    <div class="warn">
+      <p><b>没有通知</b>：待审批不会主动提醒任何人。需要线下约定"谁每天看一次外发审批"，或者把审批人拉进交付流程。</p>
+    </div>
+
+    <h3 id="s5-visit">访客那一侧看到什么</h3>
+    <div class="flow" data-flow="share-visit"></div>
+
+    <h2 id="s6" data-nav="场景 6 · 查看各种格式的文件"><span class="num">6</span>查看各种格式的文件</h2>
+    <div class="meta">
+      <span class="chip">适用 <b>查看者及以上</b></span>
+      <span class="chip">入口 <b>点文件名，或文件行「预览」</b></span>
+    </div>
+
+    <p>点文件名＝点预览。不同格式走的路径不一样，先用一张图记住"哪类慢、哪类不能看"：</p>
+
+    <div class="fmt">
+      <div class="item">
+        <div class="hd"><b>PDF / 图片 / 文本</b><span class="badge">立即打开</span></div>
+        <p>浏览器直接显示，可缩放、翻页。</p>
+        <p class="note2">没有任何等待，也没有转换环节。</p>
+      </div>
+      <div class="item">
+        <div class="hd"><b>Word / Excel / PPT</b><span class="badge slow">首次 3~15 秒</span></div>
+        <p>服务端转 PDF 后显示，页面会显示「正在转换」与已等待秒数。</p>
+        <p class="note2">只有首次慢，之后是百毫秒级。转换器未就绪时提示"请下载后查看"。</p>
+      </div>
+      <div class="item">
+        <div class="hd"><b>HEIC（iPhone 照片）</b><span class="badge slow">10~20 秒</span></div>
+        <p>在浏览器内用 wasm 解码，期间页面不卡但图未出。</p>
+        <p class="note2">超过 6000 万像素会提示下载。每次打开都要解码，不是缓存问题。</p>
+      </div>
+      <div class="item">
+        <div class="hd"><b>相机 RAW（CR2 / NEF / DNG 等）</b><span class="badge slow">首次 3~15 秒</span></div>
+        <p>有内嵌预览图的机型先出图，后台再渲染高清版。</p>
+        <p class="note2">索尼 ARW、佳能 CR3 未做完整验证；失败时会提示下载，不会误报成功。</p>
+      </div>
+      <div class="item">
+        <div class="hd"><b>视频</b><span class="badge slow">后台转码</span></div>
+        <p>转码未完成时接口返回"准备中"，前端轮询，就绪后秒开。</p>
+        <p class="note2">没有进度百分比，只能轮询，大视频请提前转。</p>
+      </div>
+      <div class="item">
+        <div class="hd"><b>压缩包 / 邮件 / CAD / HTML</b><span class="badge no">只能下载</span></div>
+        <p>不在预览范围内，点开只有下载入口。</p>
+        <p class="note2">HTML 刻意不给在线渲染——同源渲染有安全风险。</p>
+      </div>
+    </div>
+
+    <div class="note">
+      <p><b>"为什么这个格式不能预览"</b>：管理台「系统设置 → 允许上传的格式」里，每个格式右侧有徽标：<code>可预览</code> / <code>可预览 · 转码</code> / <code>不可预览</code>。徽标由服务端按当前实例能力计算，不是写死的。</p>
+    </div>
+
+    <h2 id="s7" data-nav="场景 7 · 账号、密码与工作交接"><span class="num">7</span>账号、密码与工作交接</h2>
+    <div class="meta">
+      <span class="chip">适用 <b>所有用户（自助）、系统管理员（管理他人）</b></span>
+      <span class="chip">入口 <b>右上角账号菜单、管理台「成员与角色」</b></span>
+    </div>
+
+    <div class="flow" data-flow="account"></div>
+
+    <div class="tablewrap">
+      <table class="steps">
+        <thead><tr><th>#</th><th>谁</th><th>做什么</th><th>注意</th></tr></thead>
+        <tbody>
+          <tr><td class="n"><b>1</b></td><td><span class="who user">用户</span></td><td>改密码后所有设备会被踢下线</td><td>这是有意的：账号被盗时，改密必须能收回已有凭证</td></tr>
+          <tr><td class="n"><b>2</b></td><td><span class="who user">用户</span></td><td>连续输错 5 次会被锁 30 分钟</td><td>锁定按账号计，不是按 IP。锁定期内即使密码正确也拒绝</td></tr>
+          <tr><td class="n"><b>3</b></td><td><span class="who admin">管理员</span></td><td><b>先移交、后停用</b></td><td>直接停用会让其名下的文件无人可管（所有者被停用后仍占着 owner 条目）</td></tr>
+          <tr><td class="n"><b>4</b></td><td><span class="who admin">管理员</span></td><td>停用立即生效</td><td>数据库层吊销会话，令牌在 30 秒内失效，不等 15 分钟过期</td></tr>
+          <tr><td class="n"><b>5</b></td><td><span class="who admin">管理员</span></td><td>删除是软删除</td><td>保留 30 天，期间审计与回收站仍可追溯；到期后由清理任务处理</td></tr>
+          <tr><td class="n"><b>6</b></td><td><span class="who user">用户</span></td><td>外部协作者默认强制二次验证</td><td>外部账号创建时 <code>mfa_required</code> 自动为真，收不到验证码则无法登录（fail-closed）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 id="faq" data-nav="8 · 常见问题速查"><span class="num">8</span>常见问题速查</h2>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>现象</th><th>最可能的原因</th><th>处理</th></tr></thead>
+        <tbody>
+          <tr><td>点文件提示"不存在"</td><td>权限不足被当作不存在</td><td>用权限解释确认，找所有者授权</td></tr>
+          <tr><td>上传进度长时间不动</td><td>慢速上行 + 1MB 分片，约 10 秒一格</td><td>看「x.x MB / n 片」是否在变；不变再重选文件续传</td></tr>
+          <tr><td>大文件上传到 99% 卡住</td><td>正在合并与校验</td><td>等 1~2 分钟；中断后重选可续传</td></tr>
+          <tr><td>预览一直转圈</td><td>Office 首次转换 / HEIC 解码</td><td>看提示里的"已等待 N 秒"；超过 60 秒刷新重试</td></tr>
+          <tr><td>分享链接打不开</td><td>过期 / 撤销 / 待审批 / 口令错 6 次被锁</td><td>让分享人看链接状态；锁定需等 30 分钟</td></tr>
+          <tr><td>换了网络后链接失效</td><td>票据绑定来源网段</td><td>重新打开链接即可</td></tr>
+          <tr><td>编辑时提示"有编辑会话"</td><td>有人正在编辑，回退被保护性拒绝</td><td>等对方关闭或 10 分钟无心跳后重试</td></tr>
+          <tr><td>授权后对方仍打不开</td><td>密级不够 / 有显式拒绝 / 缓存未刷新</td><td>看权限解释的具体步骤</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="cards c2" style="margin-top:28px">
+      <a class="card" href="roles.html" style="text-decoration:none;color:inherit;display:block">
+        <span class="tag f">下一篇</span>
+        <h4>角色能力手册：我到底能做什么</h4>
+        <p>三套身份维度、五个档位、三个管理角色，以及一张可以点列高亮的能力矩阵。</p>
+      </a>
+      <a class="card" href="admin.html" style="text-decoration:none;color:inherit;display:block">
+        <span class="tag f">给管理员</span>
+        <h4>管理员手册：参数、审批与运维</h4>
+        <p>只写会被系统真正读取的参数，含已知限制清单与回滚铁律。</p>
+      </a>
+    </div>
+
+  </main>
+</div>
+
+<footer class="foot">
+  <span>NeuroDMS · 用户手册 · 场景操作 V1.1.0</span>
+  <span>网页版 v1.0.0 · 源文件 docs/29-用户手册-场景操作-v1.1.0.md</span>
+</footer>
+
+<button class="totop" type="button" aria-label="回到顶部">
+  <svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+</button>
+
+<script src="assets/flows.js"></script>
+<script src="assets/flow.js"></script>
+<script src="assets/manual.js"></script>
+</body>
+</html>

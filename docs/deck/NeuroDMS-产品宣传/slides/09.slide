@@ -1,0 +1,55 @@
+<Slide style={{ width: 1280, height: 720, background: '#12294D', padding: '60px', fontFamily: '"Microsoft YaHei", Arial, sans-serif', position: 'relative' }}>
+    <Box style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 34, fontWeight: 'bold', color: '#FFFFFF' }}>三个数字，都是可以验收的承诺</Text>
+        <Text style={{ fontSize: 14, color: '#8FA6C4', marginTop: 10 }}>证据</Text>
+    </Box>
+    <Box style={{ width: '100%', height: 1, background: '#2C4A75', marginTop: 14 }} />
+
+    <Box style={{ flexDirection: 'row', gap: 48, marginTop: 34, height: 440 }}>
+        <Box style={{ flex: 1.15, flexDirection: 'column', justifyContent: 'center' }}>
+            <Box style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 12 }}>
+                <Text style={{ fontSize: 124, fontWeight: 'bold', color: '#FFFFFF', lineHeight: 0.95 }}>30</Text>
+                <Text style={{ fontSize: 28, color: '#C08A3E', marginBottom: 20 }}>秒</Text>
+            </Box>
+            <Box style={{ width: 64, height: 2, background: '#C08A3E', marginTop: 18, marginBottom: 16 }} />
+            <Text style={{ fontSize: 20, color: '#C2D2E6', lineHeight: 1.65 }}>
+                停用账号、改密或登出后，已签发的访问令牌最迟 30 秒内失效。
+                不用等 15 分钟的令牌自然过期。
+            </Text>
+        </Box>
+
+        <Box style={{ flex: 1, flexDirection: 'column', justifyContent: 'center', gap: 34 }}>
+            <Box style={{ flexDirection: 'column', gap: 8 }}>
+                <Box style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 10 }}>
+                    <Text style={{ fontSize: 64, fontWeight: 'bold', color: '#FFFFFF', lineHeight: 1 }}>5</Text>
+                    <Text style={{ fontSize: 22, color: '#9FB6D4', marginBottom: 6 }}>分钟</Text>
+                </Box>
+                <Text style={{ fontSize: 18, color: '#C2D2E6', lineHeight: 1.55 }}>
+                    外链的票据有效期。链接可以长期存在，取内容的凭证只有 5 分钟。
+                </Text>
+            </Box>
+            <Box style={{ height: 1, background: '#2C4A75' }} />
+            <Box style={{ flexDirection: 'column', gap: 8 }}>
+                <Box style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 10 }}>
+                    <Text style={{ fontSize: 64, fontWeight: 'bold', color: '#FFFFFF', lineHeight: 1 }}>24</Text>
+                    <Text style={{ fontSize: 22, color: '#9FB6D4', marginBottom: 6 }}>小时</Text>
+                </Box>
+                <Text style={{ fontSize: 18, color: '#C2D2E6', lineHeight: 1.55 }}>
+                    断点续传会话的保留窗口。换网络、关页面、换设备，重选同一文件即可续上。
+                </Text>
+            </Box>
+        </Box>
+    </Box>
+
+    <Box style={{ position: 'absolute', left: 60, right: 60, top: 676, flexDirection: 'row', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 14, color: '#7E96B6' }}>NeuroDMS · 产品概览</Text>
+        <Text style={{ fontSize: 14, color: '#7E96B6' }}>09</Text>
+    </Box>
+
+    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+        <Box style={{ width: 3, height: 20, background: '#C08A3E' }} />
+        <Text style={{ fontSize: 18, color: '#C2D2E6' }}>
+            这些都是默认值，可按租户调整——每次调整都会写进审计，谁改的、什么时候改的都能查到。
+        </Text>
+    </Box>
+</Slide>

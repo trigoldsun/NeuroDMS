@@ -1,0 +1,52 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', padding: '60px', fontFamily: '"Microsoft YaHei", Arial, sans-serif', position: 'relative' }}>
+    <Box style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 34, fontWeight: 'bold', color: '#16202E' }}>四周上线，先管住一条外发通道</Text>
+        <Text style={{ fontSize: 14, color: '#5B7899', marginTop: 10 }}>落地</Text>
+    </Box>
+    <Box style={{ width: '100%', height: 1, background: '#D8DEE7', marginTop: 14 }} />
+
+    <Box style={{ flexDirection: 'row', alignItems: 'stretch', marginTop: 30 }}>
+        {[
+            { w: '第 1 周', t: '立骨架', d: '建空间与目录树，导入成员，确定七级密级的显示名。' },
+            { w: '第 2 周', t: '接身份', d: '接 LDAP / AD 或 SSO 断言，跑通登录、角色与停用。' },
+            { w: '第 3 周', t: '管一条线', d: '选一个真实外发场景，配有效期、水印、审批阈值。' },
+            { w: '第 4 周', t: '交证据', d: '导出审计样张，演练撤销链接与停用账号的收敛时间。' },
+        ].map((s, i) => (
+            <Box key={i} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Box style={{ width: 258, background: i === 2 ? '#1B3B6F' : '#F4F6F9', borderRadius: 10, padding: '22px 20px', flexDirection: 'column', gap: 8 }}>
+                    <Text style={{ fontSize: 14, color: i === 2 ? '#C08A3E' : '#8A9BB2', letterSpacing: 1 }}>{s.w}</Text>
+                    <Text style={{ fontSize: 24, fontWeight: 'bold', color: i === 2 ? '#FFFFFF' : '#16202E' }}>{s.t}</Text>
+                    <Text style={{ fontSize: 17, color: i === 2 ? '#C2D2E6' : '#4A5B6E', lineHeight: 1.6 }}>{s.d}</Text>
+                </Box>
+                {i < 3 && <Text style={{ fontSize: 22, color: '#B7C4D4', width: 32, textAlign: 'center' }}>→</Text>}
+            </Box>
+        ))}
+    </Box>
+
+    <Box style={{ marginTop: 32, flexDirection: 'column', gap: 10 }}>
+        <Text style={{ fontSize: 14, color: '#5B7899', letterSpacing: 2 }}>每周都要有一个能拿给老板看的东西</Text>
+        <Box style={{ flexDirection: 'row', gap: 12 }}>
+            {[
+                '目录树与账号清单',
+                '一次真实登录（含域账号）',
+                '一条走完审批的外发链接',
+                '一份按人/按时间的访问记录',
+            ].map((t, i) => (
+                <Box key={i} style={{ flex: 1, borderTop: '2px solid #C08A3E', paddingTop: 10 }}>
+                    <Text style={{ fontSize: 17, color: '#16202E', lineHeight: 1.5 }}>{t}</Text>
+                </Box>
+            ))}
+        </Box>
+    </Box>
+
+    <Box style={{ marginTop: 26, background: '#F4F6F9', borderRadius: 8, padding: '16px 20px', flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <Text style={{ fontSize: 18, color: '#16202E', lineHeight: 1.5 }}>
+            不追求一次铺满全公司：<span style={{ fontWeight: 'bold' }}>先让一条外发通道闭环</span>，再复制到第二个部门。
+        </Text>
+    </Box>
+
+    <Box style={{ position: 'absolute', left: 60, right: 60, top: 676, flexDirection: 'row', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 14, color: '#8A9BB2' }}>NeuroDMS · 产品概览</Text>
+        <Text style={{ fontSize: 14, color: '#8A9BB2' }}>11</Text>
+    </Box>
+</Slide>

@@ -1,0 +1,84 @@
+<Slide style={{ width: 1280, height: 720, background: '#F5F7F2', padding: '60px', fontFamily: '"Source Han Sans SC", "Microsoft YaHei", Arial, sans-serif', position: 'relative' }}>
+    <Box style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 34, fontWeight: 'bold', color: '#0A120E' }}>怎么选：先看边界，再看成本</Text>
+        <Text style={{ fontSize: 14, color: '#66756D', marginTop: 10 }}>交付形态 02/02</Text>
+    </Box>
+    <Box style={{ width: '100%', height: 1, background: '#DDE4DC', marginTop: 14 }} />
+
+    <Box style={{ flexDirection: 'row', gap: 18, marginTop: 20 }}>
+        <Box style={{ flex: 1, background: '#FFFFFF', border: '1px solid #DDE4DC', borderRadius: 10, padding: '26px 24px', flexDirection: 'column', gap: 13 }}>
+            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Box style={{ width: 26, height: 26, borderRadius: 13, background: '#0F5C40', alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#FFFFFF' }}>S</Text>
+                </Box>
+                <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#0F5C40' }}>SaaS 订阅的长处</Text>
+            </Box>
+            {[
+                ['零运维', '服务器、备份、升级都由平台负责'],
+                ['当天可用', '开通即用，先跑一条链路再谈策略'],
+                ['跨组织协作', '外部顾问、客户、供应商都能纳入'],
+                ['按需扩容', '席位与容量随业务调整，不预设峰值'],
+                ['持续升级', '新格式、新能力随平台版本自动获得'],
+            ].map(([t, d], i) => (
+                <Box key={i} style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
+                    <Text style={{ fontSize: 15, color: '#0F5C40', lineHeight: 1.5 }}>▪</Text>
+                    <Text style={{ fontSize: 15, color: '#0A120E', lineHeight: 1.5 }}>
+                        <Text style={{ fontWeight: 'bold' }}>{t}</Text>：{d}
+                    </Text>
+                </Box>
+            ))}
+        </Box>
+
+        <Box style={{ flex: 1, background: '#0A120E', borderRadius: 10, padding: '26px 24px', flexDirection: 'column', gap: 13 }}>
+            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Box style={{ width: 26, height: 26, borderRadius: 13, background: '#C6EE4B', alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#0A120E' }}>L</Text>
+                </Box>
+                <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#FFFFFF' }}>本地部署的长处</Text>
+            </Box>
+            {[
+                ['数据不出内网', '满足「不得出网、不得出境」的硬约束'],
+                ['离线可用', '内网、专网、隔离环境都能运行'],
+                ['接内网身份', 'AD / LDAP、反向代理 SSO，不另建账号'],
+                ['深度定制', '字段、目录结构、审批链可按制度改'],
+                ['预算可控', '一次性授权，不进年度订阅'],
+            ].map(([t, d], i) => (
+                <Box key={i} style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
+                    <Text style={{ fontSize: 15, color: '#C6EE4B', lineHeight: 1.5 }}>▪</Text>
+                    <Text style={{ fontSize: 15, color: '#DDE4DC', lineHeight: 1.5 }}>
+                        <Text style={{ fontWeight: 'bold', color: '#FFFFFF' }}>{t}</Text>：{d}
+                    </Text>
+                </Box>
+            ))}
+        </Box>
+    </Box>
+
+    <Box style={{ marginTop: 18, flexDirection: 'row', gap: 12 }}>
+        {[
+            ['① 数据能不能出内网', '不能', '本地部署'],
+            ['② 有没有专职运维', '没有', 'SaaS 订阅'],
+            ['③ 必须接内网身份或改流程', '必须', '本地部署'],
+        ].map(([q, a, r], i) => (
+            <Box key={i} style={{ flex: 1, background: '#FFFFFF', borderLeft: '3px solid #0F5C40', borderRadius: 6, padding: '14px 18px', flexDirection: 'column', gap: 5 }}>
+                <Text style={{ fontSize: 14, color: '#66756D' }}>{q}</Text>
+                <Box style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
+                    <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#0A120E' }}>{a}</Text>
+                    <Text style={{ fontSize: 14, color: '#66756D' }}>→</Text>
+                    <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#0F5C40' }}>{r}</Text>
+                </Box>
+            </Box>
+        ))}
+    </Box>
+
+    <Box style={{ marginTop: 14, background: '#C6EE4B', borderRadius: 6, padding: '12px 18px' }}>
+        <Text style={{ fontSize: 15, color: '#0A120E', lineHeight: 1.5 }}>
+            三条都答「否」：订阅更省事。有一条答「是」：按那一条定，不用权衡——
+            <Text style={{ fontWeight: 'bold' }}>边界问题不能靠成本抵消。</Text>
+        </Text>
+    </Box>
+
+    <Box style={{ position: 'absolute', left: 60, right: 60, top: 676, flexDirection: 'row', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 14, color: '#A9B5AE' }}>NeuroDMS · 产品概览</Text>
+        <Text style={{ fontSize: 14, color: '#A9B5AE' }}>11</Text>
+    </Box>
+</Slide>

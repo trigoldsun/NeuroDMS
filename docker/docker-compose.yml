@@ -1,0 +1,219 @@
+# DocVault 本项目专属容器编排（唯一真源）
+#
+# 所有本项目用到的容器、数据卷、配置均在本目录下：
+#   docker/
+#   ├─ docker-compose.yml   本文件
+#   ├─ .env                 实际配置（含密钥，不入库）
+#   ├─ .env.example         配置模板
+#   ├─ server.Dockerfile    API 镜像构建
+#   ├─ data/                绑定挂载的数据目录
+#   │  └─ postgres/
+#   └─ README.md            启停与排障说明
+#
+# 常用命令（在本目录执行）：
+#   docker compose up -d                 启动核心依赖
+#   docker compose up -d --build server  构建并启动 API
+#   docker compose logs -f postgres      查看日志
+#   docker compose down                  停止（保留 data/ 数据）
+#   docker compose down -v               停止并删除数据（危险，会丢库）
+#
+# 镜像纪律：只使用官方镜像；无官方镜像时按官方安装包或源码自建。
+
+name: docvault
+
+services:
+  postgres:
+    image: postgres:18.6-alpine
+    container_name: docvault-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-docvault}
+      POSTGRES_USER: ${POSTGRES_USER:-docvault}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 必须设置}
+      TZ: UTC
+      PGTZ: UTC
+    # PostgreSQL 18 官方镜像的数据目录为 /var/lib/postgresql/18/docker，
+    # 因此挂载点必须是 /var/lib/postgresql；挂 .../data 会让容器拒绝启动。
+    volumes:
+      - ./data/postgres:/var/lib/postgresql
+    ports:
+      - "127.0.0.1:55433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-docvault} -d ${POSTGRES_DB:-docvault}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: valkey/valkey:8-alpine
+    container_name: docvault-redis
+    command: ["valkey-server", "--appendonly", "no", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      # 56380：避开其他项目占用的 56379
+      - "127.0.0.1:56380:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  server:
+    build:
+      context: ..
+      dockerfile: docker/server.Dockerfile
+    image: docvault/server:dev
+    container_name: docvault-server
+    environment:
+      DOCVAULT_MODE: ${DOCVAULT_MODE:-standalone}
+      DOCVAULT_HTTP_ADDR: ":8080"
+      DOCVAULT_JWT_SECRET: ${DOCVAULT_JWT_SECRET:?DOCVAULT_JWT_SECRET 必须设置}
+      DOCVAULT_DB_DSN: postgres://${POSTGRES_USER:-docvault}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-docvault}?sslmode=disable
+      # 可信代理网段。走 Cloudflare Tunnel 时源站看到的是 cloudflared 容器地址，
+      # 必须把容器网段列为可信，httpmw.ClientIP 才会解析 X-Forwarded-For，
+      # 否则审计里的来源 IP 全是同一个内网地址（等于没有来源信息）。
+      # 默认留空 = 只认直连地址（本地开发形态）。
+      DOCVAULT_TRUST_PROXY_CIDRS: ${DOCVAULT_TRUST_PROXY_CIDRS:-}
+      # 内容寻址存储：按租户分目录，落在本项目 data/ 下便于备份与迁移
+      DOCVAULT_STORAGE_DIR: /data/blob
+      DOCVAULT_WEB_DIR: /app/web/dist
+      # 预览缓存与转码产物：落在本项目 data/ 下，便于备份与迁移
+      DOCVAULT_PREVIEW_DIR: /data/preview
+      DOCVAULT_MEDIA_DIR: /data/media
+      # pdfcpu 的资源目录（字体库/配置）；必须是可写目录，否则启动即 panic
+      DOCVAULT_WATERMARK_DIR: /data/pdfcpu
+      # 字体随镜像放在 /app/assets/fonts；默认的相对路径在容器里会解析到 /assets
+      DOCVAULT_WATERMARK_FONT: /app/assets/fonts/WVSans-Regular.ttf
+      # 对外访问地址（编辑器回调、播放地址签名都用它）
+      DOCVAULT_PUBLIC_URL: ${DOCVAULT_PUBLIC_URL:-http://127.0.0.1:18090}
+      # 文档服务需要能反向访问本服务，走容器网络内的服务名
+      DOCVAULT_INTERNAL_URL: ${DOCVAULT_INTERNAL_URL:-http://docvault-server:8080}
+      # 浏览器加载 api.js 用这个地址；留空表示不启用在线编辑
+      DOCVAULT_ONLYOFFICE_URL: ${DOCVAULT_ONLYOFFICE_URL:-}
+      DOCVAULT_ONLYOFFICE_JWT_SECRET: ${DOCVAULT_ONLYOFFICE_JWT_SECRET:-}
+      # 服务端访问文档服务的内部地址（回传文件从这里取，不能走 127.0.0.1）
+      DOCVAULT_ONLYOFFICE_INTERNAL_URL: ${DOCVAULT_ONLYOFFICE_INTERNAL_URL:-http://docvault-onlyoffice}
+      DOCVAULT_ONLYOFFICE_ALLOWED_HOSTS: ${DOCVAULT_ONLYOFFICE_ALLOWED_HOSTS:-}
+      DOCVAULT_DEV_SEED: ${DOCVAULT_DEV_SEED:-0}
+      DOCVAULT_DEV_TENANT: ${DOCVAULT_DEV_TENANT:-demo}
+      DOCVAULT_DEV_ADMIN: ${DOCVAULT_DEV_ADMIN:-admin}
+      DOCVAULT_DEV_ADMIN_PASSWORD: ${DOCVAULT_DEV_ADMIN_PASSWORD:-}
+      # ---- 目录（LDAP/AD）：生产用 ldaps，证书随仓库挂入 ----
+      DOCVAULT_LDAP_URL: ${DOCVAULT_LDAP_URL:-}
+      DOCVAULT_LDAP_BASE_DN: ${DOCVAULT_LDAP_BASE_DN:-}
+      DOCVAULT_LDAP_BIND_DN: ${DOCVAULT_LDAP_BIND_DN:-}
+      DOCVAULT_LDAP_BIND_PASSWORD: ${DOCVAULT_LDAP_BIND_PASSWORD:-}
+      DOCVAULT_LDAP_AD_MODE: ${DOCVAULT_LDAP_AD_MODE:-0}
+      DOCVAULT_LDAP_CA_FILE: ${DOCVAULT_LDAP_CA_FILE:-}
+      DOCVAULT_LDAP_TLS_NAME: ${DOCVAULT_LDAP_TLS_NAME:-}
+      # 明文绑定默认关闭；仅实验网才设为 1
+      DOCVAULT_LDAP_ALLOW_PLAINTEXT: ${DOCVAULT_LDAP_ALLOW_PLAINTEXT:-0}
+      # ---- 域身份单点登录（由前置代理做集成认证）----
+      # 默认关闭。启用必须同时给"共享密钥"与"可信代理网段"，
+      # 缺任意一项服务端都会拒绝启用（见 httpapi.NewSSOSettings）。
+      DOCVAULT_SSO_ENABLED: ${DOCVAULT_SSO_ENABLED:-0}
+      DOCVAULT_SSO_HEADER: ${DOCVAULT_SSO_HEADER:-X-Remote-User}
+      DOCVAULT_SSO_SHARED_SECRET: ${DOCVAULT_SSO_SHARED_SECRET:-}
+      DOCVAULT_SSO_TRUSTED_CIDRS: ${DOCVAULT_SSO_TRUSTED_CIDRS:-}
+      DOCVAULT_SSO_DEFAULT_TENANT: ${DOCVAULT_SSO_DEFAULT_TENANT:-}
+      # ---- 运维与平台令牌（不配则对应端点一律 401，fail-closed）----
+      DOCVAULT_METRICS_TOKEN: ${DOCVAULT_METRICS_TOKEN:-}
+      DOCVAULT_PLATFORM_TOKEN: ${DOCVAULT_PLATFORM_TOKEN:-}
+      # ---- 平台账号与落库加密（M3）----
+      # 首个平台账号只在"平台账号表为空"时创建一次
+      DOCVAULT_PLATFORM_ADMIN: ${DOCVAULT_PLATFORM_ADMIN:-}
+      DOCVAULT_PLATFORM_ADMIN_PASSWORD: ${DOCVAULT_PLATFORM_ADMIN_PASSWORD:-}
+      # 证书私钥加密密钥（base64 32 字节）；不配则不允许上传证书
+      DOCVAULT_SECRET_KEY: ${DOCVAULT_SECRET_KEY:-}
+      DOCVAULT_ANCHOR_SECRET: ${DOCVAULT_ANCHOR_SECRET:-}
+      # ---- 邮件通道（SMTP）----
+      # HOST 与 FROM 都非空才启用；未配置时 MFA 账号会因取不到验证码而拒登（fail-closed）。
+      # TLS 取值 none | starttls | tls：465 端口用 tls（隐式 TLS），587 用 starttls。
+      DOCVAULT_SMTP_HOST: ${DOCVAULT_SMTP_HOST:-}
+      DOCVAULT_SMTP_PORT: ${DOCVAULT_SMTP_PORT:-587}
+      DOCVAULT_SMTP_USER: ${DOCVAULT_SMTP_USER:-}
+      DOCVAULT_SMTP_PASS: ${DOCVAULT_SMTP_PASS:-}
+      DOCVAULT_SMTP_FROM: ${DOCVAULT_SMTP_FROM:-}
+      DOCVAULT_SMTP_TLS: ${DOCVAULT_SMTP_TLS:-starttls}
+      DOCVAULT_SMTP_INSECURE: ${DOCVAULT_SMTP_INSECURE:-0}
+      # ---- 病毒扫描与限流 ----
+      DOCVAULT_CLAMAV_ADDR: ${DOCVAULT_CLAMAV_ADDR:-}
+      DOCVAULT_CLAMAV_TIMEOUT: ${DOCVAULT_CLAMAV_TIMEOUT:-30}
+      DOCVAULT_RATE_RPS: ${DOCVAULT_RATE_RPS:-50}
+      DOCVAULT_RATE_BURST: ${DOCVAULT_RATE_BURST:-100}
+      DOCVAULT_PUBLIC_RATE_RPS: ${DOCVAULT_PUBLIC_RATE_RPS:-2}
+      DOCVAULT_PUBLIC_RATE_BURST: ${DOCVAULT_PUBLIC_RATE_BURST:-10}
+    volumes:
+      - ./data/blob:/data/blob
+      - ./data/preview:/data/preview
+      - ./data/media:/data/media
+      - ./data/pdfcpu:/data/pdfcpu
+      - ./certs:/certs:ro
+    ports:
+      # 18090：避开其他项目占用的 8080 / 8081
+      - "127.0.0.1:18090:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles: ["app"]
+
+  # ---------------------------------------------------------------------------
+  # ONLYOFFICE Docs：在线编辑
+  #
+  # 只在 --profile office 下启动：没有它系统仍可预览（LibreOffice→PDF），
+  # 编辑入口会返回 501 并由前端提示，而不是白屏。
+  #
+  # 用官方镜像 onlyoffice/documentserver:10.0.0（与 versions.lock 一致）。
+  # ALLOW_PRIVATE_IP_ADDRESS 必须为 true，否则文档服务拒绝回源到
+  # 容器网络里的 docvault-server（私网地址）。
+  # ---------------------------------------------------------------------------
+  onlyoffice:
+    image: onlyoffice/documentserver:10.0.0
+    container_name: docvault-onlyoffice
+    environment:
+      JWT_ENABLED: "true"
+      JWT_SECRET: ${DOCVAULT_ONLYOFFICE_JWT_SECRET:?DOCVAULT_ONLYOFFICE_JWT_SECRET 必须设置}
+      JWT_HEADER: Authorization
+      JWT_IN_BODY: "true"
+      ALLOW_PRIVATE_IP_ADDRESS: "true"
+    volumes:
+      - ./data/onlyoffice/data:/var/www/onlyoffice/Data
+      - ./data/onlyoffice/log:/var/log/onlyoffice
+      - ./data/onlyoffice/db:/var/lib/postgresql
+      - ./data/onlyoffice/rabbitmq:/var/lib/rabbitmq
+      - ./data/onlyoffice/redis:/var/lib/redis
+    ports:
+      # 18091：避开其他项目占用的 8081
+      - "127.0.0.1:18091:80"
+    restart: unless-stopped
+    profiles: ["office"]
+
+  # ---------------------------------------------------------------------------
+  # cloudflared：把本服务经 Cloudflare Tunnel 发布到互联网
+  #
+  # 只在 --profile edge 下启动：没有公网发布需求时不该跑它。
+  # 隧道是**出站连接**，不需要公网 IP、不开放入站端口；对外入口是 Cloudflare
+  # 边缘的一条代理 CNAME（ndms.neurongene.cn → <UUID>.cfargotunnel.com）。
+  #
+  # 令牌来自 Cloudflare 控制台/API 创建隧道时签发，只写在 .env 里，不入库。
+  # 入站规则（ingress）不在本地文件里，而是存在 Cloudflare 侧（remote config）：
+  #   ndms.neurongene.cn → http://docvault-server:8080
+  # ---------------------------------------------------------------------------
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: docvault-cloudflared
+    command: ["tunnel", "--no-autoupdate", "--metrics", "0.0.0.0:2000", "run", "--token", "${DOCVAULT_CF_TUNNEL_TOKEN:-}"]
+    ports:
+      # 仅本机可见：用于读取隧道指标与排障
+      - "127.0.0.1:18092:2000"
+    # 不写 depends_on：server 属于 app profile，edge 单独启动时会被判为
+    # "依赖未启用的服务"而报错；隧道本身对源站掉线是自愈的（重连 + 502 透传）。
+    restart: unless-stopped
+    profiles: ["edge"]
+
+networks:
+  default:
+    name: docvault-net

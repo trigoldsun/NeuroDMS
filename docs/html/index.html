@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NeuroDMS 手册中心</title>
+<meta name="description" content="NeuroDMS 用户手册与管理员手册的网页版：按场景组织，流程图标注每一步由谁完成。">
+<link rel="stylesheet" href="assets/manual.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-in">
+    <a class="brand" href="index.html"><span class="mark"></span><b>NeuroDMS</b><span>手册</span></a>
+    <nav class="docnav">
+      <a href="index.html" aria-current="page">手册中心</a>
+      <a href="scenarios.html">场景操作</a>
+      <a href="roles.html">角色能力</a>
+      <a href="admin.html">管理员手册</a>
+    </nav>
+    <button class="toc-btn" type="button" aria-label="目录">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>目录
+    </button>
+  </div>
+</header>
+
+<div class="shell" style="grid-template-columns:minmax(0,1fr)">
+<main>
+
+  <div class="hero">
+    <span class="kicker">NeuroDMS · 使用文档</span>
+    <h1>把文件管住，把外发管住，<br>把责任留痕</h1>
+    <p class="subtitle">三份手册按"我要做什么"组织，而不是按功能清单罗列。每张流程图都标明每一步由谁完成、系统在哪里兜底、什么情况下会被拒绝。</p>
+    <div class="meta">
+      <span class="chip v">网页版 v1.0.0</span>
+      <span class="chip">内容对齐 <b>docs/29 · 30 · 31</b></span>
+      <span class="chip">更新 <b>2026-11-13</b></span>
+      <span class="chip">可直接打印 / 另存 PDF</span>
+    </div>
+  </div>
+
+  <hr class="rule">
+
+  <div class="entries">
+    <a class="entry" href="scenarios.html">
+      <span class="no">01 · 给所有登录用户</span>
+      <h3>场景操作手册</h3>
+      <p>上传、检索、授权、编辑回退、外发审批、格式预览、账号交接——七个高频场景，配 7 张流程图与逐步骤表。</p>
+      <span class="go">含 7 张流程图 →</span>
+    </a>
+    <a class="entry" href="roles.html">
+      <span class="no">02 · 给最终用户与内审</span>
+      <h3>角色能力手册</h3>
+      <p>三套彼此独立的身份维度、五个内容档位、三个管理角色、三权分立，以及一张可以点列高亮的能力矩阵。</p>
+      <span class="go">看能力矩阵 →</span>
+    </a>
+    <a class="entry" href="admin.html">
+      <span class="no">03 · 给系统 / 安全 / 审计管理员</span>
+      <h3>管理员手册</h3>
+      <p>租户参数、密级与标签、目录认证、外发审批、平台能力开关、备份升级与回滚，只写会被系统真正读取的参数。</p>
+      <span class="go">看配置项 →</span>
+    </a>
+  </div>
+
+  <h2 id="how" data-nav="怎么用这三份手册">怎么用这三份手册</h2>
+
+  <div class="cards c3">
+    <div class="card accent">
+      <span class="tag f">第一次用</span>
+      <h4>先读「场景操作」的 §0</h4>
+      <p>空间、权限档位、密级、外链票据这四个词不理解，后面每个页面都会看得别扭。四个概念读完大约三分钟。</p>
+    </div>
+    <div class="card accent">
+      <span class="tag f">不知道能不能做</span>
+      <h4>查「角色能力」的能力矩阵</h4>
+      <p>点表头的角色名，整列会高亮。实心点＝默认可做，空心圈＝需显式授权，横线＝不可做。</p>
+    </div>
+    <div class="card accent">
+      <span class="tag f">要交付 / 验收</span>
+      <h4>读「管理员手册」§3 与 §12</h4>
+      <p>§3 是每个参数的真实含义与取值边界，§12 是已知限制——实施评估时按它做预期管理，比事后解释省事。</p>
+    </div>
+  </div>
+
+  <h2 id="contract" data-nav="这套手册的三条约定">这套手册的三条约定</h2>
+
+  <div class="cards c3">
+    <div class="card mute">
+      <span class="tag">一</span>
+      <h4>不谈功能清单，只谈落点</h4>
+      <p>每个流程都写明"谁做、在哪做、注意什么"。界面上有但系统不读的开关，一律不写——那属于缺陷，不是功能。</p>
+    </div>
+    <div class="card mute">
+      <span class="tag">二</span>
+      <h4>边界写在功能旁边</h4>
+      <p>"不能做什么"和"什么情况下会被拒绝"与正流程同等重要。例如：能内部分享 ≠ 能外发；管理角色 ≠ 内容权限。</p>
+    </div>
+    <div class="card mute">
+      <span class="tag">三</span>
+      <h4>图与表可以互相对照</h4>
+      <p>流程图里的圆形序号与下方步骤表的编号一致。看不清图时直接看表，记不住步骤时看图。</p>
+    </div>
+  </div>
+
+  <h2 id="versions" data-nav="版本与来源">版本与来源</h2>
+
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>文档</th><th>版本</th><th>源文件</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>场景操作手册</td><td class="nowrap">V1.1.0</td><td><code>docs/29-用户手册-场景操作-v1.1.0.md</code></td><td>2026-11 增补外发审批入口与审批人三条件</td></tr>
+        <tr><td>角色能力手册</td><td class="nowrap">V1.0.0</td><td><code>docs/30-用户手册-角色能力-v1.0.0.md</code></td><td>能力矩阵、档位说明、三权分立</td></tr>
+        <tr><td>管理员手册</td><td class="nowrap">V1.2.0</td><td><code>docs/31-管理员手册-租户与系统配置-v1.2.0.md</code></td><td>重写 §6 外发审批；补 §9.1 三级开关求值</td></tr>
+        <tr><td>安全合规审计</td><td class="nowrap">V1.2.0</td><td><code>docs/28-安全合规审计-权限与租户隔离-v1.2.0.md</code></td><td>本轮权限与隔离审查的完整记录，作为三份手册的依据</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <p><b>关于网页版</b>：内容与上述 Markdown 一致，只做了三处呈现优化——流程图改为按"人 / 系统 / 判定 / 终止"四类语义着色并标注序号；长表格增加横向滚动与列高亮；每个标题都有独立地址，可以直接把某一节发给同事。</p>
+  </div>
+
+</main>
+</div>
+
+<footer class="foot">
+  <span>NeuroDMS · 多租户文档管理 · 手册中心</span>
+  <span>内容对齐 docs/29 · 30 · 31 · 网页版 v1.0.0</span>
+</footer>
+
+<script src="assets/flows.js"></script>
+<script src="assets/flow.js"></script>
+<script src="assets/manual.js"></script>
+</body>
+</html>

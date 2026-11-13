@@ -1,0 +1,16 @@
+# 构建上下文裁剪：不把数据、产物、文档送进构建器
+# 尤其 docker/data 内有整个数据库集群，误送会让构建变慢且泄漏数据
+
+.git
+.gitignore
+bin/
+data/
+docker/data/
+docs/
+deploy/
+*.md
+*.exe
+.DS_Store
+.idea/
+.vscode/
+web/node_modules/

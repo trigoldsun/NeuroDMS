@@ -1,0 +1,53 @@
+<Slide style={{ width: 1280, height: 720, background: '#F5F7F2', padding: '60px', fontFamily: '"Source Han Sans SC", "Microsoft YaHei", Arial, sans-serif', position: 'relative' }}>
+    <Box style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 34, fontWeight: 'bold', color: '#0A120E' }}>同一套内核，两种形态都完整具备</Text>
+        <Text style={{ fontSize: 14, color: '#66756D', marginTop: 10 }}>共有能力</Text>
+    </Box>
+    <Box style={{ width: '100%', height: 1, background: '#DDE4DC', marginTop: 14 }} />
+
+    <Text style={{ fontSize: 17, color: '#3F5148', lineHeight: 1.6, marginTop: 16 }}>
+        SaaS 与本地部署不是两个产品，是同一份服务端代码的两次交付。下面五件事在两种形态里
+        <Text style={{ fontWeight: 'bold', color: '#0F5C40' }}>逐条一致</Text>
+        ——差别只在部署位置与运维归属。
+    </Text>
+
+    <Box style={{ marginTop: 20, flexDirection: 'column', gap: 14 }}>
+        {[
+            { n: '01', t: '对象级权限', d: '权限挂在文件与目录上，15 个原子位可组合；继承可断可续' },
+            { n: '02', t: '七级密级', d: '密级先于权限生效；高密内容对外默认不可见，降密要审批' },
+            { n: '03', t: '外发闸门', d: '口令、有效期、来源网段、水印、审批、即时吊销，逐条可配' },
+            { n: '04', t: '格式中枢', d: '101 种格式在线预览，含相机 RAW 与 iPhone HEIC' },
+            { n: '05', t: '不可篡改审计', d: '访问、下载、外发、审批逐条留痕；三权分立，可对外举证' },
+        ].map((r, i) => (
+            <Box
+                key={r.n}
+                style={{
+                    width: 800 + i * 70,
+                    background: i === 4 ? '#0A120E' : '#FFFFFF',
+                    border: i === 4 ? 'none' : '1px solid #DDE4DC',
+                    borderRadius: 8,
+                    padding: '16px 20px',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 16,
+                }}
+            >
+                <Text style={{ fontSize: 13, fontWeight: 'bold', color: i === 4 ? '#C6EE4B' : '#0F5C40', width: 24 }}>{r.n}</Text>
+                <Text style={{ fontSize: 19, fontWeight: 'bold', color: i === 4 ? '#FFFFFF' : '#0A120E', width: 128 }}>{r.t}</Text>
+                <Text style={{ fontSize: 16, color: i === 4 ? '#DDE4DC' : '#3F5148', lineHeight: 1.4 }}>{r.d}</Text>
+            </Box>
+        ))}
+    </Box>
+
+    <Box style={{ marginTop: 26, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+        <Box style={{ width: 3, height: 20, background: '#0F5C40' }} />
+        <Text style={{ fontSize: 18, color: '#0A120E', lineHeight: 1.5 }}>
+            后面四页展开其中四项；第五项「审计」单独一页，因为它是外发管控能被信任的前提。
+        </Text>
+    </Box>
+
+    <Box style={{ position: 'absolute', left: 60, right: 60, top: 676, flexDirection: 'row', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 14, color: '#A9B5AE' }}>NeuroDMS · 产品概览</Text>
+        <Text style={{ fontSize: 14, color: '#A9B5AE' }}>04</Text>
+    </Box>
+</Slide>

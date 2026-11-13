@@ -1,0 +1,67 @@
+<Slide style={{ width: 1280, height: 720, background: '#F5F7F2', padding: '60px', fontFamily: '"Source Han Sans SC", "Microsoft YaHei", Arial, sans-serif', position: 'relative' }}>
+    <Box style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 34, fontWeight: 'bold', color: '#0A120E' }}>同一内核，两种交付：差别在边界，不在能力</Text>
+        <Text style={{ fontSize: 14, color: '#66756D', marginTop: 10 }}>交付形态 01/02</Text>
+    </Box>
+    <Box style={{ width: '100%', height: 1, background: '#DDE4DC', marginTop: 14 }} />
+
+    <Box style={{ flexDirection: 'row', marginTop: 18 }}>
+        <Box style={{ width: 190 }} />
+        <Box style={{ flex: 1, background: '#0F5C40', borderRadius: '8px 8px 0 0', padding: '14px 18px', flexDirection: 'column', gap: 4 }}>
+            <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#FFFFFF' }}>SaaS 订阅</Text>
+            <Text style={{ fontSize: 14, color: '#DDE4DC' }}>我们托管，按订阅使用</Text>
+        </Box>
+        <Box style={{ width: 12 }} />
+        <Box style={{ flex: 1, background: '#0A120E', borderRadius: '8px 8px 0 0', padding: '14px 18px', flexDirection: 'column', gap: 4 }}>
+            <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#FFFFFF' }}>本地部署</Text>
+            <Text style={{ fontSize: 14, color: '#A9B5AE' }}>装在客户机房或私有云</Text>
+        </Box>
+    </Box>
+
+    <Box style={{ flexDirection: 'column', marginTop: 0 }}>
+        {[
+            { k: '部署位置', a: '平台托管，多租户共用实例', b: '客户机房 / 私有云，单租户独立实例' },
+            { k: '数据边界', a: '租户级行级隔离，数据不跨租户', b: '数据不出内网，可断外网运行' },
+            { k: '开通时间', a: '当天开通，账号即用', b: '现场部署 1–3 天，含迁移与验收' },
+            { k: '计费', a: '按席位与容量订阅', b: '一次性授权 + 年度维护' },
+            { k: '升级', a: '平台统一灰度，用户无感', b: '提供升级包，客户窗口内执行' },
+            { k: '运维', a: '备份、监控、扩容由平台负责', b: '客户运维，我们提供手册与远程支持' },
+            { k: '身份对接', a: '平台账号与租户账号分离', b: '可接内网 LDAP / AD、反向代理 SSO' },
+        ].map((r, i) => (
+            <Box
+                key={r.k}
+                style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    height: 50,
+                    background: i % 2 === 0 ? '#FFFFFF' : 'transparent',
+                    borderBottom: '1px solid #DDE4DC',
+                }}
+            >
+                <Box style={{ width: 190, paddingLeft: 14 }}>
+                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#0F5C40' }}>{r.k}</Text>
+                </Box>
+                <Box style={{ flex: 1, paddingLeft: 18, paddingRight: 12 }}>
+                    <Text style={{ fontSize: 15, color: '#0A120E', lineHeight: 1.4 }}>{r.a}</Text>
+                </Box>
+                <Box style={{ width: 12 }} />
+                <Box style={{ flex: 1, paddingLeft: 18, paddingRight: 12 }}>
+                    <Text style={{ fontSize: 15, color: '#0A120E', lineHeight: 1.4 }}>{r.b}</Text>
+                </Box>
+            </Box>
+        ))}
+    </Box>
+
+    <Box style={{ marginTop: 16, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+        <Box style={{ width: 3, height: 20, background: '#0F5C40' }} />
+        <Text style={{ fontSize: 17, color: '#0A120E', lineHeight: 1.5 }}>
+            两栏共用同一份格式清单、同一条外发链路、同一套审计结构——
+            <Text style={{ fontWeight: 'bold' }}>从订阅转为本地，权限与历史不需要重建。</Text>
+        </Text>
+    </Box>
+
+    <Box style={{ position: 'absolute', left: 60, right: 60, top: 676, flexDirection: 'row', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 14, color: '#A9B5AE' }}>NeuroDMS · 产品概览</Text>
+        <Text style={{ fontSize: 14, color: '#A9B5AE' }}>10</Text>
+    </Box>
+</Slide>

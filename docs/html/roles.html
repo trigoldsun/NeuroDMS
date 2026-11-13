@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>角色能力手册 · NeuroDMS 用户手册</title>
+<meta name="description" content="NeuroDMS 角色能力手册：身份维度、五个内容档位、三个管理角色、三权分立与能力矩阵。">
+<link rel="stylesheet" href="assets/manual.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-in">
+    <a class="brand" href="index.html"><span class="mark"></span><b>NeuroDMS</b><span>手册</span></a>
+    <nav class="docnav">
+      <a href="index.html">手册中心</a>
+      <a href="scenarios.html">场景操作</a>
+      <a href="roles.html" aria-current="page">角色能力</a>
+      <a href="admin.html">管理员手册</a>
+    </nav>
+    <button class="toc-btn" type="button" aria-label="目录">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>目录
+    </button>
+    <div class="search">
+      <svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+      <input type="search" placeholder="搜索本节… 按 / 聚焦" aria-label="搜索手册">
+      <div class="search-res"></div>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <aside class="toc" aria-label="目录"></aside>
+  <main>
+
+    <span class="kicker">用户手册 · 角色能力</span>
+    <h1>身份不是一个标签，是四层</h1>
+    <p class="subtitle">同一句"我能不能做这件事"，答案可能来自四个不同的维度。先把它们拆开，再看能力矩阵。</p>
+    <div class="meta">
+      <span class="chip v">V1.0.0</span>
+      <span class="chip">适用 <b>最终用户 · 实施顾问 · 内审</b></span>
+      <span class="chip">配套 <b>场景操作</b> · <b>管理员手册</b></span>
+      <button class="chip" type="button" data-print style="cursor:pointer;font-family:inherit">打印 / 存为 PDF</button>
+    </div>
+
+    <h2 id="identity" data-nav="0 · 四层身份"><span class="num">0</span>四层身份，不要混为一谈</h2>
+    <p>大多数人第一次用会困惑"我到底是什么角色"。系统里有<b>四套彼此独立</b>的维度——口头常说"三层身份"，第四层（密级）最容易被忽略，而它恰恰是优先级最高的那层。</p>
+
+    <div class="layers">
+      <div class="layer">
+        <span class="ln">账号类型</span>
+        <span class="ld">你是不是本组织的人<small>内部成员 / 外部协作者</small></span>
+        <span class="lv">由系统管理员设置</span>
+      </div>
+      <div class="layer">
+        <span class="ln">管理角色</span>
+        <span class="ld">能否进入管理台、能改什么配置<small>系统管理员 / 安全管理员 / 审计管理员</small></span>
+        <span class="lv">由系统管理员设置</span>
+      </div>
+      <div class="layer">
+        <span class="ln">权限档位</span>
+        <span class="ld">你对<b>某一个文件 / 空间</b>能做什么<small>查看者 → 贡献者 → 编辑者 → 管理者 → 所有者</small></span>
+        <span class="lv">由对象所有者设置</span>
+      </div>
+      <div class="layer hl">
+        <span class="ln">密级</span>
+        <span class="ld">你能接触多敏感的内容，<b>先于权限判定</b><small>公开 → 内部 → 敏感 → 秘密 → 机密 → 绝密 → 核心</small></span>
+        <span class="lv">由安全管理员设置</span>
+      </div>
+    </div>
+
+    <div class="danger">
+      <p><b>最常见的误解</b>：「我是系统管理员，所以我能看所有文件」——<b>不能</b>。管理角色管的是<b>配置</b>，不是<b>内容</b>。系统管理员默认看不到别人空间里的文件，除非被显式授权。</p>
+      <p>反过来也成立：文件所有者拥有全部内容权限，但进不了管理台。</p>
+    </div>
+
+    <h2 id="matrix" data-nav="1 · 能力总表"><span class="num">1</span>能力总表</h2>
+    <p>点表头的角色名可以高亮整列，方便对照。</p>
+
+    <div class="matrix-wrap">
+      <div class="matrix">
+        <table>
+          <thead>
+            <tr>
+              <th>能力</th>
+              <th data-role="viewer">查看者</th>
+              <th data-role="contributor">贡献者</th>
+              <th data-role="editor">编辑者</th>
+              <th data-role="manager">管理者</th>
+              <th data-role="owner">所有者</th>
+              <th data-role="sysadmin">系统<small>管理员</small></th>
+              <th data-role="secadmin">安全<small>管理员</small></th>
+              <th data-role="auditor">审计<small>管理员</small></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>看到文件、在线预览</td>
+              <td data-col="viewer"><i class="dot y"></i></td><td data-col="contributor"><i class="dot y"></i></td><td data-col="editor"><i class="dot y"></i></td><td data-col="manager"><i class="dot y"></i></td><td data-col="owner"><i class="dot y"></i></td><td data-col="sysadmin"><i class="dot o"></i></td><td data-col="secadmin"><i class="dot o"></i></td><td data-col="auditor"><i class="dot o"></i></td>
+            </tr>
+            <tr>
+              <td>下载、打印</td>
+              <td data-col="viewer"><i class="dot n"></i></td><td data-col="contributor"><i class="dot y"></i></td><td data-col="editor"><i class="dot y"></i></td><td data-col="manager"><i class="dot y"></i></td><td data-col="owner"><i class="dot y"></i></td><td data-col="sysadmin"><i class="dot o"></i></td><td data-col="secadmin"><i class="dot o"></i></td><td data-col="auditor"><i class="dot o"></i></td>
+            </tr>
+            <tr>
+              <td>上传、新建目录</td>
+              <td data-col="viewer"><i class="dot n"></i></td><td data-col="contributor"><i class="dot y"></i></td><td data-col="editor"><i class="dot y"></i></td><td data-col="manager"><i class="dot y"></i></td><td data-col="owner"><i class="dot y"></i></td><td data-col="sysadmin"><i class="dot o"></i></td><td data-col="secadmin"><i class="dot o"></i></td><td data-col="auditor"><i class="dot o"></i></td>
+            </tr>
+            <tr>
+              <td>在线编辑</td>
+              <td data-col="viewer"><i class="dot n"></i></td><td data-col="contributor"><i class="dot n"></i></td><td data-col="editor"><i class="dot y"></i></td><td data-col="manager"><i class="dot y"></i></td><td data-col="owner"><i class="dot y"></i></td><td data-col="sysadmin"><i class="dot o"></i></td><td data-col="secadmin"><i class="dot o"></i></td><td data-col="auditor"><i class="dot o"></i></td>
+            </tr>
+            <tr>
+              <td>复制、改名</td>
+              <td data-col="viewer"><i class="dot n"></i></td><td data-col="contributor"><i class="dot n"></i></td><td data-col="editor"><i class="dot y"></i></td><td data-col="manager"><i class="dot y"></i></td><td data-col="owner"><i class="dot y"></i></td><td data-col="sysadmin"><i class="dot o"></i></td><td data-col="secadmin"><i class="dot o"></i></td><td data-col="auditor"><i class="dot o"></i></td>
+            </tr>
+            <tr>
+              <td>移动、删除</td>
+              <td data-col="viewer"><i class="dot n"></i></td><td data-col="contributor"><i class="dot n"></i></td><td data-col="editor"><i class="dot n"></i></td><td data-col="manager"><i class="dot y"></i></td><td data-col="owner"><i class="dot y"></i></td><td data-col="sysadmin"><i class="dot o"></i></td><td data-col="secadmin"><i class="dot o"></i></td><td data-col="auditor"><i class="dot o"></i></td>
+            </tr>
+            <tr>
+              <td>内部分享</td>
+              <td data-col="viewer"><i class="dot n"></i></td><td data-col="contributor"><i class="dot n"></i></td><td data-col="editor"><i class="dot n"></i></td><td data-col="manager"><i class="dot y"></i></td><td data-col="owner"><i class="dot y"></i></td><td data-col="sysadmin"><i class="dot o"></i></td><td data-col="secadmin"><i class="dot o"></i></td><td data-col="auditor"><i class="dot o"></i></td>
+            </tr>
+            <tr>
+              <td>外发链接</td>
+              <td data-col="viewer"><i class="dot n"></i></td><td data-col="contributor"><i class="dot n"></i></td><td data-col="editor"><i class="dot n"></i></td><td data-col="manager"><i class="dot n"></i></td><td data-col="owner"><i class="dot y"></i></td><td data-col="sysadmin"><i class="dot o"></i></td><td data-col="secadmin"><i class="dot o"></i></td><td data-col="auditor"><i class="dot o"></i></td>
+            </tr>
+            <tr>
+              <td>给别人授权</td>
+              <td data-col="viewer"><i class="dot n"></i></td><td data-col="contributor"><i class="dot n"></i></td><td data-col="editor"><i class="dot n"></i></td><td data-col="manager"><i class="dot n"></i></td><td data-col="owner"><i class="dot y"></i></td><td data-col="sysadmin"><i class="dot o"></i></td><td data-col="secadmin"><i class="dot o"></i></td><td data-col="auditor"><i class="dot o"></i></td>
+            </tr>
+            <tr>
+              <td>版本回退 / 清理</td>
+              <td data-col="viewer"><i class="dot n"></i></td><td data-col="contributor"><i class="dot n"></i></td><td data-col="editor"><i class="dot n"></i></td><td data-col="manager"><i class="dot y"></i></td><td data-col="owner"><i class="dot y"></i></td><td data-col="sysadmin"><i class="dot o"></i></td><td data-col="secadmin"><i class="dot o"></i></td><td data-col="auditor"><i class="dot o"></i></td>
+            </tr>
+            <tr>
+              <td>改文件密级</td>
+              <td data-col="viewer"><i class="dot n"></i></td><td data-col="contributor"><i class="dot n"></i></td><td data-col="editor"><i class="dot n"></i></td><td data-col="manager"><i class="dot n"></i></td><td data-col="owner"><i class="dot o"></i></td><td data-col="sysadmin"><i class="dot n"></i></td><td data-col="secadmin"><i class="dot o"></i></td><td data-col="auditor"><i class="dot n"></i></td>
+            </tr>
+            <tr>
+              <td>提交降密申请</td>
+              <td data-col="viewer"><i class="dot y"></i></td><td data-col="contributor"><i class="dot y"></i></td><td data-col="editor"><i class="dot y"></i></td><td data-col="manager"><i class="dot y"></i></td><td data-col="owner"><i class="dot y"></i></td><td data-col="sysadmin"><i class="dot n"></i></td><td data-col="secadmin"><i class="dot n"></i></td><td data-col="auditor"><i class="dot n"></i></td>
+            </tr>
+            <tr>
+              <td>审批降密申请</td>
+              <td data-col="viewer"><i class="dot n"></i></td><td data-col="contributor"><i class="dot n"></i></td><td data-col="editor"><i class="dot n"></i></td><td data-col="manager"><i class="dot n"></i></td><td data-col="owner"><i class="dot n"></i></td><td data-col="sysadmin"><i class="dot n"></i></td><td data-col="secadmin"><i class="dot y"></i></td><td data-col="auditor"><i class="dot n"></i></td>
+            </tr>
+            <tr>
+              <td>审批外发链接</td>
+              <td data-col="viewer"><i class="dot n"></i></td><td data-col="contributor"><i class="dot n"></i></td><td data-col="editor"><i class="dot n"></i></td><td data-col="manager"><i class="dot n"></i></td><td data-col="owner"><i class="dot y"></i></td><td data-col="sysadmin"><i class="dot n"></i></td><td data-col="secadmin"><i class="dot o"></i></td><td data-col="auditor"><i class="dot n"></i></td>
+            </tr>
+            <tr>
+              <td>建号、改角色、停用</td>
+              <td data-col="viewer"><i class="dot n"></i></td><td data-col="contributor"><i class="dot n"></i></td><td data-col="editor"><i class="dot n"></i></td><td data-col="manager"><i class="dot n"></i></td><td data-col="owner"><i class="dot n"></i></td><td data-col="sysadmin"><i class="dot y"></i></td><td data-col="secadmin"><i class="dot n"></i></td><td data-col="auditor"><i class="dot n"></i></td>
+            </tr>
+            <tr>
+              <td>改租户策略参数</td>
+              <td data-col="viewer"><i class="dot n"></i></td><td data-col="contributor"><i class="dot n"></i></td><td data-col="editor"><i class="dot n"></i></td><td data-col="manager"><i class="dot n"></i></td><td data-col="owner"><i class="dot n"></i></td><td data-col="sysadmin"><i class="dot y"></i></td><td data-col="secadmin"><i class="dot n"></i></td><td data-col="auditor"><i class="dot n"></i></td>
+            </tr>
+            <tr>
+              <td>改密级名称 / 标签策略</td>
+              <td data-col="viewer"><i class="dot n"></i></td><td data-col="contributor"><i class="dot n"></i></td><td data-col="editor"><i class="dot n"></i></td><td data-col="manager"><i class="dot n"></i></td><td data-col="owner"><i class="dot n"></i></td><td data-col="sysadmin"><i class="dot n"></i></td><td data-col="secadmin"><i class="dot y"></i></td><td data-col="auditor"><i class="dot n"></i></td>
+            </tr>
+            <tr>
+              <td>看审计日志、导出证据</td>
+              <td data-col="viewer"><i class="dot n"></i></td><td data-col="contributor"><i class="dot n"></i></td><td data-col="editor"><i class="dot n"></i></td><td data-col="manager"><i class="dot n"></i></td><td data-col="owner"><i class="dot n"></i></td><td data-col="sysadmin"><i class="dot n"></i></td><td data-col="secadmin"><i class="dot n"></i></td><td data-col="auditor"><i class="dot y"></i></td>
+            </tr>
+            <tr>
+              <td>看操作日志（业务流水）</td>
+              <td data-col="viewer"><i class="dot n"></i></td><td data-col="contributor"><i class="dot n"></i></td><td data-col="editor"><i class="dot n"></i></td><td data-col="manager"><i class="dot n"></i></td><td data-col="owner"><i class="dot n"></i></td><td data-col="sysadmin"><i class="dot y"></i></td><td data-col="secadmin"><i class="dot y"></i></td><td data-col="auditor"><i class="dot y"></i></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="matrix-note">● 默认可做　○ 需显式授权 / 配置　— 不可做</p>
+    </div>
+
+    <div class="note">
+      <p>「审批外发链接」安全管理员标 ○：审批门槛是<b>对该对象有 <code>manage_acl</code></b>，而不是某个角色。安全管理员若不在该对象的授权链上，同样批不了。这是刻意的——审批人要真的对这份内容有处置权。</p>
+    </div>
+
+    <h2 id="levels" data-nav="2 · 五个内容档位"><span class="num">2</span>五个内容档位：逐档说明</h2>
+
+    <div class="ladder">
+      <div class="rung"><b>查看者</b><div class="fill"><div class="cap"><i style="width:20%"></i></div><span class="t">看</span></div></div>
+      <div class="rung"><b>贡献者</b><div class="fill"><div class="cap"><i style="width:40%"></i></div><span class="t">看 · 下载 · 上传</span></div></div>
+      <div class="rung"><b>编辑者</b><div class="fill"><div class="cap"><i style="width:60%"></i></div><span class="t">+ 编辑 · 复制 · 改名</span></div></div>
+      <div class="rung"><b>管理者</b><div class="fill"><div class="cap"><i style="width:80%"></i></div><span class="t">+ 移动 · 删除 · 内部分享</span></div></div>
+      <div class="rung"><b>所有者</b><div class="fill"><div class="cap"><i style="width:100%"></i></div><span class="t">+ 授权 · 外发 · 移交</span></div></div>
+    </div>
+
+    <h3 id="lv-viewer" data-nav="2.1 查看者">2.1 查看者（viewer）</h3>
+    <p><b>能做的场景</b>：查看目录结构、在线预览文件、看版本列表。</p>
+    <p><b>不能做但常被期待的事</b>：</p>
+    <ul>
+      <li>不能下载（预览是"看"，不是"取走"）；</li>
+      <li>不能复制正文——复制属于 <code>copy</code> 位，查看者没有；</li>
+      <li>不能分享。</li>
+    </ul>
+    <div class="note"><p><b>为什么预览和下载要分开</b>：很多合规要求是"可以看、不能带走"。把它们合成一个开关，就没法表达这条策略。</p></div>
+    <p><b>给谁</b>：外部评审、只读旁听、跨部门知会。</p>
+
+    <h3 id="lv-contributor" data-nav="2.2 贡献者">2.2 贡献者（contributor）</h3>
+    <p><b>在查看者基础上加</b>：下载、打印、上传。</p>
+    <p><b>典型场景</b>：让各部门往一个目录里交材料，但不许他们互相删改。</p>
+    <div class="warn"><p><b>注意</b>：贡献者能上传，因此也能<b>覆盖同名文件</b>（产生新版本）。要防止覆盖，就别给上传位，改为"由一个人统一收口"。</p></div>
+
+    <h3 id="lv-editor" data-nav="2.3 编辑者">2.3 编辑者（editor）</h3>
+    <p><b>在贡献者基础上加</b>：在线编辑、复制、改名。</p>
+    <p><b>典型场景</b>：一起改一份方案。</p>
+    <ul>
+      <li>改名与改内容是<b>两个位</b>（<code>rename</code> / <code>edit</code>）。当前版本的"改名"按 <code>rename</code> 判定，所以只给 <code>edit</code> 的人改不了名——需要同时给。</li>
+      <li>编辑会登记"编辑会话"，会影响别人回退版本（见场景 4）。</li>
+    </ul>
+
+    <h3 id="lv-manager" data-nav="2.4 管理者">2.4 管理者（manager）</h3>
+    <p><b>在编辑者基础上加</b>：移动、删除、内部分享、版本管理。</p>
+    <p><b>典型场景</b>：项目负责人整理目录、清理过期材料、把文件分享给项目组。</p>
+    <ul>
+      <li>管理者能<b>内部分享</b>但不能<b>外发</b>。这是有意的分界：内部扩散的风险远低于全互联网可见。</li>
+      <li>管理者能删除，但删除是软删除（进回收站），不是立刻销毁。</li>
+    </ul>
+
+    <h3 id="lv-owner" data-nav="2.5 所有者">2.5 所有者（owner）</h3>
+    <p><b>全部能力</b>，并且独有：</p>
+    <ul>
+      <li>给别人授权（<code>manage_acl</code>）；</li>
+      <li>生成外发链接（<code>share_external</code>）；</li>
+      <li>移交所有权。</li>
+    </ul>
+    <ul>
+      <li>一个对象<b>至少要有一个所有者</b>，系统拒绝移除最后一个；</li>
+      <li>授权时不能授出高于自身封顶（<code>ceiling</code>）的档位。默认封顶是最高档，所以"所有者能授出所有者"是正常行为，不是漏洞；</li>
+      <li>所有者被停用后，其所有权条目仍在——<b>离职必须先移交</b>（见场景 7）。</li>
+    </ul>
+
+    <h2 id="external" data-nav="3 · 外部协作者"><span class="num">3</span>外部协作者（external）</h2>
+    <p><b>是什么</b>：在本租户内、但标记为外部的人员账号。用来给长期合作方开账号，而不是发链接。</p>
+
+    <div class="cards c3">
+      <div class="card">
+        <span class="tag f">默认限制 01</span>
+        <h4>强制二次验证</h4>
+        <p>创建时强制邮箱验证码。收不到码就登不上，这是 fail-closed 行为。</p>
+      </div>
+      <div class="card">
+        <span class="tag f">默认限制 02</span>
+        <h4>不继承内部授权</h4>
+        <p>外部主体只能通过 <code>external:</code> 前缀的授权条目获得权限，<b>不会</b>因为"同部门"自动继承内部授权。</p>
+      </div>
+      <div class="card">
+        <span class="tag f">默认限制 03</span>
+        <h4>档位本身不限</h4>
+        <p>档位没有额外封顶，但密级与授权范围要单独给。</p>
+      </div>
+    </div>
+
+    <p><b>给谁</b>：长期驻场的供应商、外部财务顾问。</p>
+
+    <h3 id="external-vs-link">与"外链"的选择</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>维度</th><th>外部协作者账号</th><th>外链</th></tr></thead>
+        <tbody>
+          <tr><td>适合</td><td>长期、频繁、需要留痕到人</td><td>一次性、临时、对方不愿注册</td></tr>
+          <tr><td>追溯</td><td>精确到账号</td><td>精确到链接 + 网段 + 时间</td></tr>
+          <tr><td>回收</td><td>停用账号</td><td>撤销链接</td></tr>
+          <tr><td>成本</td><td>占席位</td><td>不占席位</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 id="admins" data-nav="4 · 三个管理角色"><span class="num">4</span>三个管理角色</h2>
+
+    <h3 id="sysadmin" data-nav="4.1 系统管理员">4.1 系统管理员（sysadmin）</h3>
+    <p><b>管什么</b>：人、组织、系统参数。</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>场景</th><th>入口</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>建号 / 停用 / 删除</td><td>管理台 → 成员与角色</td><td>停用立即吊销会话，30 秒内生效</td></tr>
+          <tr><td>分配管理角色</td><td>同上</td><td><b>不能给自己加冲突角色</b>（见 §5）</td></tr>
+          <tr><td>重置他人密码</td><td>同上</td><td>重置后对方全部会话失效</td></tr>
+          <tr><td>改租户策略</td><td>管理台 → 系统设置</td><td>上传上限、超时、日志保留、格式白名单</td></tr>
+          <tr><td>配目录认证</td><td>管理台 → 目录认证</td><td>LDAP / AD、SSO 断言</td></tr>
+          <tr><td>看操作日志</td><td>管理台 → 操作日志</td><td>业务流水，可按人 / 对象筛</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><b>不能做</b>：</p>
+    <ul>
+      <li>看不到别人空间里的文件（管理角色 ≠ 内容权限）；</li>
+      <li>改不了密级定义与标签策略（属安全管理员）；</li>
+      <li>看不到审计日志（属审计管理员）。</li>
+    </ul>
+
+    <h3 id="secadmin" data-nav="4.2 安全管理员">4.2 安全管理员（secadmin）</h3>
+    <p><b>管什么</b>：密级、标签、降密审批。</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>场景</th><th>入口</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>改密级显示名与描述</td><td>管理台 → 密级定义</td><td><b>只能改名称与描述，等级数值固定</b>。改数值会让历史数据语义翻转</td></tr>
+          <tr><td>配标签策略</td><td>管理台 → 标签策略</td><td>给带某标签的文件设最低密级（只收紧，不放松）</td></tr>
+          <tr><td>审批降密申请</td><td>管理台 → 降密审批</td><td>通过后文件密级下调</td></tr>
+          <tr><td>审批外发链接</td><td>管理台 → 外发审批</td><td>且必须对该对象有 <code>manage_acl</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><b>不能做</b>：建号、改系统参数、看审计日志。</p>
+    <div class="warn"><p><b>常被误解的一点</b>：安全管理员<b>没有</b>"绕过密级"的特权。系统刻意不给安全管理员豁免——否则"高密文件外发必须有人复核"就形同虚设。</p></div>
+
+    <h3 id="auditor" data-nav="4.3 审计管理员">4.3 审计管理员（auditor）</h3>
+    <p><b>管什么</b>：只读审计。</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>场景</th><th>入口</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>查审计事件</td><td>管理台 → 审计日志</td><td>含成功与失败，含被拒绝的越权尝试</td></tr>
+          <tr><td>校验审计完整性</td><td>同上 → 校验</td><td>校验哈希链，判断记录是否被篡改</td></tr>
+          <tr><td>导出证据包</td><td>同上 → 导出 CSV</td><td>用于内审 / 外审取证</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><b>不能做</b>：任何写操作。审计管理员看不到"删除审计"按钮，因为不存在。</p>
+    <div class="note"><p><b>为什么审计管理员不能是系统管理员</b>：能改配置的人如果能同时读 / 改审计，独立性就没了。系统的三权分立检查会在<b>运行期</b>拦住同时持有冲突角色的账号——不是只在界面上隐藏。</p></div>
+
+    <h2 id="separation" data-nav="5 · 三权分立"><span class="num">5</span>三权分立：哪些角色组合被禁止</h2>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>组合</th><th>结果</th><th>原因</th></tr></thead>
+        <tbody>
+          <tr><td>系统管理员 + 审计管理员</td><td>拒绝（<code>SEPARATION_VIOLATION</code>）</td><td>能改配置又能改审计 = 无独立审计</td></tr>
+          <tr><td>系统管理员 + 安全管理员</td><td>允许</td><td>小团队常见，职责可合并</td></tr>
+          <tr><td>安全管理员 + 审计管理员</td><td>拒绝</td><td>能改密级又能审自己</td></tr>
+          <tr><td>三个全给</td><td>拒绝</td><td>同上</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="danger">
+      <p>被拒绝时不是"按钮消失"，而是<b>所有管理接口都返回 403 并写审计</b>。也就是说，一旦配错，这个账号会立刻失去全部管理能力——这是刻意的强约束，配错时要尽快改回来。</p>
+    </div>
+
+    <h2 id="platform" data-nav="6 · 平台运营（仅 SaaS）"><span class="num">6</span>平台运营（仅 SaaS 形态）</h2>
+    <p>平台账号与租户账号<b>完全分离</b>：不同的表、不同的令牌、不同的入口（<code>/platform/{tab}</code>）。</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>能力</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>租户生命周期</td><td>新建、停用、逻辑删除；停用后该租户所有人立即不可用</td></tr>
+          <tr><td>配额与档位</td><td>调整存储 / 席位 / 上传上限；改档位立即生效</td></tr>
+          <tr><td>灰度开关</td><td>按租户关闭外发、邮件验证、音视频转码等能力</td></tr>
+          <tr><td>用量与对账</td><td>按租户看存储、API 调用、导出对账单</td></tr>
+          <tr><td>平台审计</td><td>平台侧的每一次操作都留痕</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tip">
+      <p><b>边界</b>：平台运营<b>不能</b>读租户文件内容。平台能看到"这个租户用了多少、开了哪些开关"，看不到"里面存了什么"。这是多租户产品的信任前提。</p>
+      <p>自托管 / 私有化部署没有这一层，对应能力由本地系统管理员承担（且不含许可证管理，见部署说明）。</p>
+    </div>
+
+    <h2 id="errors" data-nav="7 · 403 / 404 对照表"><span class="num">7</span>典型 403 / 404 对照表</h2>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>返回</th><th>含义</th><th>该找谁</th></tr></thead>
+        <tbody>
+          <tr><td><code>403 CEILING_EXCEEDED</code></td><td>想授出的档位高于自己的封顶</td><td>让更高档位的人授权</td></tr>
+          <tr><td><code>403 SEPARATION_VIOLATION</code></td><td>角色组合冲突，管理能力被冻结</td><td>系统管理员调整角色</td></tr>
+          <tr><td><code>403 FEATURE_DISABLED</code></td><td>平台 / 租户关掉了该能力（如对外分享）</td><td>系统管理员或平台运营</td></tr>
+          <tr><td><code>403 SELF_APPROVAL_DENIED</code></td><td>审批自己发起的分享</td><td>换一位审批人</td></tr>
+          <tr><td><code>403 SPACE_NOT_SHAREABLE</code></td><td>空间含你无权访问或更高密级内容</td><td>改为分享具体文件 / 目录</td></tr>
+          <tr><td><code>403 DOWNLOAD_FORBIDDEN</code></td><td>该外链不允许下载</td><td>让分享人开启下载</td></tr>
+          <tr><td><code>404 NOT_FOUND</code></td><td>不存在<b>或</b>无权限（系统不区分）</td><td>用权限解释确认</td></tr>
+          <tr><td><code>409 INHERITED_ACE</code></td><td>想删继承来的权限条目</td><td>先恢复继承，再调整上层</td></tr>
+          <tr><td><code>400 LAST_OWNER</code></td><td>想移除最后一个所有者</td><td>先给别人所有者档位</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="cards c2" style="margin-top:28px">
+      <a class="card" href="scenarios.html" style="text-decoration:none;color:inherit;display:block">
+        <span class="tag f">上一篇</span>
+        <h4>场景操作手册：七件事怎么做</h4>
+        <p>上传、检索、授权、编辑回退、外发审批、格式预览、账号交接。</p>
+      </a>
+      <a class="card" href="admin.html" style="text-decoration:none;color:inherit;display:block">
+        <span class="tag f">给管理员</span>
+        <h4>管理员手册：参数、审批与运维</h4>
+        <p>租户配置、密级策略、外发审批、能力开关、备份与回滚。</p>
+      </a>
+    </div>
+
+  </main>
+</div>
+
+<footer class="foot">
+  <span>NeuroDMS · 用户手册 · 角色能力 V1.0.0</span>
+  <span>网页版 v1.0.0 · 源文件 docs/30-用户手册-角色能力-v1.0.0.md</span>
+</footer>
+
+<button class="totop" type="button" aria-label="回到顶部">
+  <svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+</button>
+
+<script src="assets/flows.js"></script>
+<script src="assets/flow.js"></script>
+<script src="assets/manual.js"></script>
+</body>
+</html>

@@ -1,0 +1,54 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', padding: '60px', fontFamily: '"Microsoft YaHei", Arial, sans-serif', position: 'relative' }}>
+    <Box style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 34, fontWeight: 'bold', color: '#16202E' }}>一个实例，多个租户，互不可见</Text>
+        <Text style={{ fontSize: 14, color: '#5B7899', marginTop: 10 }}>方案 · 隔离</Text>
+    </Box>
+    <Box style={{ width: '100%', height: 1, background: '#D8DEE7', marginTop: 14 }} />
+
+    <Box style={{ flexDirection: 'row', gap: 28, marginTop: 30, height: 430 }}>
+        <Box style={{ flex: 1, background: '#F4F6F9', borderRadius: 12, padding: '28px 26px', flexDirection: 'column', gap: 18 }}>
+            <Text style={{ fontSize: 14, color: '#8A9BB2', letterSpacing: 2 }}>常见做法</Text>
+            <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#16202E', lineHeight: 1.35 }}>靠代码记得加<br />WHERE tenant_id</Text>
+            <Box style={{ flexDirection: 'column', gap: 12 }}>
+                {[
+                    '查询漏一个条件，就是全库可见',
+                    '新增接口靠人记得，没有机制兜底',
+                    '出问题只能事后 grep 代码',
+                ].map((t, i) => (
+                    <Box key={i} style={{ flexDirection: 'row', gap: 10 }}>
+                        <Text style={{ fontSize: 18, color: '#8A9BB2' }}>—</Text>
+                        <Text style={{ fontSize: 18, color: '#4A5B6E', lineHeight: 1.5 }}>{t}</Text>
+                    </Box>
+                ))}
+            </Box>
+        </Box>
+
+        <Box style={{ flex: 1, background: '#FFFFFF', border: '1px solid #1B3B6F', borderRadius: 12, padding: '28px 26px', flexDirection: 'column', gap: 18 }}>
+            <Text style={{ fontSize: 14, color: '#1B3B6F', letterSpacing: 2 }}>本系统做法</Text>
+            <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#1B3B6F', lineHeight: 1.35 }}>隔离写在数据库里，<br />不写在自觉里</Text>
+            <Box style={{ flexDirection: 'column', gap: 12 }}>
+                {[
+                    '每次租户事务切换专用角色，策略在库内生效',
+                    '39 张带租户字段的表全部启用行级隔离',
+                    '启动自检：有表没开隔离就拒绝启动',
+                ].map((t, i) => (
+                    <Box key={i} style={{ flexDirection: 'row', gap: 10 }}>
+                        <Text style={{ fontSize: 18, color: '#C08A3E' }}>▪</Text>
+                        <Text style={{ fontSize: 18, color: '#16202E', lineHeight: 1.5 }}>{t}</Text>
+                    </Box>
+                ))}
+            </Box>
+        </Box>
+    </Box>
+
+    <Box style={{ marginTop: 22, background: '#F4F6F9', borderLeft: '3px solid #1B3B6F', borderRadius: 6, padding: '14px 20px', flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+        <Text style={{ fontSize: 18, color: '#16202E', lineHeight: 1.5 }}>
+            平台账号与租户账号<span style={{ fontWeight: 'bold' }}>分表、分令牌</span>：平台能看用量与开关，看不到文件内容。
+        </Text>
+    </Box>
+
+    <Box style={{ position: 'absolute', left: 60, right: 60, top: 676, flexDirection: 'row', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 14, color: '#8A9BB2' }}>NeuroDMS · 产品概览</Text>
+        <Text style={{ fontSize: 14, color: '#8A9BB2' }}>07</Text>
+    </Box>
+</Slide>

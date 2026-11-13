@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>管理员手册 · 租户与系统配置 · NeuroDMS</title>
+<meta name="description" content="NeuroDMS 管理员手册：租户参数、密级与标签、目录认证、外发审批、平台能力开关、备份升级与回滚。">
+<link rel="stylesheet" href="assets/manual.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-in">
+    <a class="brand" href="index.html"><span class="mark"></span><b>NeuroDMS</b><span>手册</span></a>
+    <nav class="docnav">
+      <a href="index.html">手册中心</a>
+      <a href="scenarios.html">场景操作</a>
+      <a href="roles.html">角色能力</a>
+      <a href="admin.html" aria-current="page">管理员手册</a>
+    </nav>
+    <button class="toc-btn" type="button" aria-label="目录">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>目录
+    </button>
+    <div class="search">
+      <svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+      <input type="search" placeholder="搜索本节… 按 / 聚焦" aria-label="搜索手册">
+      <div class="search-res"></div>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <aside class="toc" aria-label="目录"></aside>
+  <main>
+
+    <span class="kicker">管理员手册 · 租户与系统配置</span>
+    <h1>只写会被系统真正读取的参数</h1>
+    <p class="subtitle">界面上存在但不生效的开关，一律不写——那属于缺陷，不是功能。这份手册按"改完会发生什么"来组织。</p>
+    <div class="meta">
+      <span class="chip v">V1.2.0</span>
+      <span class="chip">适用 <b>系统 / 安全 / 审计管理员 · 实施与运维</b></span>
+      <span class="chip">管理台 <b><code>/admin/{tab}</code></b></span>
+      <button class="chip" type="button" data-print style="cursor:pointer;font-family:inherit">打印 / 存为 PDF</button>
+    </div>
+
+    <div class="note">
+      <p><b>修订记录</b>　V1.0.0 首版；V1.1.0 新增 §9.1 三级开关求值（放量 0% 与总开关开启的组合此前在界面上显示为"已开启"，导致运营无法解释"功能全部不可用"）；V1.2.0 重写 §6 外发审批，补上管理台入口、审批人三条件、单人空间的死链风险。</p>
+    </div>
+
+    <h2 id="roles" data-nav="1 · 三个管理角色的边界"><span class="num">1</span>开始之前：三个管理角色的边界</h2>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>角色</th><th>能进哪些页签</th><th>关键边界</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="who admin">系统管理员</span> <code>sysadmin</code></td>
+            <td>概览、成员与角色、操作日志、系统设置、目录认证</td>
+            <td><b>看不到文件内容</b>；改不了密级与审计</td>
+          </tr>
+          <tr>
+            <td><span class="who admin">安全管理员</span> <code>secadmin</code></td>
+            <td>密级定义、标签策略、降密审批、操作日志</td>
+            <td>建不了号、改不了系统参数</td>
+          </tr>
+          <tr>
+            <td><span class="who admin">审计管理员</span> <code>auditor</code></td>
+            <td>审计日志（只读）</td>
+            <td>任何写操作都不可用</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>三者的冲突组合（如 sysadmin + auditor）会被<b>运行期</b>拒绝：持有冲突角色的账号，所有管理接口返回 403 并写审计。详见《角色能力》§5。</p>
+
+    <div class="tip">
+      <p>管理台地址：<code>/admin/{tab}</code>。页签按角色动态渲染，地址与页签一一对应，可直接收藏或转发给同角色同事。</p>
+    </div>
+
+    <h2 id="onboard" data-nav="2 · 新成员入职"><span class="num">2</span>新成员入职：标准流程</h2>
+
+    <div class="flow" data-flow="onboard"></div>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>步骤</th><th>谁</th><th>注意</th></tr></thead>
+        <tbody>
+          <tr><td class="nowrap">建号</td><td><span class="who admin">系统管理员</span></td><td>初始密码请走独立通道告知；<code>MinPasswordLen</code> 当前为 12</td></tr>
+          <tr><td class="nowrap">定密级</td><td><span class="who admin">系统管理员</span></td><td>用户密级是<b>上限</b>：高于此密级的文件对他一律不可见，给再多权限也没用</td></tr>
+          <tr><td class="nowrap">定封顶</td><td><span class="who admin">系统管理员</span></td><td><code>ceiling</code> 决定他能授出的最高档位。默认最高档；要限制"部门管理员只能授查看者"，必须在这里降</td></tr>
+          <tr><td class="nowrap">授角色</td><td><span class="who admin">系统管理员</span></td><td>冲突组合会被拒；一旦配错，该账号管理能力立刻冻结，需尽快改回</td></tr>
+          <tr><td class="nowrap">归档部门</td><td><span class="who admin">系统管理员</span></td><td>部门是<b>树</b>：给父部门授权会自动覆盖所有子部门成员</td></tr>
+          <tr><td class="nowrap">授权空间</td><td><span class="who user">空间所有者</span></td><td>管理员不给内容权限——这是刻意的职责分离</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="warn">
+      <p><b>外部协作者</b>：创建时 <code>mfa_required</code> 自动为真，必须有可用邮箱，否则登不上（fail-closed）。</p>
+    </div>
+
+    <h2 id="settings" data-nav="3 · 系统设置：每个参数"><span class="num">3</span>系统设置：每个参数的真实含义</h2>
+    <p>入口：管理台 → 系统设置。以下 5 个参数<b>写入即生效</b>，不需要重启。</p>
+
+    <h3 id="p-expire" data-nav="3.1 外链默认有效期">3.1 外链默认有效期 <code>shareDefaultExpireDays</code></h3>
+    <div class="param">
+      <div class="ph"><b>外链默认有效期</b><code>shareDefaultExpireDays</code><span class="chip" style="font-size:11px">默认 7</span></div>
+      <div class="pb">
+        <dl>
+          <dt>含义</dt><dd>创建外链时建议的默认天数</dd>
+          <dt>取值</dt><dd><code>0</code> = 不过期；正整数 = 天数</dd>
+          <dt>影响</dt><dd>只影响<b>新建</b>链接的默认值。存量链接的策略在创建时已快照，改这个不会让已发出的链接提前失效</dd>
+          <dt>建议</dt><dd>保持 7。设为 0（永久）会让链接变成长期敞口，且撤销依赖人工记得</dd>
+        </dl>
+      </div>
+    </div>
+
+    <h3 id="p-upload" data-nav="3.2 单文件上传上限">3.2 单文件上传上限 <code>maxUploadMB</code></h3>
+    <div class="param">
+      <div class="ph"><b>单文件上传上限</b><code>maxUploadMB</code><span class="chip" style="font-size:11px">默认按档位</span></div>
+      <div class="pb">
+        <dl>
+          <dt>含义</dt><dd>单个文件允许的最大体积</dd>
+          <dt>取值</dt><dd><code>0</code> = 按档位默认；正整数 = MB</dd>
+          <dt>默认</dt><dd>按档位：基础 1024 / 专业 5120 / 商业 10240</dd>
+          <dt>影响</dt><dd>超过即拒绝（413），<b>分片上传的每个分片不受此限制</b>，整体仍受此限制</dd>
+          <dt>注意</dt><dd>调大之前先确认磁盘余量与备份窗口。10GB 的单文件会让备份与迁移成本上一个台阶</dd>
+        </dl>
+      </div>
+    </div>
+
+    <h3 id="p-audit" data-nav="3.3 日志保留期">3.3 日志保留期 <code>auditRetentionDays</code></h3>
+    <div class="param">
+      <div class="ph"><b>日志保留期</b><code>auditRetentionDays</code><span class="chip" style="font-size:11px">默认 730</span></div>
+      <div class="pb">
+        <dl>
+          <dt>含义</dt><dd>操作日志与审计事件的保留天数，决定清理任务删到哪一天</dd>
+          <dt>取值</dt><dd>30 ~ 3650；<code>0</code> 落成 730</dd>
+          <dt>影响</dt><dd><b>缩短后不可恢复</b>。删除的是已被日结锚点覆盖的数据，锚点仍能证明"那段时间存在过"，但明细没了</dd>
+          <dt>建议</dt><dd>合规场景按监管要求设（常见 180 天 / 2 年 / 10 年三档）。缩短前先导出</dd>
+        </dl>
+      </div>
+    </div>
+
+    <h3 id="p-timeout" data-nav="3.4 上传超时">3.4 上传超时 <code>uploadTimeoutSeconds</code></h3>
+    <div class="param">
+      <div class="ph"><b>上传超时</b><code>uploadTimeoutSeconds</code><span class="chip" style="font-size:11px">默认 300</span></div>
+      <div class="pb">
+        <dl>
+          <dt>含义</dt><dd>单个上传请求允许的最长读取时长</dd>
+          <dt>取值</dt><dd>60 ~ 3600；<code>0</code> 落成 300</dd>
+          <dt>影响</dt><dd>约束的是<b>每一片</b>，不是整个文件。片大小 1MB，250Kbps 上行约 32 秒/片，300 秒余量充足</dd>
+          <dt>调小</dt><dd>移动网络下大文件会频繁中断。中断可续传，但用户体感差</dd>
+          <dt>调大</dt><dd>慢速连接会长期占用一个连接。防大包靠 <code>maxUploadMB</code> 与配额，不靠这个值</dd>
+        </dl>
+      </div>
+    </div>
+    <div class="note">
+      <p><b>历史教训</b>：这个值曾经写死 60 秒，导致 iPhone 照片（4MB）在慢速上行下必然失败，而错误却显示"请使用 multipart/form-data"，把人引向格式问题。现在按租户可配，且超时会明确提示"可重试，大文件会从断点继续"。</p>
+    </div>
+
+    <h3 id="p-exts" data-nav="3.5 允许上传的格式">3.5 允许上传的格式 <code>allowedExts</code></h3>
+    <div class="param">
+      <div class="ph"><b>允许上传的格式（白名单）</b><code>allowedExts</code><span class="chip" style="font-size:11px">默认不限制</span></div>
+      <div class="pb">
+        <dl>
+          <dt>含义</dt><dd>白名单，小写带点（如 <code>.pdf</code>）</dd>
+          <dt>取值</dt><dd><code>null</code> = 不限制；数组 = 只允许这些</dd>
+          <dt>生效点</dt><dd><b>前端选完文件的一瞬间</b>判一次（不合规直接标红、不入队）；后端单文件与分片初始化各判一次（415）</dd>
+          <dt>界面</dt><dd>8 个分组共 101 种格式，支持组内全选、一键不限；每个格式右侧标 <code>可预览</code> / <code>可预览 · 转码</code> / <code>不可预览</code></dd>
+          <dt>重要</dt><dd>这是<b>入口约束，不是安全边界</b>。危险扩展名与可执行魔数另有独立拦截，两者不可互相替代</dd>
+        </dl>
+      </div>
+    </div>
+    <div class="tip">
+      <p>徽标由服务端按当前实例真实能力计算（LibreOffice 是否就绪、转码是否启用）。如果某台部署没装转换器，Office 格式会自动变成"不可预览"——不会给你一个必然失败的承诺。</p>
+    </div>
+
+    <h3 id="p-hard" data-nav="3.6 当前不可在界面配置的参数">3.6 当前<b>不可</b>在界面配置的参数</h3>
+    <p>以下参数写在代码里（<code>auth.DefaultConfig()</code>），<b>数据库与界面都不读</b>，改需改代码重新构建：</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>参数</th><th>当前值</th><th>含义</th></tr></thead>
+        <tbody>
+          <tr><td><code>AccessTTL</code></td><td class="nowrap">15 分钟</td><td>访问令牌有效期</td></tr>
+          <tr><td><code>RefreshTTL</code></td><td class="nowrap">30 天</td><td>刷新令牌有效期</td></tr>
+          <tr><td><code>MaxFailed</code></td><td class="nowrap">5 次</td><td>连续登录失败锁定阈值</td></tr>
+          <tr><td><code>LockDuration</code></td><td class="nowrap">30 分钟</td><td>锁定时长</td></tr>
+          <tr><td><code>MinPasswordLen</code></td><td class="nowrap">12</td><td>口令最小长度</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="warn">
+      <p>这属于<b>已知缺口</b>：<code>auth.Config</code> 的注释写着"全部来自系统设置（不允许写死在代码里）"，但实现没有接上。需要按客户合规要求调整时，只能改代码——请在实施评估阶段就确认这几个值是否需要差异。</p>
+    </div>
+
+    <p>另有两个<b>只在数据库里</b>的配置，界面未暴露：</p>
+    <pre><code>-- 外发审批阈值：达到该密级的分享强制走审批（默认 3 = 秘密）
+UPDATE tenant SET share_approval_min_class = 3 WHERE slug = 'demo';
+
+-- 每文件保留的历史版本数（默认按档位，上限 50）
+-- 由租户策略 versionKeep 承载，界面暂未提供输入框</code></pre>
+
+    <h2 id="class" data-nav="4 · 密级与标签策略"><span class="num">4</span>密级与标签策略</h2>
+    <p>入口：管理台 → 密级定义 / 标签策略（仅安全管理员）。</p>
+
+    <h3 id="class-7" data-nav="4.1 七个密级">4.1 七个密级</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>等级</th><th>默认名称</th><th>默认含义</th><th>典型使用</th></tr></thead>
+        <tbody>
+          <tr><td class="n">0</td><td><b>公开</b></td><td>可在组织外自由传播</td><td>宣传资料</td></tr>
+          <tr><td class="n">1</td><td><b>内部</b></td><td>仅组织内成员可见</td><td>内部通知</td></tr>
+          <tr><td class="n">2</td><td><b>敏感</b></td><td>仅相关部门可见</td><td>部门数据</td></tr>
+          <tr><td class="n">3</td><td><b>秘密</b></td><td>仅项目成员，外发需审批</td><td>项目文档</td></tr>
+          <tr><td class="n">4</td><td><b>机密</b></td><td>仅授权人员，外发需审批并留痕</td><td>财务、合同</td></tr>
+          <tr><td class="n">5</td><td><b>绝密</b></td><td>仅指定人员，禁止外发</td><td>并购、核心技术</td></tr>
+          <tr><td class="n">6</td><td><b>核心</b></td><td>最高保护，禁止任何形式外发</td><td>董事会材料</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="danger">
+      <p><b>只能改名称与描述，等级数值固定。</b>改数值会让历史数据的语义整体翻转——昨天标记"秘密"的文件会突然变成"公开"。系统刻意不给这个入口。</p>
+    </div>
+
+    <h3 id="class-points" data-nav="4.2 密级的两个作用点">4.2 密级的两个作用点</h3>
+    <div class="cards c2">
+      <div class="card">
+        <span class="tag f">作用点 1</span>
+        <h4>准入：强制访问控制</h4>
+        <p>用户密级 &lt; 文件密级 → 一律拒绝，与 ACL 无关。这是强制访问控制（MAC），<b>先于</b>权限判定。</p>
+      </div>
+      <div class="card">
+        <span class="tag f">作用点 2</span>
+        <h4>外发上界：按创建时的快照</h4>
+        <p>外链取内容时校验 <code>节点密级 ≤ 发起人创建时的密级快照</code>。所以"先分享再提密"不能绕过。</p>
+      </div>
+    </div>
+
+    <h3 id="class-label" data-nav="4.3 标签策略">4.3 标签策略</h3>
+    <p>给带某标签的文件设一个<b>最低密级下限</b>。效果是"只收紧，不放松"：文件可以比下限更高，不能更低。</p>
+    <p>用途：让分类 / 打标流程自动兜住密级，避免依赖人工每次记得选。</p>
+
+    <h3 id="class-down" data-nav="4.4 降密">4.4 降密</h3>
+    <p>普通用户<b>不能</b>直接把密级改低（会返回 <code>NEED_APPROVAL</code>）。流程是：</p>
+    <div class="pipeline">
+      <span class="step">用户在文件上提交降密申请</span><span class="ar">→</span>
+      <span class="step hi">安全管理员在「降密审批」通过 / 驳回</span><span class="ar">→</span>
+      <span class="step">通过后密级下调</span>
+    </div>
+    <p>升密不需要审批（收紧方向不设障）。</p>
+
+    <h2 id="auth" data-nav="5 · 目录认证与单点登录"><span class="num">5</span>目录认证与单点登录</h2>
+    <p>入口：管理台 → 目录认证（仅系统管理员）。</p>
+
+    <h3 id="auth-ldap" data-nav="5.1 LDAP / AD">5.1 LDAP / AD</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>项</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td class="nowrap">作用域</td><td><b>每租户一份</b>，不同租户可以接各自的域</td></tr>
+          <tr><td class="nowrap">认证方式</td><td>域账号口令<b>永不在本地校验</b>。本地不存它的散列，避免"改密后本地旧散列仍然正确"</td></tr>
+          <tr><td class="nowrap">同步</td><td>支持手动 / 定时同步；同步进来的账号走表默认值（<code>ceiling=6</code>）</td></tr>
+          <tr><td class="nowrap">失败处理</td><td>目录不可达时不计数、不锁定，避免一次域控维护把全员锁死</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note"><p><b>同名账号</b>：同一租户允许本地账号与域账号同名（如 <code>zhangsan</code> 与 <code>zhangsan@corp</code>）。登录时若出现歧义，系统默认取本地账号——这是为了升级兼容，不是安全判断。</p></div>
+
+    <h3 id="auth-sso" data-nav="5.2 SSO 断言">5.2 SSO 断言（反向代理注入头）</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>项</th><th>要求</th></tr></thead>
+        <tbody>
+          <tr><td class="nowrap">共享密钥</td><td><b>必填</b>。只靠来源网段不够：同一 docker 网络里任何容器都能发请求</td></tr>
+          <tr><td class="nowrap">可信网段</td><td><b>必填</b>，且拒绝 <code>0.0.0.0/0</code>（等于信任全世界）</td></tr>
+          <tr><td class="nowrap">断言头</td><td>可自定义，但禁止用 <code>Authorization</code>、<code>Cookie</code>、<code>X-Forwarded-For</code> 这类客户端可控的头</td></tr>
+          <tr><td class="nowrap">判定依据</td><td>用<b>TCP 直连对端</b>判断是否受信代理，不用改写后的客户端 IP</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>配错任一项，<code>Enabled=false</code> 并带原因，接口自然不可用（fail-closed），不会出现"配错但还在跑"。</p>
+
+    <h3 id="auth-ip" data-nav="5.3 客户端 IP 与可信代理">5.3 客户端 IP 与可信代理</h3>
+    <p>外链 IP 白名单、票据绑定、审计里的来源 IP、水印页脚，全都依赖"真实客户端 IP"。</p>
+    <p>必须配置 <code>DOCVAULT_TRUST_PROXY_CIDRS</code> 为你的反向代理 / 隧道出口网段。<b>不配</b>时系统一律使用 TCP 对端地址——如果前面有代理，所有访问会看起来来自同一个内网 IP，后果是：</p>
+    <ul>
+      <li>外链 IP 白名单要么全拦、要么全放；</li>
+      <li>审计里的 IP 失去取证价值；</li>
+      <li>水印上的 IP 是错的。</li>
+    </ul>
+    <div class="danger">
+      <p>这不是理论风险：审计里如果出现大量同一个 <code>172.x</code> 地址，就是这个配置没做对。</p>
+    </div>
+
+    <h2 id="share-approve" data-nav="6 · 外发审批"><span class="num">6</span>外发审批</h2>
+
+    <h3 id="approve-when" data-nav="6.1 什么时候需要审批">6.1 什么时候需要审批</h3>
+    <p>两个触发条件，满足任一即进入 <code>pending</code>：</p>
+    <ol>
+      <li>创建链接时显式勾选「需要审批」；</li>
+      <li>对象密级 ≥ 租户阈值 <code>share_approval_min_class</code>（默认 3 = 秘密）。</li>
+    </ol>
+    <p>创建时<b>不需要选审批人</b>：谁是审批人由权限决定，不是由发起人指派。这是刻意的——如果发起人能挑审批人，他总会挑最容易通过的那个。</p>
+
+    <h3 id="approve-who" data-nav="6.2 谁在审批">6.2 谁在审批：三个条件同时满足</h3>
+    <div class="flow" data-flow="approve"></div>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>条件</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td class="nowrap">对该对象有 <code>manage_acl</code></td><td>空间「管理者」或「所有者」档位，或在文件 / 目录上单独授予过管理权限</td></tr>
+          <tr><td class="nowrap">密级 ≥ 文件密级</td><td>密级先于权限：看不到的文件不可能审批</td></tr>
+          <tr><td class="nowrap">不是发起人本人</td><td>自批返回 403 <code>SELF_APPROVAL_DENIED</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="warn">
+      <p><b>管理角色不等于审批权</b>。系统管理员、安全管理员管的是配置（成员、密级定义、策略），不自动获得内容权限。所以"我是管理员，为什么看不到待审批"是正常现象——缺的是对象级 <code>manage_acl</code>，不是角色。</p>
+    </div>
+
+    <div class="danger">
+      <p><b>单人空间的死链风险</b>：如果某个空间的权限只在发起人一个人手里（个人项目、单人负责的目录很常见），三个条件无法同时满足，链接会<b>永远停在审批中</b>。系统在创建时返回 <code>approverCount</code>，为 0 时分享面板会直接提示"当前没有其他人能审批"，避免发起人空等。</p>
+    </div>
+
+    <h3 id="approve-where" data-nav="6.3 审批人从哪里操作">6.3 审批人从哪里操作</h3>
+    <p>管理台 → <b>外发审批</b>（<code>/admin/share-approvals</code>），系统管理员与安全管理员可见。</p>
+    <p>列表只显示"你有权处置"的链接：服务端逐条按上表三个条件判定，没有权限的链接不会出现，所以不会出现"列出来却点不动"。每行给出文件、密级、发起人、提交时间、链接有效期，可「通过」或「驳回」。</p>
+    <p>通过后链接<b>立即可用</b>，无需重新创建；驳回后发起人需要重新建链。两种结果都写审计（<code>share.approve</code>，结果 <code>ok</code>，<code>detail.decision</code> 记录 approved / rejected）。</p>
+
+    <h3 id="approve-nobody" data-nav="6.4 无人可批时怎么办">6.4 无人可批时怎么办</h3>
+    <p>两条路，按业务选：</p>
+    <div class="cards c2">
+      <div class="card accent">
+        <span class="tag f">路线 1 · 推荐</span>
+        <h4>给同事授权</h4>
+        <p>发起人 → 文件 → 该空间 → 权限 → 添加成员 → 档位选「管理者」。该同事的密级也要 ≥ 文件密级。</p>
+      </div>
+      <div class="card">
+        <span class="tag">路线 2</span>
+        <h4>降低文件密级</h4>
+        <p>走降密审批（管理台 → 降密审批），降到阈值以下后新链接不再需要审批。<b>已经 pending 的链接不会因此自动放行</b>，需要重新创建。</p>
+      </div>
+    </div>
+    <div class="note">
+      <p>如果这种情况反复出现，说明阈值（默认 3）对本租户偏低，或空间权限过度集中在单人手里。前者调 <code>share_approval_min_class</code>，后者应治理授权结构——不要用"关掉审批"来解决。</p>
+    </div>
+
+    <h3 id="approve-limits" data-nav="6.5 当前约束">6.5 当前约束（需知）</h3>
+    <ul>
+      <li><b>没有通知</b>：待审批不会主动提醒任何人，发起人与审批人都要靠"自己去看列表"。外发邮件只发给收件人，不发给审批人。流程上需要约定"谁每天看一次外发审批"。</li>
+      <li><b>一人一票，不能改判</b>：通过或驳回之后不能再改，只能重新建链。</li>
+      <li><b>审计写不进就拒绝操作</b>：审批先改状态、再写审计；审计失败返回 500 并提示。此前的缺陷是审计 <code>result</code> 写了 <code>approved</code>（不在 <code>ok/denied/error</code> 约束内），导致<b>审批一提交就 500，而状态其实已改</b>——现已修正为 <code>ok</code> + <code>detail.decision</code>。</li>
+    </ul>
+
+    <h3 id="approve-space" data-nav="6.6 空间级外链的额外闸门">6.6 空间级外链的额外闸门</h3>
+    <p>对空间生成外链时，若空间内存在：<b>密级高于发起人的节点</b>，或<b>带显式拒绝条目的节点</b>，直接拒绝（403 <code>SPACE_NOT_SHAREABLE</code>）。</p>
+    <div class="warn">
+      <p>这道闸门是刻意的：空间级外链面向匿名访客，子树的任何例外都会被绕过。遇到这个提示，正确做法是改为分享具体文件 / 目录，而不是让管理员去删例外配置。</p>
+    </div>
+
+    <h2 id="brand" data-nav="7 · 品牌与域名"><span class="num">7</span>品牌与域名</h2>
+    <p>入口：管理台 → 系统设置（品牌部分）。</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>能力</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td class="nowrap">系统名称 / Logo</td><td>影响登录页与页头；会写审计</td></tr>
+          <tr><td class="nowrap">自定义域名</td><td>商业版能力；需在平台侧配置证书与域名校验</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>品牌配置不影响任何权限判定——它只是展示层。</p>
+
+    <h2 id="audit" data-nav="8 · 审计与证据"><span class="num">8</span>审计与证据</h2>
+    <p>入口：管理台 → 审计日志（仅审计管理员）、操作日志（管理角色）。</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>类型</th><th>内容</th><th>谁能看</th></tr></thead>
+        <tbody>
+          <tr><td class="nowrap">操作日志</td><td>业务流水：谁在什么时候对什么做了什么，结果如何</td><td>三个管理角色</td></tr>
+          <tr><td class="nowrap">审计事件</td><td>全量事件，含<b>被拒绝</b>的越权尝试、登录失败、审批结论</td><td>仅审计管理员</td></tr>
+          <tr><td class="nowrap">完整性校验</td><td>哈希链校验，判断记录是否被篡改</td><td>仅审计管理员</td></tr>
+          <tr><td class="nowrap">证据包</td><td>导出 CSV 供内审 / 外审</td><td>仅审计管理员</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="tip">
+      <p><b>关键设计</b>：关键操作的审计写入失败时，<b>操作本身会被拒绝</b>。宁可让用户重试，也不留"做了但没记录"的空洞。</p>
+      <p>导证据包时注意：导出行为本身也会写审计（"谁导出了什么范围"），这是可核查性的一部分。</p>
+    </div>
+
+    <h2 id="platform" data-nav="9 · 平台运营台"><span class="num">9</span>平台运营台（仅 SaaS 形态）</h2>
+    <p>入口：<code>/platform/{tab}</code>，账号在 <code>platform_user</code> 表，与租户账号完全分离。</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>页签</th><th>能做什么</th><th>不能做什么</th></tr></thead>
+        <tbody>
+          <tr><td class="nowrap">租户</td><td>新建、停用、逻辑删除、改档位、配额、<b>按租户开关能力</b></td><td>不能读租户文件内容</td></tr>
+          <tr><td class="nowrap">用量与对账</td><td>存储、API 调用、导出对账单</td><td>不能改租户业务数据</td></tr>
+          <tr><td class="nowrap">灰度开关</td><td>平台默认值与放量比例（<b>全局</b>）</td><td>关闭只影响<b>新建</b>，存量链接不受影响</td></tr>
+          <tr><td class="nowrap">平台账号</td><td>建号、改密、停用</td><td>—</td></tr>
+          <tr><td class="nowrap">平台审计</td><td>平台侧操作留痕</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 id="flags" data-nav="9.1 能力开关：三级求值">9.1 能力开关：全局、放量、租户覆盖（三级）</h3>
+    <p>这是一处<b>最容易互相误解</b>的配置。2026-11 有过一次真实事故：平台把 <code>share.external</code> 的放量从 100 调到 0（总开关仍是"开启"），运营台显示"已开启"，而所有租户创建外链都收到"未开启对外分享能力，请联系平台运营"——运营进去看，每个开关都是开启的，找不到任何关闭动作。</p>
+
+    <div class="flow" data-flow="flags"></div>
+
+    <p><b>求值顺序（固定，不可调换）</b>：</p>
+    <div class="pipeline">
+      <span class="step hi">租户覆盖（tenant_feature）</span><span class="ar">&gt;</span>
+      <span class="step">全局总开关（default_enabled）</span><span class="ar">&gt;</span>
+      <span class="step">放量（rollout_percent）</span>
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>组合</th><th>实际结果</th><th>界面显示（现已修正）</th></tr></thead>
+        <tbody>
+          <tr><td>总开关 开 + 放量 100%</td><td>全部租户开启</td><td>已开启</td></tr>
+          <tr><td>总开关 开 + 放量 25%</td><td>约 25% 租户开启（按租户 ID 稳定分桶）</td><td>已开启（放量 25%）</td></tr>
+          <tr><td><b>总开关 开 + 放量 0%</b></td><td><b>全部租户关闭</b></td><td><b>已暂停</b>（并显示提示条）</td></tr>
+          <tr><td>总开关 关 + 放量任意</td><td>除租户覆盖外全部关闭</td><td>已关闭</td></tr>
+          <tr><td>有租户覆盖</td><td><b>覆盖值优先</b>，与全局无关</td><td>本租户单独设置</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <p>放量 0% 是"暂停"而不是"没配"：它表达"功能已发布但当前不对任何租户开放"。因此界面不再把这种组合显示成"已开启"——那是这次事故的直接原因。</p>
+    </div>
+
+    <h4>给单个客户开通（最常用）</h4>
+    <ol>
+      <li>运营台 →「租户」→ 点租户名 → 抽屉里找到「<b>能力开关</b>」；</li>
+      <li>每一行显示：能力说明、<code>code</code>、当前取值来源（跟随平台默认 / 平台放量 N% / 本租户单独设置）；</li>
+      <li>点「开通」写入租户覆盖；点「恢复默认」删除覆盖、回到平台策略。</li>
+    </ol>
+    <p>这一步只改这一个租户，不动全局放量。合规交付里最常见的就是"平台默认全关，按合同逐个开"。</p>
+
+    <p><b>生效时间</b>：开关有 30 秒缓存，改完 30 秒内全实例一致。急等不及可重启服务，但正常场景不必。</p>
+    <p><b>留痕</b>：全局改动写 <code>platform.flag.set</code>，租户覆盖写 <code>platform.flag.override</code>（清除覆盖写 <code>platform.flag.override.clear</code>），都带操作人与新旧值，在「平台审计」可查。</p>
+
+    <h4>四个开关的实际作用点</h4>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>开关</th><th>关闭后的行为</th></tr></thead>
+        <tbody>
+          <tr><td><code>share.external</code></td><td>新建外链被拒（403 <code>FEATURE_DISABLED</code>），<b>已存在的链接按原样继续</b></td></tr>
+          <tr><td><code>share.email_verify</code></td><td>新建链接不再要求访客邮箱验证；存量链接不变</td></tr>
+          <tr><td><code>media.transcode</code></td><td>不再启动新转码；<b>已转码的产物仍可播放</b>（不会让历史视频集体失效）</td></tr>
+          <tr><td><code>branding.custom_domain</code></td><td>禁止新增 / 变更域名绑定；已绑定的继续服务</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="danger">
+      <p><b>读不到开关时一律按"关闭"处理</b>（fail-closed）。这是刻意的：这些开关的用途正是合规关闭，数据库抖动一下就把对外分享自动放开，是最不能接受的失败方向。表现为请求返回 503「能力暂时不可用，请稍后重试」，而不是静默放行。</p>
+      <p><b>停用租户的连锁反应</b>：该租户所有用户的会话立即失效（不必等令牌过期），登录被拒，接口返回只读 / 拒绝。恢复后不需要用户重新配置，但需要重新登录。</p>
+    </div>
+
+    <h4>档位差异（影响可配置范围）</h4>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>项</th><th>基础版</th><th>专业版</th><th>商业版</th></tr></thead>
+        <tbody>
+          <tr><td>密级</td><td>仅 0</td><td>0 / 3 / 4</td><td>全部 0–6</td></tr>
+          <tr><td>域账号（AD）</td><td>—</td><td>✓</td><td>✓</td></tr>
+          <tr><td>邮件外发</td><td>—</td><td>✓</td><td>✓</td></tr>
+          <tr><td>自定义域名</td><td>—</td><td>—</td><td>✓</td></tr>
+          <tr><td>版本保留</td><td>3</td><td>10</td><td>50</td></tr>
+          <tr><td>单文件上限</td><td>1 GB</td><td>5 GB</td><td>10 GB</td></tr>
+          <tr><td>席位上限</td><td>20</td><td>不限</td><td>不限</td></tr>
+          <tr><td>每席位容量</td><td>10 GB</td><td>20 GB</td><td>50 GB</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><b>到期与宽限</b>：到期后进入 30 天宽限期（能力保持），宽限期结束后降为基础版，但界面仍显示"原为专业版"，避免用户以为数据丢了。</p>
+
+    <h2 id="ops" data-nav="10 · 运维：备份、升级、回滚"><span class="num">10</span>运维：备份、升级、回滚</h2>
+
+    <h3 id="ops-backup" data-nav="10.1 发布前必做">10.1 发布前必做</h3>
+    <pre><code># 1) 备份数据库
+docker exec docvault-postgres sh -c \
+  'pg_dump -U docvault -d docvault -Fc -f /tmp/ndms-$(date +%Y%m%d).dump'
+docker cp docvault-postgres:/tmp/ndms-$(date +%Y%m%d).dump docker/data/backup/</code></pre>
+
+    <h3 id="ops-release" data-nav="10.2 发布">10.2 发布</h3>
+    <pre><code>docker compose build server &amp;&amp; docker compose up -d server</code></pre>
+    <p>启动时自动执行迁移，并做两项自检：</p>
+    <ul>
+      <li><b>RLS 覆盖自检</b>：带 <code>tenant_id</code> 的表若缺行级隔离，<b>拒绝启动</b>；</li>
+      <li><b>权限模型告警</b>：连接角色是超级用户时提示"请求路径不得直接使用连接池"。</li>
+    </ul>
+
+    <h3 id="ops-iron" data-nav="10.3 铁律：镜像与迁移同批">10.3 铁律：镜像与迁移必须同批</h3>
+    <ul>
+      <li>旧镜像 + 新库：可能因新增列 / 函数缺失而报错；</li>
+      <li>新镜像 + 旧库：启动时自动迁移，正常；</li>
+      <li><b>单独回滚镜像而不回滚库</b>：如果迁移删过东西，会坏。</li>
+    </ul>
+    <p>迁移文件的纪律：已有函数改签名要 <code>DROP + CREATE</code>，返回列只在末尾追加。这样旧镜像回滚到新库时仍能跑。</p>
+
+    <h3 id="ops-tasks" data-nav="10.4 后台任务">10.4 后台任务</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>任务</th><th>频率</th><th>做什么</th></tr></thead>
+        <tbody>
+          <tr><td>清理过期上传会话</td><td>每 6 小时（启动先跑一次）</td><td>删 24 小时未完成的会话与磁盘分片</td></tr>
+          <tr><td>清理口令尝试记录</td><td>每 6 小时</td><td>删 30 天前且已解锁的记录</td></tr>
+          <tr><td>日志 / 审计清理</td><td>按保留期</td><td>删超过 <code>auditRetentionDays</code> 的明细（锚点保留）</td></tr>
+          <tr><td>版本清理</td><td>每次在线保存后</td><td>按 <code>versionKeep</code> 删超出数量的旧版本</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 id="ops-rollback" data-nav="10.5 回滚">10.5 回滚</h3>
+    <pre><code>docker compose down server
+# 恢复上一版镜像 tag
+docker compose up -d server
+# 若该版本对应的迁移不可逆，再恢复数据库备份
+docker exec -i docvault-postgres pg_restore -U docvault -d docvault --clean &lt; backup.dump</code></pre>
+
+    <h2 id="trouble" data-nav="11 · 故障排查"><span class="num">11</span>故障排查</h2>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>现象</th><th>最可能的原因</th><th>处理</th></tr></thead>
+        <tbody>
+          <tr><td>所有上传都失败，日志 <code>status=400 dur_ms=60000</code></td><td>读超时被写死（旧版本）</td><td>升级到支持 <code>uploadTimeoutSeconds</code> 的版本</td></tr>
+          <tr><td>审计里来源 IP 全是同一个内网地址</td><td>未配置可信代理网段</td><td>配 <code>DOCVAULT_TRUST_PROXY_CIDRS</code></td></tr>
+          <tr><td>外链 IP 白名单"要么全拦要么全放"</td><td>同上</td><td>同上</td></tr>
+          <tr><td>Office 预览全部 500</td><td>未装 LibreOffice / 转换器不可用</td><td>查启动日志；格式徽标会显示"不可预览"</td></tr>
+          <tr><td>HEIC 预览空白且控制台只有 <code>CompileError</code></td><td>CSP 未放行 wasm</td><td>确认响应头含 <code>'wasm-unsafe-eval'</code></td></tr>
+          <tr><td>上传进度不动</td><td>慢速上行 + 1MB 分片</td><td>属正常；看"x.x MB / n 片"是否推进</td></tr>
+          <tr><td>管理接口全部 403 且日志有 <code>SEPARATION_VIOLATION</code></td><td>角色组合冲突</td><td>移除冲突角色之一</td></tr>
+          <tr><td>分享链接显示"审批中"且长期不动</td><td>无人可批 / 无人调用审批接口</td><td>见 §6.2、§6.4</td></tr>
+          <tr><td>迁移失败导致无法启动</td><td>迁移与镜像不匹配 / 手工改过表结构</td><td>恢复备份后按顺序重跑；不要手工改表</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 id="limits" data-nav="12 · 已知限制与待补项"><span class="num">12</span>已知限制与待补项</h2>
+    <p>按影响面排序，实施前请据此做预期管理。</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>项</th><th>影响</th><th>建议</th></tr></thead>
+        <tbody>
+          <tr><td>外发审批无通知、不能改判</td><td>待审批要靠人主动看列表；结论不可撤销</td><td>流程上指定"每天看一次"的审批人；驳回后重建</td></tr>
+          <tr><td>认证参数（会话时长 / 锁定阈值 / 口令长度）硬编码</td><td>无法按客户合规要求调整</td><td>实施评估时确认；需要则改代码</td></tr>
+          <tr><td>外发审批阈值只在数据库</td><td>无法在界面调整</td><td>用 SQL；变更写审计（当前需手工记录）</td></tr>
+          <tr><td>索尼 ARW / 佳能 CR3 未完整验证</td><td>部分新机型可能解不出预览</td><td>有样张时单独验证；失败会提示下载，不会误报成功</td></tr>
+          <tr><td>空间外链只拦"显式拒绝"，不拦"该子树无任何授权"</td><td>极端配置下仍可能多开放</td><td>遵循"空间级外链只用于全公开内容"的使用约定</td></tr>
+          <tr><td>全文检索只搜文件名</td><td>搜不到正文</td><td>用规范的命名与目录结构</td></tr>
+          <tr><td>视频转码无进度百分比</td><td>只能轮询"准备中"</td><td>大视频提前转码或提示用户等待</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="cards c2" style="margin-top:28px">
+      <a class="card" href="scenarios.html" style="text-decoration:none;color:inherit;display:block">
+        <span class="tag f">给用户</span>
+        <h4>场景操作手册</h4>
+        <p>七个高频场景的流程图与步骤表，可直接转发给最终用户。</p>
+      </a>
+      <a class="card" href="roles.html" style="text-decoration:none;color:inherit;display:block">
+        <span class="tag f">给内审</span>
+        <h4>角色能力手册</h4>
+        <p>能力矩阵、三权分立、403 / 404 对照表。</p>
+      </a>
+    </div>
+
+  </main>
+</div>
+
+<footer class="foot">
+  <span>NeuroDMS · 管理员手册 · 租户与系统配置 V1.2.0</span>
+  <span>网页版 v1.0.0 · 源文件 docs/31-管理员手册-租户与系统配置-v1.2.0.md</span>
+</footer>
+
+<button class="totop" type="button" aria-label="回到顶部">
+  <svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+</button>
+
+<script src="assets/flows.js"></script>
+<script src="assets/flow.js"></script>
+<script src="assets/manual.js"></script>
+</body>
+</html>

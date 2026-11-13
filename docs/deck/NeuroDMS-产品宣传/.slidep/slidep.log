@@ -1,0 +1,50 @@
+=== boot pid=12632 ts=2026-11-12 21:53:10.010 cwd=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传 argv=C:\Users\sunxi\.workbuddy\binaries\node\versions\22.22.2-6\node_modules\@tencent\slidep\dist\index.js create NeuroDMS-产品宣传.pptx ===
+[2026-11-12 21:53:10.008] [INFO ] [pid=12632] [server-url] baseUrl=http://127.0.0.1:39099 source=env
+=== boot pid=13164 ts=2026-11-12 21:53:31.807 cwd=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传 argv=C:\Users\sunxi\.workbuddy\binaries\node\versions\22.22.2-6\node_modules\@tencent\slidep\dist\index.js upsert-dsl NeuroDMS-产品宣传.pptx --dsl-file slides/01.slide ===
+[2026-11-12 21:53:31.805] [INFO ] [pid=13164] [server-url] baseUrl=http://127.0.0.1:39099 source=env
+[2026-11-12 21:53:31.932] [INFO ] [pid=13164] [slide-version] fileId=96F83506 version=0 filePath=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传\NeuroDMS-产品宣传.pptx
+=== boot pid=25824 ts=2026-11-12 21:54:05.875 cwd=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传 argv=C:\Users\sunxi\.workbuddy\binaries\node\versions\22.22.2-6\node_modules\@tencent\slidep\dist\index.js upsert-dsl NeuroDMS-产品宣传.pptx --dsl-file slides/02.slide ===
+[2026-11-12 21:54:05.873] [INFO ] [pid=25824] [server-url] baseUrl=http://127.0.0.1:39099 source=env
+[2026-11-12 21:54:05.917] [INFO ] [pid=25824] [slide-version] fileId=96F83506 version=1 filePath=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传\NeuroDMS-产品宣传.pptx
+=== boot pid=21376 ts=2026-11-12 21:54:28.046 cwd=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传 argv=C:\Users\sunxi\.workbuddy\binaries\node\versions\22.22.2-6\node_modules\@tencent\slidep\dist\index.js upsert-dsl NeuroDMS-产品宣传.pptx --dsl-file slides/02.slide --page-index 1 ===
+[2026-11-12 21:54:28.045] [INFO ] [pid=21376] [server-url] baseUrl=http://127.0.0.1:39099 source=env
+[2026-11-12 21:54:28.108] [INFO ] [pid=21376] [slide-version] fileId=96F83506 version=2 filePath=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传\NeuroDMS-产品宣传.pptx
+=== boot pid=21716 ts=2026-11-12 21:55:02.865 cwd=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传 argv=C:\Users\sunxi\.workbuddy\binaries\node\versions\22.22.2-6\node_modules\@tencent\slidep\dist\index.js upsert-dsl NeuroDMS-产品宣传.pptx --dsl-file slides/02.slide --page-index 1 ===
+[2026-11-12 21:55:02.864] [INFO ] [pid=21716] [server-url] baseUrl=http://127.0.0.1:39099 source=env
+[2026-11-12 21:55:02.907] [INFO ] [pid=21716] [slide-version] fileId=96F83506 version=3 filePath=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传\NeuroDMS-产品宣传.pptx
+=== boot pid=17856 ts=2026-11-12 21:55:41.566 cwd=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传 argv=C:\Users\sunxi\.workbuddy\binaries\node\versions\22.22.2-6\node_modules\@tencent\slidep\dist\index.js upsert-dsl NeuroDMS-产品宣传.pptx --dsl-file slides/03.slide ===
+[2026-11-12 21:55:41.565] [INFO ] [pid=17856] [server-url] baseUrl=http://127.0.0.1:39099 source=env
+[2026-11-12 21:55:41.613] [INFO ] [pid=17856] [slide-version] fileId=96F83506 version=4 filePath=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传\NeuroDMS-产品宣传.pptx
+=== boot pid=29068 ts=2026-11-12 21:56:08.185 cwd=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传 argv=C:\Users\sunxi\.workbuddy\binaries\node\versions\22.22.2-6\node_modules\@tencent\slidep\dist\index.js upsert-dsl NeuroDMS-产品宣传.pptx --dsl-file slides/04.slide ===
+[2026-11-12 21:56:08.183] [INFO ] [pid=29068] [server-url] baseUrl=http://127.0.0.1:39099 source=env
+[2026-11-12 21:56:08.239] [INFO ] [pid=29068] [slide-version] fileId=96F83506 version=5 filePath=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传\NeuroDMS-产品宣传.pptx
+=== boot pid=32684 ts=2026-11-12 21:56:37.144 cwd=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传 argv=C:\Users\sunxi\.workbuddy\binaries\node\versions\22.22.2-6\node_modules\@tencent\slidep\dist\index.js upsert-dsl NeuroDMS-产品宣传.pptx --dsl-file slides/04.slide --page-index 3 ===
+[2026-11-12 21:56:37.143] [INFO ] [pid=32684] [server-url] baseUrl=http://127.0.0.1:39099 source=env
+[2026-11-12 21:56:37.211] [INFO ] [pid=32684] [slide-version] fileId=96F83506 version=6 filePath=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传\NeuroDMS-产品宣传.pptx
+=== boot pid=31044 ts=2026-11-12 21:57:06.284 cwd=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传 argv=C:\Users\sunxi\.workbuddy\binaries\node\versions\22.22.2-6\node_modules\@tencent\slidep\dist\index.js upsert-dsl NeuroDMS-产品宣传.pptx --dsl-file slides/04.slide --page-index 3 ===
+[2026-11-12 21:57:06.283] [INFO ] [pid=31044] [server-url] baseUrl=http://127.0.0.1:39099 source=env
+[2026-11-12 21:57:06.340] [INFO ] [pid=31044] [slide-version] fileId=96F83506 version=7 filePath=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传\NeuroDMS-产品宣传.pptx
+=== boot pid=30292 ts=2026-11-12 21:57:32.567 cwd=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传 argv=C:\Users\sunxi\.workbuddy\binaries\node\versions\22.22.2-6\node_modules\@tencent\slidep\dist\index.js upsert-dsl NeuroDMS-产品宣传.pptx --dsl-file slides/05.slide ===
+[2026-11-12 21:57:32.565] [INFO ] [pid=30292] [server-url] baseUrl=http://127.0.0.1:39099 source=env
+[2026-11-12 21:57:32.618] [INFO ] [pid=30292] [slide-version] fileId=96F83506 version=8 filePath=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传\NeuroDMS-产品宣传.pptx
+=== boot pid=33272 ts=2026-11-12 21:58:01.934 cwd=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传 argv=C:\Users\sunxi\.workbuddy\binaries\node\versions\22.22.2-6\node_modules\@tencent\slidep\dist\index.js upsert-dsl NeuroDMS-产品宣传.pptx --dsl-file slides/06.slide ===
+[2026-11-12 21:58:01.933] [INFO ] [pid=33272] [server-url] baseUrl=http://127.0.0.1:39099 source=env
+[2026-11-12 21:58:01.985] [INFO ] [pid=33272] [slide-version] fileId=96F83506 version=9 filePath=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传\NeuroDMS-产品宣传.pptx
+=== boot pid=28760 ts=2026-11-12 21:58:24.075 cwd=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传 argv=C:\Users\sunxi\.workbuddy\binaries\node\versions\22.22.2-6\node_modules\@tencent\slidep\dist\index.js upsert-dsl NeuroDMS-产品宣传.pptx --dsl-file slides/07.slide ===
+[2026-11-12 21:58:24.073] [INFO ] [pid=28760] [server-url] baseUrl=http://127.0.0.1:39099 source=env
+[2026-11-12 21:58:24.115] [INFO ] [pid=28760] [slide-version] fileId=96F83506 version=10 filePath=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传\NeuroDMS-产品宣传.pptx
+=== boot pid=17572 ts=2026-11-12 21:58:48.166 cwd=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传 argv=C:\Users\sunxi\.workbuddy\binaries\node\versions\22.22.2-6\node_modules\@tencent\slidep\dist\index.js upsert-dsl NeuroDMS-产品宣传.pptx --dsl-file slides/08.slide ===
+[2026-11-12 21:58:48.165] [INFO ] [pid=17572] [server-url] baseUrl=http://127.0.0.1:39099 source=env
+[2026-11-12 21:58:48.209] [INFO ] [pid=17572] [slide-version] fileId=96F83506 version=11 filePath=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传\NeuroDMS-产品宣传.pptx
+=== boot pid=33584 ts=2026-11-12 21:59:36.840 cwd=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传 argv=C:\Users\sunxi\.workbuddy\binaries\node\versions\22.22.2-6\node_modules\@tencent\slidep\dist\index.js upsert-dsl NeuroDMS-产品宣传.pptx --dsl-file slides/09.slide ===
+[2026-11-12 21:59:36.839] [INFO ] [pid=33584] [server-url] baseUrl=http://127.0.0.1:39099 source=env
+[2026-11-12 21:59:36.880] [INFO ] [pid=33584] [slide-version] fileId=96F83506 version=12 filePath=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传\NeuroDMS-产品宣传.pptx
+=== boot pid=1464 ts=2026-11-12 22:00:02.974 cwd=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传 argv=C:\Users\sunxi\.workbuddy\binaries\node\versions\22.22.2-6\node_modules\@tencent\slidep\dist\index.js upsert-dsl NeuroDMS-产品宣传.pptx --dsl-file slides/10.slide ===
+[2026-11-12 22:00:02.972] [INFO ] [pid=1464] [server-url] baseUrl=http://127.0.0.1:39099 source=env
+[2026-11-12 22:00:03.028] [INFO ] [pid=1464] [slide-version] fileId=96F83506 version=13 filePath=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传\NeuroDMS-产品宣传.pptx
+=== boot pid=4144 ts=2026-11-12 22:00:35.295 cwd=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传 argv=C:\Users\sunxi\.workbuddy\binaries\node\versions\22.22.2-6\node_modules\@tencent\slidep\dist\index.js upsert-dsl NeuroDMS-产品宣传.pptx --dsl-file slides/11.slide ===
+[2026-11-12 22:00:35.294] [INFO ] [pid=4144] [server-url] baseUrl=http://127.0.0.1:39099 source=env
+[2026-11-12 22:00:35.336] [INFO ] [pid=4144] [slide-version] fileId=96F83506 version=14 filePath=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传\NeuroDMS-产品宣传.pptx
+=== boot pid=31112 ts=2026-11-12 22:00:55.689 cwd=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传 argv=C:\Users\sunxi\.workbuddy\binaries\node\versions\22.22.2-6\node_modules\@tencent\slidep\dist\index.js upsert-dsl NeuroDMS-产品宣传.pptx --dsl-file slides/12.slide ===
+[2026-11-12 22:00:55.687] [INFO ] [pid=31112] [server-url] baseUrl=http://127.0.0.1:39099 source=env
+[2026-11-12 22:00:55.729] [INFO ] [pid=31112] [slide-version] fileId=96F83506 version=15 filePath=C:\Users\sunxi\Documents\KailuWKKBD\02-软件开发\0203-NeuroDMS\docs\deck\NeuroDMS-产品宣传\NeuroDMS-产品宣传.pptx

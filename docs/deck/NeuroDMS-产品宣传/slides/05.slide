@@ -1,0 +1,58 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', padding: '60px', fontFamily: '"Microsoft YaHei", Arial, sans-serif', position: 'relative' }}>
+    <Box style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 34, fontWeight: 'bold', color: '#16202E' }}>密级先于权限，外发必须过闸</Text>
+        <Text style={{ fontSize: 14, color: '#5B7899', marginTop: 10 }}>方案 · 外发</Text>
+    </Box>
+    <Box style={{ width: '100%', height: 1, background: '#D8DEE7', marginTop: 14 }} />
+
+    <Box style={{ flexDirection: 'row', alignItems: 'stretch', marginTop: 26, gap: 0 }}>
+        {[
+            { n: '01', t: '发起', d: '所有者对文件或目录发起外链，必须持有外发权限。' },
+            { n: '02', t: '过闸', d: '密级达到阈值，或勾选"需审批"，链接先进入待审批。' },
+            { n: '03', t: '设限', d: '有效期、口令、禁用下载、水印、邮箱验证、来源网段。' },
+            { n: '04', t: '兑换', d: '访客用链接换一张 5 分钟票据，票据绑定来源网段。' },
+            { n: '05', t: '收回', d: '撤销后票据立即失效，已打开的页面也取不到新内容。' },
+        ].map((s, i) => (
+            <Box key={i} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Box style={{ width: 196, height: 196, background: i === 1 ? '#1B3B6F' : '#F4F6F9', borderRadius: 10, padding: '18px 16px', flexDirection: 'column', gap: 8 }}>
+                    <Text style={{ fontSize: 14, fontWeight: 'bold', color: i === 1 ? '#C08A3E' : '#8A9BB2', letterSpacing: 1 }}>{s.n}</Text>
+                    <Text style={{ fontSize: 22, fontWeight: 'bold', color: i === 1 ? '#FFFFFF' : '#16202E' }}>{s.t}</Text>
+                    <Text style={{ fontSize: 16, color: i === 1 ? '#C2D2E6' : '#5B7899', lineHeight: 1.5 }}>{s.d}</Text>
+                </Box>
+                {i < 4 && <Text style={{ fontSize: 22, color: '#B7C4D4', width: 36, textAlign: 'center' }}>→</Text>}
+            </Box>
+        ))}
+    </Box>
+
+    <Box style={{ marginTop: 26, flexDirection: 'column', gap: 10 }}>
+        <Text style={{ fontSize: 14, color: '#5B7899', letterSpacing: 2 }}>七级密级：等级数值固定，只允许改显示名</Text>
+        <Box style={{ flexDirection: 'row', gap: 6 }}>
+            {[
+                { l: '0', n: '公开', c: '#EEF2F7', f: '#5B7899' },
+                { l: '1', n: '内部', c: '#DDE5EF', f: '#4A6079' },
+                { l: '2', n: '敏感', c: '#C8D5E4', f: '#3C5471' },
+                { l: '3', n: '秘密', c: '#A9BDD3', f: '#1F3A5C' },
+                { l: '4', n: '机密', c: '#7E9AB8', f: '#FFFFFF' },
+                { l: '5', n: '绝密', c: '#4E7096', f: '#FFFFFF' },
+                { l: '6', n: '核心', c: '#1B3B6F', f: '#FFFFFF' },
+            ].map((x, i) => (
+                <Box key={i} style={{ flex: 1, height: 58, background: x.c, borderRadius: 8, alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 2 }}>
+                    <Text style={{ fontSize: 14, color: x.f, opacity: 0.85 }}>{x.l}</Text>
+                    <Text style={{ fontSize: 18, fontWeight: 'bold', color: x.f }}>{x.n}</Text>
+                </Box>
+            ))}
+        </Box>
+    </Box>
+
+    <Box style={{ marginTop: 22, background: '#F4F6F9', borderLeft: '3px solid #C08A3E', borderRadius: 6, padding: '14px 20px', flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+        <Text style={{ fontSize: 18, color: '#16202E', lineHeight: 1.5 }}>
+            默认阈值：<span style={{ fontWeight: 'bold' }}>秘密（3 级）及以上一律进审批</span>，且发起人不能审批自己创建的链接。
+        </Text>
+        <Text style={{ fontSize: 14, color: '#8A9BB2' }}>阈值可按租户调整</Text>
+    </Box>
+
+    <Box style={{ position: 'absolute', left: 60, right: 60, top: 676, flexDirection: 'row', justifyContent: 'space-between' }}>
+        <Text style={{ fontSize: 14, color: '#8A9BB2' }}>NeuroDMS · 产品概览</Text>
+        <Text style={{ fontSize: 14, color: '#8A9BB2' }}>05</Text>
+    </Box>
+</Slide>
