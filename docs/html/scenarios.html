@@ -93,6 +93,42 @@
       <p>用「权限解释」（见<a href="#s2">场景 2</a>）能看清卡在哪一步。</p>
     </div>
 
+    <h2 id="s0" data-nav="场景 0 · 登录后的第一屏（工作台）"><span class="num">0</span>登录后的第一屏（工作台）</h2>
+    <div class="meta">
+      <span class="chip">适用 <b>所有登录用户</b></span>
+      <span class="chip">入口 <b>登录后自动进入 /home；点左上角产品名随时回来</b></span>
+    </div>
+
+    <p>工作台不是"又一个首页"，它按<b>你下一刻要做什么</b>排顺序：待办 → 职责 → 数字 → 最近 → 空间。</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>区块</th><th>回答的问题</th><th>什么时候出现</th></tr></thead>
+        <tbody>
+          <tr><td><b>等你处理</b></td><td>有没有事必须由我拍板（移交确认、外发审批）</td><td>有待办才出现</td></tr>
+          <tr><td><b>职责视图</b></td><td>作为管理员，我该关注哪些数字</td><td>有管理角色</td></tr>
+          <tr><td><b>关键数字</b></td><td>能进几个空间、占多少存储、最近打开过几个</td><td>有内容或待办</td></tr>
+          <tr><td><b>最近打开</b></td><td>我上次在弄的那份文件在哪</td><td>有访问记录</td></tr>
+          <tr><td><b>我的空间</b></td><td>从哪进、容量还剩多少</td><td>有可见空间</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tablewrap">
+      <table class="steps">
+        <thead><tr><th>#</th><th>谁</th><th>做什么</th><th>注意</th></tr></thead>
+        <tbody>
+          <tr><td class="n"><b>1</b></td><td><span class="who user">所有人</span></td><td>先看「等你处理」</td><td>里面每一条都必须由你处理，别人替不了</td></tr>
+          <tr><td class="n"><b>2</b></td><td><span class="who user">所有人</span></td><td>点「最近打开」的卡片直接预览</td><td>新页签打开；记录来自你自己的审计日志，同事看不到</td></tr>
+          <tr><td class="n"><b>3</b></td><td><span class="who user">所有人</span></td><td>点空间卡片进空间根目录</td><td>卡片上显示所有者与最近更新时间</td></tr>
+          <tr><td class="n"><b>4</b></td><td><span class="who admin">管理员</span></td><td>「职责视图」的橙色/红色提示优先处理</td><td>提示的是"资产没人管"（仅所有者可达 / 孤儿空间），不是"文件多不多"</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note"><p><b>管理员的工作台空间数是 0，这是设计不是故障。</b>管理角色管配置，不自动获得内容权限；
+    工作台会用一行说明代替一排 0。要查看某个空间，需要所有者授权。</p></div>
+
     <h2 id="s1" data-nav="场景 1 · 把文件存进来"><span class="num">1</span>把文件存进来</h2>
     <div class="meta">
       <span class="chip">适用 <b>贡献者及以上</b></span>
@@ -372,13 +408,43 @@
         <tbody>
           <tr><td class="n"><b>1</b></td><td><span class="who user">用户</span></td><td>改密码后所有设备会被踢下线</td><td>这是有意的：账号被盗时，改密必须能收回已有凭证</td></tr>
           <tr><td class="n"><b>2</b></td><td><span class="who user">用户</span></td><td>连续输错 5 次会被锁 30 分钟</td><td>锁定按账号计，不是按 IP。锁定期内即使密码正确也拒绝</td></tr>
-          <tr><td class="n"><b>3</b></td><td><span class="who admin">管理员</span></td><td><b>先移交、后停用</b></td><td>直接停用会让其名下的文件无人可管（所有者被停用后仍占着 owner 条目）</td></tr>
-          <tr><td class="n"><b>4</b></td><td><span class="who admin">管理员</span></td><td>停用立即生效</td><td>数据库层吊销会话，令牌在 30 秒内失效，不等 15 分钟过期</td></tr>
-          <tr><td class="n"><b>5</b></td><td><span class="who admin">管理员</span></td><td>删除是软删除</td><td>保留 30 天，期间审计与回收站仍可追溯；到期后由清理任务处理</td></tr>
+          <tr><td class="n"><b>3</b></td><td><span class="who admin">管理员</span></td><td>停用/删除前<b>系统强制检查名下空间</b></td><td>只要他还拥有空间，操作被直接拒绝并列出空间名。这是硬约束：停用后他登不进来，空间就没人管了</td></tr>
+          <tr><td class="n"><b>4</b></td><td><span class="who admin">管理员</span></td><td>被拒后先去「空间台账」移交</td><td>移交完成再停用即可通过；不想移交就不能停用</td></tr>
+          <tr><td class="n"><b>5</b></td><td><span class="who admin">管理员</span></td><td>只是账号被盗要立刻踢下线</td><td>用<b>重置口令</b>：立即吊销全部会话，但账号仍可登录，不会让空间失去负责人</td></tr>
+          <tr><td class="n"><b>6</b></td><td><span class="who admin">管理员</span></td><td>停用立即生效、删除是软删除</td><td>令牌在 30 秒内失效；软删除保留 30 天，期间审计与回收站仍可追溯</td></tr>
           <tr><td class="n"><b>6</b></td><td><span class="who user">用户</span></td><td>外部协作者默认强制二次验证</td><td>外部账号创建时 <code>mfa_required</code> 自动为真，收不到验证码则无法登录（fail-closed）</td></tr>
         </tbody>
       </table>
     </div>
+
+    <h3 id="s7-transfer">7.2 空间移交：谁能发起、怎么生效</h3>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>发起人</th><th>接收人</th><th>生效方式</th><th>为什么这样定</th></tr></thead>
+        <tbody>
+          <tr><td>当前所有者</td><td>任意可用成员</td><td><b>立即生效</b></td><td>自己的东西自己处置</td></tr>
+          <tr><td>系统管理员（非所有者）</td><td>第三方</td><td><b>立即生效</b>，审计记发起人</td><td>代离职/离岗人员交接，不存在利益冲突</td></tr>
+          <tr><td>系统管理员（非所有者）</td><td><b>自己</b></td><td><b>原所有者 7 天内点同意</b>才生效</td><td>管理员能看到所有账号，不设闸就能把任何人的空间收进自己名下</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tablewrap">
+      <table class="steps">
+        <thead><tr><th>#</th><th>谁</th><th>做什么</th><th>注意</th></tr></thead>
+        <tbody>
+          <tr><td class="n"><b>1</b></td><td><span class="who user">所有者</span></td><td>文件页标题右侧点「移交」，选接收人</td><td>接收人必须本租户可登录，且密级不低于空间密级</td></tr>
+          <tr><td class="n"><b>2</b></td><td><span class="who user">所有者</span></td><td>移交后自己不再是所有者</td><td>不可撤销；对方可以再移交给别人</td></tr>
+          <tr><td class="n"><b>3</b></td><td><span class="who admin">管理员</span></td><td>管理台「空间台账」对任一空间点「移交」</td><td>转第三方立即生效；转给自己会生成待确认请求</td></tr>
+          <tr><td class="n"><b>4</b></td><td><span class="who user">原所有者</span></td><td>在工作台「等你处理」点同意或拒绝</td><td>7 天不处理自动失效；拒绝后对方要重新发起</td></tr>
+          <tr><td class="n"><b>5</b></td><td><span class="who admin">管理员</span></td><td>原所有者已停用/删除时</td><td>不能转给自己（没人能确认），只能转给第三方</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tip"><p><b>一次移交同时改三处</b>：空间归谁、空间里原属于他的文件归谁、谁能管理这个空间。
+    只改前两处会出现"名字换了、权限没换"，所以三者在一笔事务里完成。</p></div>
 
     <h2 id="faq" data-nav="8 · 常见问题速查"><span class="num">8</span>常见问题速查</h2>
 
@@ -394,6 +460,9 @@
           <tr><td>换了网络后链接失效</td><td>票据绑定来源网段</td><td>重新打开链接即可</td></tr>
           <tr><td>编辑时提示"有编辑会话"</td><td>有人正在编辑，回退被保护性拒绝</td><td>等对方关闭或 10 分钟无心跳后重试</td></tr>
           <tr><td>授权后对方仍打不开</td><td>密级不够 / 有显式拒绝 / 缓存未刷新</td><td>看权限解释的具体步骤</td></tr>
+          <tr><td>停用账号被拒绝</td><td>该账号名下还有空间</td><td>按弹层清单先去「空间台账」移交，再回来停用</td></tr>
+          <tr><td>移交提交后没生效</td><td>管理员转给自己的请求要原所有者确认</td><td>对方在工作台「等你处理」点同意；7 天不处理自动失效</td></tr>
+          <tr><td>工作台没有任何空间</td><td>你是管理角色，或还没被授权</td><td>管理角色不自动获得内容权限；找空间所有者授权</td></tr>
         </tbody>
       </table>
     </div>
@@ -416,7 +485,7 @@
 
 <footer class="foot">
   <span>NeuroDMS · 用户手册 · 场景操作 V1.1.0</span>
-  <span>网页版 v1.0.0 · 源文件 docs/29-用户手册-场景操作-v1.1.0.md</span>
+  <span>网页版 v1.1.0 · 源文件 docs/29-用户手册-场景操作-v1.2.0.md</span>
 </footer>
 
 <button class="totop" type="button" aria-label="回到顶部">

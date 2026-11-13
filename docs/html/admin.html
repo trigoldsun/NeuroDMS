@@ -44,7 +44,7 @@
     </div>
 
     <div class="note">
-      <p><b>修订记录</b>　V1.0.0 首版；V1.1.0 新增 §9.1 三级开关求值（放量 0% 与总开关开启的组合此前在界面上显示为"已开启"，导致运营无法解释"功能全部不可用"）；V1.2.0 重写 §6 外发审批，补上管理台入口、审批人三条件、单人空间的死链风险。</p>
+      <p><b>修订记录</b>　V1.0.0 首版；V1.1.0 新增 §9.1 三级开关求值（放量 0% 与总开关开启的组合此前在界面上显示为"已开启"，导致运营无法解释"功能全部不可用"）；V1.2.0 重写 §6 外发审批，补上管理台入口、审批人三条件、单人空间的死链风险；V1.3.0 新增 §6 空间台账与所有权移交（停用/删除前的强制校验、三种移交组合、管理员转自己需确认），外发审批补 /approvals 独立入口。</p>
     </div>
 
     <h2 id="roles" data-nav="1 · 三个管理角色的边界"><span class="num">1</span>开始之前：三个管理角色的边界</h2>
@@ -296,9 +296,79 @@ UPDATE tenant SET share_approval_min_class = 3 WHERE slug = 'demo';
       <p>这不是理论风险：审计里如果出现大量同一个 <code>172.x</code> 地址，就是这个配置没做对。</p>
     </div>
 
-    <h2 id="share-approve" data-nav="6 · 外发审批"><span class="num">6</span>外发审批</h2>
+    <h2 id="spaces" data-nav="6 · 空间台账与所有权移交"><span class="num">6</span>空间台账与所有权移交</h2>
 
-    <h3 id="approve-when" data-nav="6.1 什么时候需要审批">6.1 什么时候需要审批</h3>
+    <p>空间的可达性靠授权条目。如果某个空间只有所有者本人的一条授权，那么这个人<b>一停用或离职，
+    空间就再也没人能打开</b>——管理员也看不到它，因为管理角色不具备内容权限。
+    所以系统对"停用/删除账号"设了硬约束，并提供专门的移交入口。</p>
+
+    <h3 id="spaces-block">6.1 停用或删除前：系统强制检查名下空间</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>操作</th><th>有空间时的结果</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>停用账号</td><td><code>409 OWNS_SPACES</code>，返回空间清单</td><td>账号状态不变；清单带"是否仅他可达"标记</td></tr>
+          <tr><td>删除账号</td><td>同上</td><td>删除没有继任者参数，直接删会制造孤儿空间</td></tr>
+          <tr><td>重置口令</td><td>不受影响</td><td>账号被盗时的应急手段：立即吊销会话，不让空间失去负责人</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note"><p>检查在<b>同一事务内、对空间行加锁</b>之后执行。不加锁时，另一笔事务可以在"检查通过"
+    和"停用生效"之间给他新建一个空间，检查就白做了。</p>
+    <p>界面表现：成员页点「停用」会弹出清单，逐条列出空间名与"仅他可达"，并给两个出口——
+    「去空间台账移交」和「改用重置口令」。</p></div>
+
+    <h3 id="spaces-transfer">6.2 三种移交组合</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>发起人</th><th>接收人</th><th>生效方式</th><th>审计</th></tr></thead>
+        <tbody>
+          <tr><td>空间当前所有者</td><td>任意可用成员</td><td><b>立即生效</b></td><td><code>space.transfer</code> mode=owner</td></tr>
+          <tr><td>系统管理员（非所有者）</td><td>第三方</td><td><b>立即生效</b></td><td><code>space.transfer</code> mode=admin</td></tr>
+          <tr><td>系统管理员（非所有者）</td><td><b>自己</b></td><td><b>生成待确认请求</b>，原所有者 7 天内同意后生效</td><td><code>space.transfer.request</code> + <code>.approve</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="tip"><p><b>为什么"转给自己"要别人同意</b>：管理员能看到所有账号。不设这道闸，他可以把任何员工的空间
+    收进自己名下，然后读里面的文件。这道闸防的是内部越权，不是外部攻击。</p></div>
+    <div class="note"><p>服务端强制：接收人必须<b>在职</b>（未停用/未过期/未删除）且不是原所有者；密级 ≥ 空间密级；
+    在该空间无<b>显式拒绝</b>（不静默清除 deny）；同一空间同时只能有一条待确认请求；
+    原所有者已停用/删除时，管理员<b>不能</b>转给自己，只能转给第三方。</p></div>
+
+    <h3 id="spaces-three">6.3 一次移交改三处</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>位置</th><th>含义</th></tr></thead>
+        <tbody>
+          <tr><td><code>space.owner_id</code></td><td>空间归谁（台账、列表的"所有者"）</td></tr>
+          <tr><td><code>node.owner_id</code></td><td>空间内<b>原本属于原所有者</b>的文件归谁（列表"归属"列）</td></tr>
+          <tr><td>空间根的 owner ACE</td><td>真正决定能不能进得去</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="hint">三处必须同事务完成。只改前两处会出现"名字换了、权限没换"——比不移交更糟。
+    其他成员的文件归属、node 级别的单独授权、空间密级都不受影响。</p>
+
+    <h3 id="spaces-ledger">6.4 空间台账</h3>
+    <p>管理台 →「空间台账」（仅系统管理员）。列：空间名、所有者、授权条目、最近活动、状态、移交。</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>状态</th><th>含义</th><th>该做什么</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge ok">已共享</span></td><td>除所有者外还有用户/部门/角色/组授权</td><td>正常</td></tr>
+          <tr><td><span class="badge danger">仅所有者</span></td><td>除所有者外没有任何授权</td><td>补一份部门/角色授权，或安排移交</td></tr>
+          <tr><td><span class="badge warn">待确认</span></td><td>有一条管理员转给自己的请求在等原所有者</td><td>等对方处理，7 天后自动失效</td></tr>
+          <tr><td><span class="badge plain">账号不可用</span></td><td>所有者已停用或删除</td><td>立即移交给可用成员（转第三方无需确认）</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note"><p>顶部汇总"共 N 个空间，其中 M 个仅所有者可达"；存在"所有者已不可用且无其他授权"的空间时给红色告警条——
+    这类空间现在<b>没人能打开</b>，只能由管理员转给第三方恢复。</p>
+    <p>台账只显示元数据，<b>点不进内容</b>：管配置，不管内容。</p></div>
+
+    <h2 id="share-approve" data-nav="7 · 外发审批"><span class="num">7</span>外发审批</h2>
+
+    <h3 id="approve-when" data-nav="6.1 什么时候需要审批">7.1 什么时候需要审批</h3>
     <p>两个触发条件，满足任一即进入 <code>pending</code>：</p>
     <ol>
       <li>创建链接时显式勾选「需要审批」；</li>
@@ -306,7 +376,7 @@ UPDATE tenant SET share_approval_min_class = 3 WHERE slug = 'demo';
     </ol>
     <p>创建时<b>不需要选审批人</b>：谁是审批人由权限决定，不是由发起人指派。这是刻意的——如果发起人能挑审批人，他总会挑最容易通过的那个。</p>
 
-    <h3 id="approve-who" data-nav="6.2 谁在审批">6.2 谁在审批：三个条件同时满足</h3>
+    <h3 id="approve-who" data-nav="6.2 谁在审批">7.2 谁在审批：三个条件同时满足</h3>
     <div class="flow" data-flow="approve"></div>
 
     <div class="tablewrap">
@@ -328,12 +398,16 @@ UPDATE tenant SET share_approval_min_class = 3 WHERE slug = 'demo';
       <p><b>单人空间的死链风险</b>：如果某个空间的权限只在发起人一个人手里（个人项目、单人负责的目录很常见），三个条件无法同时满足，链接会<b>永远停在审批中</b>。系统在创建时返回 <code>approverCount</code>，为 0 时分享面板会直接提示"当前没有其他人能审批"，避免发起人空等。</p>
     </div>
 
-    <h3 id="approve-where" data-nav="6.3 审批人从哪里操作">6.3 审批人从哪里操作</h3>
-    <p>管理台 → <b>外发审批</b>（<code>/admin/share-approvals</code>），系统管理员与安全管理员可见。</p>
+    <h3 id="approve-where" data-nav="6.3 审批人从哪里操作">7.3 审批人从哪里操作</h3>
+    <p>三个入口，看到的是同一份列表：工作台「等你处理」的待办、直接访问 <code>/approvals</code>
+    （<b>任何登录用户都可访问</b>，不要求管理角色）、管理台「外发审批」
+    （<code>/admin/share-approvals</code>）。</p>
+    <p>第 2 条是关键：审批判据是对象级 <code>manage_acl</code>，而空间所有者通常不是管理员。
+    如果只有管理台有入口，这些人收到待办也点不进去，审批链会在最关键的一步断掉。</p>
     <p>列表只显示"你有权处置"的链接：服务端逐条按上表三个条件判定，没有权限的链接不会出现，所以不会出现"列出来却点不动"。每行给出文件、密级、发起人、提交时间、链接有效期，可「通过」或「驳回」。</p>
     <p>通过后链接<b>立即可用</b>，无需重新创建；驳回后发起人需要重新建链。两种结果都写审计（<code>share.approve</code>，结果 <code>ok</code>，<code>detail.decision</code> 记录 approved / rejected）。</p>
 
-    <h3 id="approve-nobody" data-nav="6.4 无人可批时怎么办">6.4 无人可批时怎么办</h3>
+    <h3 id="approve-nobody" data-nav="6.4 无人可批时怎么办">7.4 无人可批时怎么办</h3>
     <p>两条路，按业务选：</p>
     <div class="cards c2">
       <div class="card accent">
@@ -351,20 +425,20 @@ UPDATE tenant SET share_approval_min_class = 3 WHERE slug = 'demo';
       <p>如果这种情况反复出现，说明阈值（默认 3）对本租户偏低，或空间权限过度集中在单人手里。前者调 <code>share_approval_min_class</code>，后者应治理授权结构——不要用"关掉审批"来解决。</p>
     </div>
 
-    <h3 id="approve-limits" data-nav="6.5 当前约束">6.5 当前约束（需知）</h3>
+    <h3 id="approve-limits" data-nav="6.5 当前约束">7.5 当前约束（需知）</h3>
     <ul>
       <li><b>没有通知</b>：待审批不会主动提醒任何人，发起人与审批人都要靠"自己去看列表"。外发邮件只发给收件人，不发给审批人。流程上需要约定"谁每天看一次外发审批"。</li>
       <li><b>一人一票，不能改判</b>：通过或驳回之后不能再改，只能重新建链。</li>
       <li><b>审计写不进就拒绝操作</b>：审批先改状态、再写审计；审计失败返回 500 并提示。此前的缺陷是审计 <code>result</code> 写了 <code>approved</code>（不在 <code>ok/denied/error</code> 约束内），导致<b>审批一提交就 500，而状态其实已改</b>——现已修正为 <code>ok</code> + <code>detail.decision</code>。</li>
     </ul>
 
-    <h3 id="approve-space" data-nav="6.6 空间级外链的额外闸门">6.6 空间级外链的额外闸门</h3>
+    <h3 id="approve-space" data-nav="6.6 空间级外链的额外闸门">7.6 空间级外链的额外闸门</h3>
     <p>对空间生成外链时，若空间内存在：<b>密级高于发起人的节点</b>，或<b>带显式拒绝条目的节点</b>，直接拒绝（403 <code>SPACE_NOT_SHAREABLE</code>）。</p>
     <div class="warn">
       <p>这道闸门是刻意的：空间级外链面向匿名访客，子树的任何例外都会被绕过。遇到这个提示，正确做法是改为分享具体文件 / 目录，而不是让管理员去删例外配置。</p>
     </div>
 
-    <h2 id="brand" data-nav="7 · 品牌与域名"><span class="num">7</span>品牌与域名</h2>
+    <h2 id="brand" data-nav="8 · 品牌与域名"><span class="num">8</span>品牌与域名</h2>
     <p>入口：管理台 → 系统设置（品牌部分）。</p>
     <div class="tablewrap">
       <table>
@@ -377,7 +451,7 @@ UPDATE tenant SET share_approval_min_class = 3 WHERE slug = 'demo';
     </div>
     <p>品牌配置不影响任何权限判定——它只是展示层。</p>
 
-    <h2 id="audit" data-nav="8 · 审计与证据"><span class="num">8</span>审计与证据</h2>
+    <h2 id="audit" data-nav="9 · 审计与证据"><span class="num">9</span>审计与证据</h2>
     <p>入口：管理台 → 审计日志（仅审计管理员）、操作日志（管理角色）。</p>
     <div class="tablewrap">
       <table>
@@ -395,7 +469,7 @@ UPDATE tenant SET share_approval_min_class = 3 WHERE slug = 'demo';
       <p>导证据包时注意：导出行为本身也会写审计（"谁导出了什么范围"），这是可核查性的一部分。</p>
     </div>
 
-    <h2 id="platform" data-nav="9 · 平台运营台"><span class="num">9</span>平台运营台（仅 SaaS 形态）</h2>
+    <h2 id="platform" data-nav="10 · 平台运营台"><span class="num">10</span>平台运营台（仅 SaaS 形态）</h2>
     <p>入口：<code>/platform/{tab}</code>，账号在 <code>platform_user</code> 表，与租户账号完全分离。</p>
 
     <div class="tablewrap">
@@ -487,7 +561,7 @@ UPDATE tenant SET share_approval_min_class = 3 WHERE slug = 'demo';
     </div>
     <p><b>到期与宽限</b>：到期后进入 30 天宽限期（能力保持），宽限期结束后降为基础版，但界面仍显示"原为专业版"，避免用户以为数据丢了。</p>
 
-    <h2 id="ops" data-nav="10 · 运维：备份、升级、回滚"><span class="num">10</span>运维：备份、升级、回滚</h2>
+    <h2 id="ops" data-nav="11 · 运维：备份、升级、回滚"><span class="num">11</span>运维：备份、升级、回滚</h2>
 
     <h3 id="ops-backup" data-nav="10.1 发布前必做">10.1 发布前必做</h3>
     <pre><code># 1) 备份数据库
@@ -531,7 +605,7 @@ docker compose up -d server
 # 若该版本对应的迁移不可逆，再恢复数据库备份
 docker exec -i docvault-postgres pg_restore -U docvault -d docvault --clean &lt; backup.dump</code></pre>
 
-    <h2 id="trouble" data-nav="11 · 故障排查"><span class="num">11</span>故障排查</h2>
+    <h2 id="trouble" data-nav="12 · 故障排查"><span class="num">12</span>故障排查</h2>
 
     <div class="tablewrap">
       <table>
@@ -550,7 +624,7 @@ docker exec -i docvault-postgres pg_restore -U docvault -d docvault --clean &lt;
       </table>
     </div>
 
-    <h2 id="limits" data-nav="12 · 已知限制与待补项"><span class="num">12</span>已知限制与待补项</h2>
+    <h2 id="limits" data-nav="13 · 已知限制与待补项"><span class="num">13</span>已知限制与待补项</h2>
     <p>按影响面排序，实施前请据此做预期管理。</p>
 
     <div class="tablewrap">
@@ -586,7 +660,7 @@ docker exec -i docvault-postgres pg_restore -U docvault -d docvault --clean &lt;
 
 <footer class="foot">
   <span>NeuroDMS · 管理员手册 · 租户与系统配置 V1.2.0</span>
-  <span>网页版 v1.0.0 · 源文件 docs/31-管理员手册-租户与系统配置-v1.2.0.md</span>
+  <span>网页版 v1.1.0 · 源文件 docs/31-管理员手册-租户与系统配置-v1.3.0.md</span>
 </footer>
 
 <button class="totop" type="button" aria-label="回到顶部">

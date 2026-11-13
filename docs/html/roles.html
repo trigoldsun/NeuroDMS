@@ -151,6 +151,18 @@
               <td data-col="viewer"><i class="dot n"></i></td><td data-col="contributor"><i class="dot n"></i></td><td data-col="editor"><i class="dot n"></i></td><td data-col="manager"><i class="dot n"></i></td><td data-col="owner"><i class="dot y"></i></td><td data-col="sysadmin"><i class="dot n"></i></td><td data-col="secadmin"><i class="dot o"></i></td><td data-col="auditor"><i class="dot n"></i></td>
             </tr>
             <tr>
+              <td>移交自己名下的空间</td>
+              <td data-col="viewer"><i class="dot n"></i></td><td data-col="contributor"><i class="dot n"></i></td><td data-col="editor"><i class="dot n"></i></td><td data-col="manager"><i class="dot n"></i></td><td data-col="owner"><i class="dot y"></i></td><td data-col="sysadmin"><i class="dot o"></i></td><td data-col="secadmin"><i class="dot n"></i></td><td data-col="auditor"><i class="dot n"></i></td>
+            </tr>
+            <tr>
+              <td>确认"管理员要接手我的空间"</td>
+              <td data-col="viewer"><i class="dot n"></i></td><td data-col="contributor"><i class="dot n"></i></td><td data-col="editor"><i class="dot n"></i></td><td data-col="manager"><i class="dot n"></i></td><td data-col="owner"><i class="dot y"></i></td><td data-col="sysadmin"><i class="dot n"></i></td><td data-col="secadmin"><i class="dot n"></i></td><td data-col="auditor"><i class="dot n"></i></td>
+            </tr>
+            <tr>
+              <td>查看空间台账（不含内容）</td>
+              <td data-col="viewer"><i class="dot n"></i></td><td data-col="contributor"><i class="dot n"></i></td><td data-col="editor"><i class="dot n"></i></td><td data-col="manager"><i class="dot n"></i></td><td data-col="owner"><i class="dot n"></i></td><td data-col="sysadmin"><i class="dot y"></i></td><td data-col="secadmin"><i class="dot n"></i></td><td data-col="auditor"><i class="dot n"></i></td>
+            </tr>
+            <tr>
               <td>建号、改角色、停用</td>
               <td data-col="viewer"><i class="dot n"></i></td><td data-col="contributor"><i class="dot n"></i></td><td data-col="editor"><i class="dot n"></i></td><td data-col="manager"><i class="dot n"></i></td><td data-col="owner"><i class="dot n"></i></td><td data-col="sysadmin"><i class="dot y"></i></td><td data-col="secadmin"><i class="dot n"></i></td><td data-col="auditor"><i class="dot n"></i></td>
             </tr>
@@ -178,7 +190,21 @@
 
     <div class="note">
       <p>「审批外发链接」安全管理员标 ○：审批门槛是<b>对该对象有 <code>manage_acl</code></b>，而不是某个角色。安全管理员若不在该对象的授权链上，同样批不了。这是刻意的——审批人要真的对这份内容有处置权。</p>
+      <p>「移交」系统管理员标 ○：管理员可以代离职人员把空间转给第三方，但<b>转给自己时必须原所有者确认</b>。</p>
     </div>
+
+    <h3 id="transfer">1.1 移交的三种组合</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>发起人</th><th>接收人</th><th>生效方式</th><th>为什么这样定</th></tr></thead>
+        <tbody>
+          <tr><td>空间当前所有者</td><td>任意可用成员</td><td><b>立即生效</b></td><td>自己的东西自己处置</td></tr>
+          <tr><td>系统管理员（非所有者）</td><td>第三方</td><td><b>立即生效</b>，审计记发起人</td><td>代离职/离岗人员交接，无利益冲突</td></tr>
+          <tr><td>系统管理员（非所有者）</td><td><b>自己</b></td><td><b>原所有者 7 天内同意</b>才生效</td><td>管理员能看到所有账号，不设闸就能把任何人的空间收进自己名下</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="hint">三种组合都要求：接收人在职（未停用/未过期）、密级不低于空间密级、在该空间上无显式拒绝。原所有者已停用时，管理员不能转给自己，只能转给第三方。</p>
 
     <h2 id="levels" data-nav="2 · 五个内容档位"><span class="num">2</span>五个内容档位：逐档说明</h2>
 
@@ -365,7 +391,27 @@
       <p>自托管 / 私有化部署没有这一层，对应能力由本地系统管理员承担（且不含许可证管理，见部署说明）。</p>
     </div>
 
-    <h2 id="errors" data-nav="7 · 403 / 404 对照表"><span class="num">7</span>典型 403 / 404 对照表</h2>
+    <h2 id="workspace" data-nav="7 · 工作台：不同角色看到什么"><span class="num">7</span>工作台：不同角色看到什么</h2>
+    <p>登录后落 <code>/home</code>。工作台内容<b>按角色变化</b>，不是同一个页面对所有人显示同样东西。</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>区块</th><th>普通成员</th><th>系统管理员</th><th>安全管理员</th><th>审计管理员</th></tr></thead>
+        <tbody>
+          <tr><td>等你处理</td><td>有才显示</td><td>有才显示</td><td>有才显示</td><td>有才显示</td></tr>
+          <tr><td>职责视图</td><td>—</td><td>账号/空间/文件/容量 + 仅所有者可达与孤儿空间告警</td><td>待审降密、密级分布</td><td>24h 事件与被拒、最近日结锚点</td></tr>
+          <tr><td>关键数字</td><td>空间、存储、最近打开、待办</td><td>同左（通常为 0）</td><td>同左</td><td>同左</td></tr>
+          <tr><td>最近打开 / 我的空间</td><td>我的记录与空间</td><td>同左</td><td>同左</td><td>同左</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tip">
+      <p><b>管理员看不到空间是设计，不是故障。</b>管理角色管配置；要看内容必须被授权。</p>
+      <p><b>审批权不等于管理角色。</b>能不能批外发取决于是否对该对象有 <code>manage_acl</code>，所以普通所有者也会在「等你处理」里看到审批待办，并能从 <code>/approvals</code> 处理。</p>
+    </div>
+
+    <h2 id="errors" data-nav="8 · 403 / 404 / 409 对照表"><span class="num">8</span>典型 403 / 404 / 409 对照表</h2>
 
     <div class="tablewrap">
       <table>
@@ -379,6 +425,12 @@
           <tr><td><code>403 DOWNLOAD_FORBIDDEN</code></td><td>该外链不允许下载</td><td>让分享人开启下载</td></tr>
           <tr><td><code>404 NOT_FOUND</code></td><td>不存在<b>或</b>无权限（系统不区分）</td><td>用权限解释确认</td></tr>
           <tr><td><code>409 INHERITED_ACE</code></td><td>想删继承来的权限条目</td><td>先恢复继承，再调整上层</td></tr>
+          <tr><td><code>409 OWNS_SPACES</code></td><td>停用 / 删除的人名下还有空间</td><td>先移交（响应里带空间清单）</td></tr>
+          <tr><td><code>409 TRANSFER_PENDING</code></td><td>该空间已有待确认的移交请求</td><td>等对方确认，或先撤销原请求</td></tr>
+          <tr><td><code>409 OWNER_UNAVAILABLE</code></td><td>原所有者已停用 / 删除，无法确认"转给管理员自己"</td><td>改为转给第三方</td></tr>
+          <tr><td><code>409 TRANSFER_STALE</code></td><td>审批期间空间所有者已变更</td><td>重新发起移交</td></tr>
+          <tr><td><code>409 TARGET_UNAVAILABLE</code></td><td>接收人停用 / 过期</td><td>换一位在职成员</td></tr>
+          <tr><td><code>409 CLEARANCE_TOO_LOW</code></td><td>接收人密级低于空间密级</td><td>先提密，或换人</td></tr>
           <tr><td><code>400 LAST_OWNER</code></td><td>想移除最后一个所有者</td><td>先给别人所有者档位</td></tr>
         </tbody>
       </table>
@@ -387,8 +439,8 @@
     <div class="cards c2" style="margin-top:28px">
       <a class="card" href="scenarios.html" style="text-decoration:none;color:inherit;display:block">
         <span class="tag f">上一篇</span>
-        <h4>场景操作手册：七件事怎么做</h4>
-        <p>上传、检索、授权、编辑回退、外发审批、格式预览、账号交接。</p>
+        <h4>场景操作手册：八件事怎么做</h4>
+        <p>工作台、上传、检索、授权、编辑回退、外发审批、格式预览、账号交接。</p>
       </a>
       <a class="card" href="admin.html" style="text-decoration:none;color:inherit;display:block">
         <span class="tag f">给管理员</span>
@@ -402,7 +454,7 @@
 
 <footer class="foot">
   <span>NeuroDMS · 用户手册 · 角色能力 V1.0.0</span>
-  <span>网页版 v1.0.0 · 源文件 docs/30-用户手册-角色能力-v1.0.0.md</span>
+  <span>网页版 v1.1.0 · 源文件 docs/30-用户手册-角色能力-v1.1.0.md</span>
 </footer>
 
 <button class="totop" type="button" aria-label="回到顶部">
