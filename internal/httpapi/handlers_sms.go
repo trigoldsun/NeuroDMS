@@ -3,6 +3,7 @@ package httpapi
 // 短信验证码登录（公开端点，靠频控而不是身份保护）。
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -59,6 +60,7 @@ func (a *API) handleSMSSend(w http.ResponseWriter, r *http.Request) {
 
 	res, err := a.Auth.SendLoginCode(r.Context(), req.Account, clientIP(r))
 	if err != nil {
+		a.logSMSFailure(err)
 		writeAuthErr(w, r, err)
 		return
 	}
@@ -100,6 +102,7 @@ func (a *API) handleSMSLogin(w http.ResponseWriter, r *http.Request) {
 		if ref, e := a.Auth.ResolveAccount(r.Context(), req.Account); e == nil {
 			tenantID = ref.TenantID
 		}
+		a.logSMSFailure(err)
 		a.auditLogin(r, tenantID, auth.MaskPhone(normalizeLoosePhone(req.Account)), err)
 		writeAuthErr(w, r, err)
 		return
@@ -125,6 +128,19 @@ func (a *API) handleSMSLogin(w http.ResponseWriter, r *http.Request) {
 		"tenantId":      tk.TenantID,
 		"sessionId":     tk.SessionID,
 	})
+}
+
+// logSMSFailure 把上游原文写进服务端日志，不回给调用方。
+//
+// 这两个接口是匿名的：上游错误含配置细节（InvalidAccessKeyId / SignatureDoesNotMatch），
+// 回出去等于对外公布"这台网关怎么配错了"。日志只记错误，不记号码。
+func (a *API) logSMSFailure(err error) {
+	if a.Log == nil {
+		return
+	}
+	if errors.Is(err, auth.ErrSMSUnavailable) {
+		a.Log.Warn("短信通道调用失败", "err", err.Error())
+	}
 }
 
 // normalizeLoosePhone 只用于"把用户输入转成可掩码的样子"，失败则原样返回。

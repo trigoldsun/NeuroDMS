@@ -616,9 +616,16 @@ func writeAuthErr(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, auth.ErrPhoneTaken):
 		write(http.StatusConflict, "PHONE_TAKEN")
 	case errors.Is(err, auth.ErrSMSNotConfigured):
-		write(http.StatusServiceUnavailable, "SMS_NOT_CONFIGURED")
+		writeErrHint(w, r, http.StatusServiceUnavailable, "SMS_NOT_CONFIGURED",
+			auth.ErrSMSNotConfigured.Error(), hint)
 	case errors.Is(err, auth.ErrSMSUnavailable):
-		write(http.StatusServiceUnavailable, "SMS_UNAVAILABLE")
+		// 只回固定文案，不回上游原文。
+		//
+		// 上游错误里带的是服务端配置细节（例如 InvalidAccessKeyId.NotFound），
+		// 这两个接口是**匿名可调**的——把原文回出去等于告诉外面"这台网关没配好"。
+		// 详细原因由 handler 写进服务端日志，运维能查，外部看不到。
+		writeErrHint(w, r, http.StatusServiceUnavailable, "SMS_UNAVAILABLE",
+			auth.ErrSMSUnavailable.Error(), hint)
 	case errors.Is(err, auth.ErrCodeInvalid):
 		write(http.StatusUnauthorized, "SMS_CODE_INVALID")
 	default:
