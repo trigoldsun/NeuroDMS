@@ -136,6 +136,16 @@ services:
       DOCVAULT_SMTP_FROM: ${DOCVAULT_SMTP_FROM:-}
       DOCVAULT_SMTP_TLS: ${DOCVAULT_SMTP_TLS:-starttls}
       DOCVAULT_SMTP_INSECURE: ${DOCVAULT_SMTP_INSECURE:-0}
+      # ---- 短信认证服务（阿里云号码认证 dypnsapi）----
+      # 不是"短信服务 SMS"：验证码由阿里云生成并核验，服务端不存明文。
+      # 四项任一为空则短信登录整体不可用（fail-closed），不影响口令登录。
+      DOCVAULT_SMS_ACCESS_KEY_ID: ${DOCVAULT_SMS_ACCESS_KEY_ID:-}
+      DOCVAULT_SMS_ACCESS_KEY_SECRET: ${DOCVAULT_SMS_ACCESS_KEY_SECRET:-}
+      DOCVAULT_SMS_SIGN_NAME: ${DOCVAULT_SMS_SIGN_NAME:-}
+      DOCVAULT_SMS_TEMPLATE_CODE: ${DOCVAULT_SMS_TEMPLATE_CODE:-}
+      DOCVAULT_SMS_SCHEME_NAME: ${DOCVAULT_SMS_SCHEME_NAME:-}
+      # 仅开发/测试：固定验证码、不联网；production 模式下启用会拒绝启动
+      DOCVAULT_SMS_MOCK: ${DOCVAULT_SMS_MOCK:-0}
       # ---- 病毒扫描与限流 ----
       DOCVAULT_CLAMAV_ADDR: ${DOCVAULT_CLAMAV_ADDR:-}
       DOCVAULT_CLAMAV_TIMEOUT: ${DOCVAULT_CLAMAV_TIMEOUT:-30}

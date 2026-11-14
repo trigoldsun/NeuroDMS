@@ -291,6 +291,56 @@ UPDATE tenant SET share_approval_min_class = 3 WHERE slug = 'demo';
       <li>一次最多 5000 个文件（<code>TOO_MANY_FILES</code>）；目录逐个创建，几百个时会显示「正在创建目录 x/y」——正常，不是卡死。</li>
     </ul>
 
+    <h3 id="p-phone" data-nav="3.10 手机号与短信登录">3.10 手机号与短信登录</h3>
+    <p>手机号在本系统里是<b>登录凭据</b>（小程序只对已登记并验证手机号的账号开放），不是普通联系方式。入口：管理台 → 系统设置 →「登录方式」；管理台 → 成员 → 新建 / 编辑。</p>
+
+    <p><b>号码从哪来</b></p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>来源</th><th>怎么进入</th><th>状态</th></tr></thead>
+        <tbody>
+          <tr><td class="nowrap">认证源同步（AD / Entra）</td><td>目录里有 <code>mobile</code> 或 <code>telephoneNumber</code>，同步时自动写入</td><td><b>已验证</b>（组织背书）</td></tr>
+          <tr><td class="nowrap">管理员录入</td><td>新建成员或编辑成员时填写</td><td><b>待验证</b></td></tr>
+          <tr><td class="nowrap">本人自助绑定</td><td>账户 →「手机号」，需当前口令 + 新号码验证码</td><td>已验证</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>认证源同步的号码直接算已验证：域控里的是 HR/IT 维护的权威资料，若还要求本人逐个再验一遍，「自动登记」就退回了手工。号码来源记在 <code>phone_source</code>（manual / self / directory），排障时能看出该找谁核对。</p>
+
+    <p><b>录入不等于可用</b></p>
+    <ul>
+      <li>新建时填了号码，状态是<b>待验证</b>，<b>不能</b>用于任何登录（含小程序）；</li>
+      <li>在该成员的编辑窗口点「发送验证码」，向本人索取 6 位码后点「确认验证」，才转为已验证；</li>
+      <li><b>改号一定回到待验证</b>。保留旧的已验证标记等于「你填谁的号、谁就能登录」；</li>
+      <li>号码在<b>租户内唯一</b>，包括未验证的号码。冲突时提示「该手机号已被其他账号使用」，不会告诉你是谁在用。</li>
+    </ul>
+
+    <p><b>短信验证码登录（增值功能）</b></p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>项</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td class="nowrap">能力要求</td><td>专业版及以上</td></tr>
+          <tr><td class="nowrap">默认</td><td><b>关闭</b>；开启即按条计费</td></tr>
+          <tr><td class="nowrap">三条件</td><td>档位 × 租户开关 × 服务端已配置短信通道，缺一不可</td></tr>
+          <tr><td class="nowrap">未开通时</td><td>登录页不出现「手机号验证码」，发码接口 503，不降级为「跳过验证」</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>凭据在服务端环境变量（<code>DOCVAULT_SMS_*</code>），不在界面上配置。自检不发短信：</p>
+    <pre><code>set -a; . docker/.env; set +a
+go run ./cmd/smscheck</code></pre>
+
+    <h4>mfa_required 账号允许仅短信登录（必须知道的代价）</h4>
+    <p>产品确认：短信通过即视为满足二次验证，不再要求先输口令。</p>
+    <ul>
+      <li>好处：这类账号不必记两个凭据；</li>
+      <li>代价：<b>SIM 交换风险</b>——攻击者补办手机卡后就能收码登录。高权限账号（系统 / 安全管理员）建议保持「口令 + 二次验证」，不要只依赖短信；</li>
+      <li>审计里这类登录带 <code>mfaSatisfiedBy=sms</code>，可与普通短信登录区分。</li>
+    </ul>
+
+    <p><b>直线上级与职位</b>：从认证源自动同步（<code>title</code> / <code>manager</code>），<b>只读</b>。域里删掉上级后本地写成空——保留旧值会让组织关系指向一个不存在的人。同步记录的 <code>managers_linked</code> 是本次解析成功的条数，出现「上级一栏是空的」先看这个数。</p>
+
     <h2 id="class" data-nav="4 · 密级与标签策略"><span class="num">4</span>密级与标签策略</h2>
     <p>入口：管理台 → 密级定义 / 标签策略（仅安全管理员）。</p>
 
@@ -857,7 +907,7 @@ docker exec -i docvault-postgres pg_restore -U docvault -d docvault --clean &lt;
 
 <footer class="foot">
   <span>NeuroDMS · 管理员手册 · 租户与系统配置 V1.2.0</span>
-  <span>网页版 v1.5.0 · 源文件 docs/31-管理员手册-租户与系统配置-v1.8.0.md</span>
+  <span>网页版 v1.6.0 · 源文件 docs/31-管理员手册-租户与系统配置-v1.9.0.md</span>
 </footer>
 
 <button class="totop" type="button" aria-label="回到顶部">

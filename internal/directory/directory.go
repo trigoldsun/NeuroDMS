@@ -44,6 +44,16 @@ type User struct {
 	Username    string
 	Email       string
 	DisplayName string
+	// Phone 是目录里的移动电话（AD: mobile，回退 telephoneNumber）。
+	//
+	// 手机号在小程序登录里是凭据，手填错一位就等于把账号交给号码的主人，
+	// 所以只要认证源里有，就以认证源为准，不再让管理员手输。
+	Phone string
+	// Title 是职位（AD: title，Entra: jobTitle）。
+	Title string
+	// ManagerDN 是直线上级的 DN（AD: manager 属性本身就是 DN）。
+	// 需要二次解析成本地账号 ID，见 sync 里的"上级解析"阶段。
+	ManagerDN string
 	// DistinguishedName 用于按组解析成员关系
 	DN string
 	// Dept 是单一层级部门（来自 department 属性），DeptChain 为空时使用
@@ -116,5 +126,7 @@ type Result struct {
 	// 必须显式统计：否则管理员只会看到"目录里 52 个、系统里 51 个"，不知道差在哪。
 	Conflicts     int
 	ConflictUsers []string
-	Watermark     string
+	// ManagersLinked 是本次成功写入了直线上级的账号数。
+	ManagersLinked int
+	Watermark      string
 }

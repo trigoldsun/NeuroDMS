@@ -29,6 +29,13 @@ func (a *API) registerMembers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/admin/members/{id}/roles", a.requireRole(rbac.SysAdmin)(a.handleMemberGrantRole))
 	mux.HandleFunc("DELETE /v1/admin/members/{id}/roles/{code}", a.requireRole(rbac.SysAdmin)(a.handleMemberRevokeRole))
 
+	// 手机号的事后验证：录入不强制当场验证，但必须能补验（docs/44 §4）。
+	// 三个端点都只作用于"库里已登记的那个号"，不接受新号码——
+	// 换号走 PATCH（会重置验证状态），两条路分开就不会出现"验 A 存 B"。
+	mux.HandleFunc("POST /v1/admin/members/{id}/phone/request", a.requireRole(rbac.SysAdmin)(a.handleMemberPhoneRequest))
+	mux.HandleFunc("POST /v1/admin/members/{id}/phone/confirm", a.requireRole(rbac.SysAdmin)(a.handleMemberPhoneConfirm))
+	mux.HandleFunc("DELETE /v1/admin/members/{id}/phone", a.requireRole(rbac.SysAdmin)(a.handleMemberPhoneClear))
+
 	// 部门下拉：建号时要选部门
 	mux.HandleFunc("GET /v1/admin/depts", a.requireRole(rbac.SysAdmin)(a.handleDeptList))
 }
@@ -48,6 +55,8 @@ func (a *API) iamErr(w http.ResponseWriter, r *http.Request, tenantID, action, t
 		code, status, msg = "INVALID_ARGUMENT", http.StatusBadRequest, err.Error()
 	case errors.Is(err, iam.ErrDuplicate):
 		code, status, msg = "USER_EXISTS", http.StatusConflict, "用户名或邮箱已被占用"
+	case errors.Is(err, iam.ErrPhoneTaken):
+		code, status, msg = "PHONE_TAKEN", http.StatusConflict, "该手机号已被其他账号使用"
 	case errors.Is(err, iam.ErrLastAdmin):
 		code, status, msg = "LAST_ADMIN", http.StatusConflict, "不能移除最后一个可登录的系统管理员"
 	case errors.Is(err, iam.ErrSeparation):
@@ -437,5 +446,10 @@ func memberSnapshot(m iam.Member) map[string]any {
 		"ceiling":        m.Ceiling,
 		"deptId":         m.DeptID,
 		"mfaRequired":    m.MFARequired,
+		// 手机号只记掩码：审计里放完整号码，等于把通讯录写进一个
+		// 审计管理员能读的表。掩码足够回答"换没换、换成哪个尾号"。
+		"phone":         m.PhoneMasked,
+		"phoneVerified": m.PhoneVerified,
+		"title":         m.Title,
 	}
 }

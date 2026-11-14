@@ -99,6 +99,10 @@ type Tokens struct {
 	UserID        string
 	TenantID      string
 	SessionID     string
+	// MFA 表示"本次登录额外满足了一次二次验证"。仅短信登录会置位：
+	// 短信是持有因子，对 mfa_required 账号来说它替代了口令+邮件的两步。
+	// 只给审计用，不进响应体（客户端不需要知道自己"算不算过了 MFA"）。
+	MFA bool
 }
 
 // Login 用租户 slug + 用户名 + 口令登录，mode 指定"按本地身份还是域身份"校验。

@@ -411,3 +411,83 @@ func TestAuthenticateRejectsEmptyPassword(t *testing.T) {
 		t.Fatalf("空用户名应直接拒绝，实际 %v", err)
 	}
 }
+
+// TestSyncRegistersProfileFromDirectory 锁"员工资料从认证源自动登记"：
+// 手机号、职位、直线上级都跟着目录走，不需要管理员手填。
+func TestSyncRegistersProfileFromDirectory(t *testing.T) {
+	pool := testPool(t)
+	tenantID := seedTenant(t, pool)
+	ctx := context.Background()
+
+	snap := Snapshot{
+		Watermark: "2000",
+		Users: []User{
+			{ExternalID: "p-1", Username: "alice", Email: "alice@example.com", DisplayName: "Alice",
+				DN: "CN=alice,OU=研发,DC=example,DC=com", Phone: "138 0013 8010", Title: "研发经理",
+				ManagerDN: "CN=bob,OU=研发,DC=example,DC=com"},
+			{ExternalID: "p-2", Username: "bob", Email: "bob@example.com", DisplayName: "Bob",
+				DN: "CN=bob,OU=研发,DC=example,DC=com", Phone: "+8613800138011", Title: "CTO"},
+			// 脏号码（分机）与重复号码：都不该让整次同步失败
+			{ExternalID: "p-3", Username: "carol", Email: "carol@example.com", DisplayName: "Carol",
+				DN: "CN=carol,OU=财务,DC=example,DC=com", Phone: "8888"},
+			{ExternalID: "p-4", Username: "dave", Email: "dave@example.com", DisplayName: "Dave",
+				DN: "CN=dave,OU=财务,DC=example,DC=com", Phone: "13800138010"},
+		},
+	}
+	res, err := Sync(ctx, pool, tenantID, &fakeDir{snap: snap}, "", Options{})
+	if err != nil {
+		t.Fatalf("同步失败: %v", err)
+	}
+	if res.Created != 4 {
+		t.Fatalf("应创建 4 个账号，实际 %d", res.Created)
+	}
+	// alice → bob 一条；carol 无上级；dave 无上级
+	if res.ManagersLinked != 1 {
+		t.Fatalf("应解析出 1 条直线上级，实际 %d", res.ManagersLinked)
+	}
+
+	var (
+		phone, title, source string
+		verified             bool
+		mgrName              string
+	)
+	if err := pool.QueryRow(ctx, `
+		SELECT COALESCE(u.phone,''), COALESCE(u.title,''), COALESCE(u.phone_source,''),
+		       u.phone_verified_at IS NOT NULL, COALESCE(m.username,'')
+		  FROM app_user u LEFT JOIN app_user m ON m.id = u.manager_id
+		 WHERE u.tenant_id=$1 AND u.username='alice'`, tenantID).
+		Scan(&phone, &title, &source, &verified, &mgrName); err != nil {
+		t.Fatal(err)
+	}
+	if phone != "+8613800138010" || !verified || source != "directory" {
+		t.Fatalf("手机号应规范化并标记为目录来源且已验证，实际 phone=%q verified=%v source=%q", phone, verified, source)
+	}
+	if title != "研发经理" {
+		t.Fatalf("职位应同步，实际 %q", title)
+	}
+	if mgrName != "bob" {
+		t.Fatalf("直线上级应为 bob，实际 %q", mgrName)
+	}
+
+	// 脏号码不落库（否则违反 CHECK，整次同步会被打回滚）
+	var carolPhone *string
+	if err := pool.QueryRow(ctx,
+		`SELECT phone FROM app_user WHERE tenant_id=$1 AND username='carol'`, tenantID).
+		Scan(&carolPhone); err != nil {
+		t.Fatal(err)
+	}
+	if carolPhone != nil {
+		t.Fatalf("非法号码不应入库，实际 %q", *carolPhone)
+	}
+
+	// 号码重复时后来者不抢：dave 与 alice 同号，dave 应留空
+	var davePhone *string
+	if err := pool.QueryRow(ctx,
+		`SELECT phone FROM app_user WHERE tenant_id=$1 AND username='dave'`, tenantID).
+		Scan(&davePhone); err != nil {
+		t.Fatal(err)
+	}
+	if davePhone != nil {
+		t.Fatalf("占用的号码不应被后者覆盖，实际 %q", *davePhone)
+	}
+}

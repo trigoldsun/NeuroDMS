@@ -8,12 +8,13 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
 	"docvault/internal/db"
+	"docvault/internal/edition"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -55,6 +56,50 @@ type SMSCodeResult struct {
 	TenantID string
 }
 
+// smsLoginAllowed 判断该租户此刻是否开放短信登录（档位 × 租户开关）。
+//
+// 为什么在服务层再判一次：/v1/me/capabilities 只是"给界面看的"，
+// 关掉开关后仍有人直接调 /v1/auth/sms/send —— 那会继续烧短信费，
+// 而且组织以为"我已经关了"。
+//
+// 读不到就返回 false（fail-closed）：与"扩展名白名单读不到就放行"不同，
+// 这里放行的代价是真金白银 + 一条可用的登录通道。
+func (s *Service) smsLoginAllowed(ctx context.Context, tenantID string) bool {
+	if s.sms == nil || tenantID == "" {
+		return false
+	}
+	var (
+		declared, status string
+		expires          *time.Time
+	)
+	if err := s.pool.QueryRow(ctx, `
+		SELECT edition, status, edition_expires_at FROM tenant
+		 WHERE id = $1 AND deleted_at IS NULL`, tenantID).Scan(&declared, &status, &expires); err != nil {
+		return false
+	}
+	if status != "active" && status != "trial" && status != "readonly" {
+		return false
+	}
+	if !edition.Resolve(declared, expires, s.now()).Spec.SmsLogin {
+		return false
+	}
+	var raw []byte
+	if err := s.pool.QueryRow(ctx, `
+		SELECT policy FROM tenant_config WHERE tenant_id = $1`, tenantID).Scan(&raw); err != nil {
+		return false
+	}
+	// 只用匿名结构体读这一个字段：避免让 auth 依赖 tenant 包（那会绕成一个环）。
+	var pol struct {
+		SmsLogin bool `json:"smsLogin"`
+	}
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, &pol); err != nil {
+			return false
+		}
+	}
+	return pol.SmsLogin
+}
+
 // SendLoginCode 发送登录验证码。
 //
 // 关键取舍：账号不存在时**也返回成功**（同样的文案与结构），只是不发短信。
@@ -74,6 +119,9 @@ func (s *Service) SendLoginCode(ctx context.Context, account, ip string) (SMSCod
 			return SMSCodeResult{SentTo: MaskPhone(phone), RetryAfter: int(s.rate.Interval.Seconds())}, nil
 		}
 		return SMSCodeResult{}, err
+	}
+	if !s.smsLoginAllowed(ctx, ref.TenantID) {
+		return SMSCodeResult{}, ErrSMSNotConfigured
 	}
 	if ref.Phone == "" || !ref.PhoneVerified {
 		return SMSCodeResult{}, ErrPhoneNotRegistered
@@ -111,6 +159,9 @@ func (s *Service) LoginWithSMS(ctx context.Context, account, code, ip, ua string
 	ref, err := s.ResolveAccount(ctx, account)
 	if err != nil {
 		return Tokens{}, err
+	}
+	if !s.smsLoginAllowed(ctx, ref.TenantID) {
+		return Tokens{}, ErrSMSNotConfigured
 	}
 	if ref.Phone == "" || !ref.PhoneVerified {
 		return Tokens{}, ErrPhoneNotRegistered
@@ -153,12 +204,18 @@ func (s *Service) LoginWithSMS(ctx context.Context, account, code, ip, ua string
 	if status != "active" || (expires != nil && expires.Before(s.now())) {
 		return Tokens{}, ErrAccountDisabled
 	}
-	if mfa {
-		// 短信是"持有因子"。允许它单独登录，等于把双因子降成单因子。
-		return Tokens{}, fmt.Errorf("%w: 该账号要求口令登录并完成二次验证", ErrMFARequired)
+	// mfa_required 账号允许"仅短信验证码"登录（docs/44 §3，产品已确认）。
+	//
+	// 早先这里返回 409，理由是"短信只是持有因子，单独用就把双因子降成单因子"。
+	// 产品口径改为允许：短信码本身就是"持有手机"的证明，且它比口令更难被撞库。
+	// 代价是 SIM 交换风险（补卡后收码）——这一点必须写进管理员手册，
+	// 由"是否需要这类账号"的决定方承担，而不是由代码偷偷放宽或收紧。
+	tk, err := s.createSession(ctx, ref.TenantID, ref.UserID, epoch, ip, ua)
+	if err != nil {
+		return Tokens{}, err
 	}
-
-	return s.createSession(ctx, ref.TenantID, ref.UserID, epoch, ip, ua)
+	tk.MFA = mfa
+	return tk, nil
 }
 
 // checkSendRate 检查发送频率（号码 + IP）。

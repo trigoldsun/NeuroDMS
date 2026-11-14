@@ -13,6 +13,28 @@ import (
 func (a *API) registerSMSAuth(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/auth/sms/send", a.handleSMSSend)
 	mux.HandleFunc("POST /v1/auth/sms/login", a.handleSMSLogin)
+	// 登录页在"输密码之前"就要知道该不该显示验证码入口。
+	// 这是个公开端点，因此只回布尔值，且租户不存在时也只回"仅口令"。
+	mux.HandleFunc("GET /v1/auth/methods", a.handleAuthMethods)
+}
+
+// handleAuthMethods 返回该组织当前支持的登录方式（公开端点）。
+//
+// 为什么需要它：登录页是未登录状态，拿不到 /v1/me/capabilities；
+// 没有它就只能"永远显示验证码入口"，点下去才报"未开通"。
+func (a *API) handleAuthMethods(w http.ResponseWriter, r *http.Request) {
+	out := map[string]any{"password": true, "sms": false}
+	slug := r.URL.Query().Get("tenant")
+	if slug == "" || a.Tenants == nil {
+		writeOK(w, r, out)
+		return
+	}
+	// 任何错误都按"未开通"返回：登录页不需要知道是"租户不存在"还是"配置读失败"，
+	// 而把两者区分开正好给了外部一个探测组织标识是否存在的接口。
+	if m, err := a.Tenants.LoginMethodsBySlug(r.Context(), slug); err == nil {
+		out["sms"] = m.SMS && a.SMSConfigured && a.Auth != nil
+	}
+	writeOK(w, r, out)
 }
 
 // handleSMSSend 发送登录验证码。
@@ -82,9 +104,15 @@ func (a *API) handleSMSLogin(w http.ResponseWriter, r *http.Request) {
 		writeAuthErr(w, r, err)
 		return
 	}
+	detail := map[string]any{"method": "sms", "phone": auth.MaskPhone(normalizeLoosePhone(req.Account))}
+	if tk.MFA {
+		// 这条标记是审计里唯一能区分"普通短信登录"与"mfa_required 账号用短信过闸"的地方。
+		// 没有它，事后无法解释"这个要求双因子的账号为什么只用一步就进来了"。
+		detail["mfaSatisfiedBy"] = "sms"
+	}
 	if err := a.emit(r, tk.TenantID, AuditEntry{
 		ActorID: tk.UserID, Action: "auth.login", Result: "ok",
-		Detail: map[string]any{"method": "sms", "phone": auth.MaskPhone(normalizeLoosePhone(req.Account))},
+		Detail: detail,
 	}); err != nil {
 		writeErr(w, r, http.StatusInternalServerError, "AUDIT_FAILED", "审计写入失败，登录已拒绝")
 		return

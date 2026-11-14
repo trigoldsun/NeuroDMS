@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"docvault/internal/db"
+	"docvault/internal/phone"
 	"docvault/internal/sms"
 
 	"github.com/jackc/pgx/v5"
@@ -34,7 +35,10 @@ var (
 	// ErrPhoneRequired 表示这个入口只接受手机号。
 	ErrPhoneRequired = errors.New("请使用已登记的手机号登录")
 	// ErrPhoneInvalid 表示号码格式不合法。
-	ErrPhoneInvalid = errors.New("手机号格式不正确")
+	//
+	// 复用 phone 包的哨兵值：同步（directory）与登录（auth）判的是同一件事，
+	// 两个错误值会让 errors.Is 在上层漏判，表现为"格式错却提示系统错误"。
+	ErrPhoneInvalid = phone.ErrInvalid
 	// ErrPhoneTaken 表示号码已被同租户的其他账号占用。
 	ErrPhoneTaken = errors.New("该手机号已被其他账号使用")
 	// ErrSMSNotConfigured 表示服务端没有配置短信通道。
@@ -52,44 +56,14 @@ type SMSProvider interface {
 // SetSMS 注入短信通道。未注入时短信登录一律拒绝（fail-closed）。
 func (s *Service) SetSMS(p SMSProvider) { s.sms = p }
 
-// NormalizePhone 把各种写法收敛成 +86 的 E.164。
-//
-// 接受：13800138000 / +8613800138000 / 008613800138000 / 86 138 0013 8000。
-// 只支持中国大陆手机号：短信认证服务目前也只支持国内号码，
-// 这里放开国际号只会让用户走进一个必然失败的流程。
+// NormalizePhone 把各种写法收敛成 +86 的 E.164（实现见 internal/phone）。
 func NormalizePhone(raw string) (string, error) {
-	s := strings.TrimSpace(raw)
-	if s == "" {
-		return "", ErrPhoneInvalid
-	}
-	repl := strings.NewReplacer(" ", "", "-", "", "(", "", ")", "", "　", "")
-	s = repl.Replace(s)
-	s = strings.TrimPrefix(s, "+86")
-	s = strings.TrimPrefix(s, "0086")
-	if len(s) == 13 && strings.HasPrefix(s, "86") {
-		s = s[2:]
-	}
-	if len(s) != 11 || s[0] != '1' || s[1] < '3' || s[1] > '9' {
-		return "", ErrPhoneInvalid
-	}
-	for _, r := range s {
-		if r < '0' || r > '9' {
-			return "", ErrPhoneInvalid
-		}
-	}
-	return "+86" + s, nil
+	return phone.Normalize(raw)
 }
 
 // MaskPhone 返回 138****8000。审计、列表、日志一律用它。
 func MaskPhone(e164 string) string {
-	s := strings.TrimPrefix(strings.TrimSpace(e164), "+86")
-	if len(s) != 11 {
-		if s == "" {
-			return ""
-		}
-		return "***"
-	}
-	return s[:3] + "****" + s[7:]
+	return phone.Mask(e164)
 }
 
 var tenantSlugRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,62}$`)

@@ -24,6 +24,13 @@ type Member = {
   status: 'active' | 'suspended' | 'invited'
   deptId: string
   deptName: string
+  // 手机号只回掩码；phoneVerified 决定能不能用于小程序登录
+  phoneMasked: string
+  phoneVerified: boolean
+  phoneSource: string
+  // 职位与直线上级来自认证源同步（只读）
+  title: string
+  managerName: string
   classification: number
   ceiling: number
   mfaRequired: boolean
@@ -196,6 +203,18 @@ export default function Members({ roles, meId }: { roles: RoleDef[]; meId: strin
                   {m.principalType === 'external' && <span className="badge warn" style={{ marginLeft: 6 }}>外部</span>}
                   {m.mfaRequired && <span className="badge plain" style={{ marginLeft: 4 }}>二次验证</span>}
                   {m.email && <div className="hint">{m.email}</div>}
+                  <div className="hint">
+                    {m.phoneMasked ? (
+                      <>
+                        {m.phoneMasked}
+                        {m.phoneVerified
+                          ? <span className="badge ok" style={{ marginLeft: 6, height: 16 }}>已验证</span>
+                          : <span className="badge warn" style={{ marginLeft: 6, height: 16 }}>待验证</span>}
+                      </>
+                    ) : <span>未登记手机号</span>}
+                    {m.title && <span style={{ marginLeft: 8 }}>{m.title}</span>}
+                    {m.managerName && <span style={{ marginLeft: 8 }}>上级 {m.managerName}</span>}
+                  </div>
                 </td>
                 <td>
                   <span className={`badge ${m.status === 'active' ? 'ok' : 'error'}`}>
@@ -292,7 +311,9 @@ export default function Members({ roles, meId }: { roles: RoleDef[]; meId: strin
           member={editing}
           depts={depts}
           onClose={() => setEditing(null)}
-          onDone={async () => { setEditing(null); await load(); flash('已保存') }}
+          // 保存后不关窗：手机号刚录入时状态是"待验证"，
+          // 关掉再打开才能发码，会让"录入→验证"这一步显得多余且容易漏。
+          onSaved={() => { void load() }}
         />
       )}
 
@@ -356,7 +377,7 @@ export default function Members({ roles, meId }: { roles: RoleDef[]; meId: strin
 function CreateMember({ depts, roles, onClose, onDone }:
   { depts: Dept[]; roles: RoleDef[]; onClose: () => void; onDone: () => void }) {
   const [f, setF] = useState({
-    username: '', displayName: '', email: '', password: '',
+    username: '', displayName: '', email: '', phone: '', password: '',
     role: '', deptId: '', ceiling: 4, classification: 0,
     principalType: 'internal', mfaRequired: false, expiresAt: '',
   })
@@ -411,6 +432,21 @@ function CreateMember({ depts, roles, onClose, onDone }:
                 <option value="">不指定</option>
                 {depts.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
+            </div>
+          </div>
+          <div className="field">
+            <label>手机号（可选，用于小程序登录）</label>
+            <input
+              value={f.phone}
+              onChange={(e) => setF({ ...f, phone: e.target.value })}
+              placeholder="13800138000"
+              inputMode="numeric"
+            />
+            {/* 不强制当场验证：管理员手上未必有对方手机。
+                但必须说清"录入 ≠ 可用"，否则会以为建完就能登录小程序。 */}
+            <div className="hint">
+              保存后状态为「待验证」，不能用于登录；在该成员的编辑窗口点「发送验证码」，
+              向本人索取验证码后确认即可。域账户的号码由认证源自动同步，无需手填。
             </div>
           </div>
           <div className="field">
@@ -469,8 +505,8 @@ function CreateMember({ depts, roles, onClose, onDone }:
 
 // ---------------- 编辑 ----------------
 
-function EditMember({ member, depts, onClose, onDone }:
-  { member: Member; depts: Dept[]; onClose: () => void; onDone: () => void }) {
+function EditMember({ member, depts, onClose, onSaved }:
+  { member: Member; depts: Dept[]; onClose: () => void; onSaved: () => void }) {
   const [f, setF] = useState({
     displayName: member.displayName,
     email: member.email,
@@ -482,6 +518,70 @@ function EditMember({ member, depts, onClose, onDone }:
   })
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+
+  // 手机号：输入框留空 = 不修改；填了就是换号（保存后自动重置验证状态）。
+  // 验证动作只作用于"已保存的那个号"，所以 send/confirm 不接收号码。
+  const [phone, setPhone] = useState('')
+  const [phoneState, setPhoneState] = useState({ masked: member.phoneMasked, verified: member.phoneVerified })
+  const [codeSent, setCodeSent] = useState(false)
+  const [code, setCode] = useState('')
+  const [phoneMsg, setPhoneMsg] = useState('')
+  const [phoneBusy, setPhoneBusy] = useState(false)
+
+  async function refreshPhone() {
+    const fresh = await api<Member>(`/v1/admin/members/${member.id}`)
+    setPhoneState({ masked: fresh.phoneMasked, verified: fresh.phoneVerified })
+    return fresh
+  }
+
+  async function sendCode() {
+    setPhoneMsg('')
+    setPhoneBusy(true)
+    try {
+      const r = await postJSON<{ sentTo: string; next: string }>(
+        `/v1/admin/members/${member.id}/phone/request`, {})
+      setCodeSent(true)
+      setPhoneMsg(`验证码已发送至 ${r.sentTo}，请向本人索取后填入`)
+    } catch (e) {
+      setPhoneMsg(e instanceof HttpError ? e.message : '发送失败')
+    } finally {
+      setPhoneBusy(false)
+    }
+  }
+
+  async function confirmCode() {
+    setPhoneMsg('')
+    setPhoneBusy(true)
+    try {
+      await postJSON(`/v1/admin/members/${member.id}/phone/confirm`, { code })
+      await refreshPhone()
+      setCodeSent(false)
+      setCode('')
+      setPhoneMsg('已验证，该号码现在可用于登录（含小程序）')
+      onSaved()
+    } catch (e) {
+      setPhoneMsg(e instanceof HttpError ? e.message : '验证失败')
+    } finally {
+      setPhoneBusy(false)
+    }
+  }
+
+  async function clearPhone() {
+    if (!window.confirm('清除该成员的手机号？清除后无法用手机号/短信登录，需要重新登记并验证。')) return
+    setPhoneMsg('')
+    setPhoneBusy(true)
+    try {
+      await del(`/v1/admin/members/${member.id}/phone`)
+      await refreshPhone()
+      setCodeSent(false)
+      setPhoneMsg('已清除')
+      onSaved()
+    } catch (e) {
+      setPhoneMsg(e instanceof HttpError ? e.message : '清除失败')
+    } finally {
+      setPhoneBusy(false)
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -499,9 +599,20 @@ function EditMember({ member, depts, onClose, onDone }:
           mfaRequired: f.mfaRequired,
           expiresAt: f.expiresAt ? new Date(f.expiresAt).toISOString() : null,
           clearExpiry: !f.expiresAt,
+          // 只在填了号码时提交：留空表示"不动手机号"，
+          // 否则每次改部门都会把已验证的号码打回待验证。
+          ...(phone.trim() ? { phone: phone.trim() } : {}),
         }),
       })
-      onDone()
+      const fresh = await refreshPhone()
+      setPhone('')
+      // 改号后验证状态必然被重置，这里如实说清楚，避免管理员以为"已就绪"
+      setPhoneMsg(phone.trim()
+        ? (fresh.phoneMasked
+          ? `已保存 ${fresh.phoneMasked}，状态为待验证，请点「发送验证码」完成验证`
+          : '已保存')
+        : '已保存')
+      onSaved()
     } catch (e) {
       setErr(e instanceof HttpError ? e.message : '保存失败')
     } finally {
@@ -526,6 +637,54 @@ function EditMember({ member, depts, onClose, onDone }:
               <label>邮箱</label>
               <input type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
             </div>
+          </div>
+          <div className="field">
+            <label>手机号（留空表示不修改；填写即换号并重置验证）</label>
+            <input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder={phoneState.masked || '13800138000'}
+              inputMode="numeric"
+            />
+            <div className="phone-row">
+              <span className="hint">
+                当前：
+                {phoneState.masked
+                  ? <b style={{ color: 'var(--ink)' }}>{phoneState.masked}</b>
+                  : '未登记'}
+                {phoneState.masked && (
+                  phoneState.verified
+                    ? <span className="badge ok" style={{ marginLeft: 6, height: 17 }}>已验证</span>
+                    : <span className="badge warn" style={{ marginLeft: 6, height: 17 }}>待验证</span>
+                )}
+                {member.phoneSource === 'directory' && <span className="hint"> · 由认证源同步</span>}
+              </span>
+              {phoneState.masked && (
+                <>
+                  <button type="button" className="sm" disabled={phoneBusy} onClick={() => void sendCode()}>
+                    发送验证码
+                  </button>
+                  <button type="button" className="sm ghost" disabled={phoneBusy} onClick={() => void clearPhone()}>
+                    清除
+                  </button>
+                </>
+              )}
+            </div>
+            {codeSent && (
+              <div className="phone-row" style={{ marginTop: 8 }}>
+                <input
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  placeholder="6 位验证码"
+                  inputMode="numeric"
+                  style={{ maxWidth: 160 }}
+                />
+                <button type="button" className="sm primary" disabled={phoneBusy || code.length < 4} onClick={() => void confirmCode()}>
+                  确认验证
+                </button>
+              </div>
+            )}
+            {phoneMsg && <div className="hint" style={{ marginTop: 6 }}>{phoneMsg}</div>}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div className="field">

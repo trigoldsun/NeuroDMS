@@ -338,11 +338,15 @@ func fetchEntries[T any](
 
 func (d *LDAPDirectory) userAttrs() []string {
 	if d.cfg.ADMode {
+		// mobile / telephoneNumber / title / manager 是"自动登记员工资料"的来源，
+		// 少取一个，界面上就会多一个手填框，而手填的手机号是登录凭据。
 		return []string{"sAMAccountName", "mail", "displayName", "objectGUID", "uSNChanged",
-			"memberOf", "distinguishedName", "userAccountControl", "department"}
+			"memberOf", "distinguishedName", "userAccountControl", "department",
+			"mobile", "telephoneNumber", "title", "manager"}
 	}
 	return []string{"uid", "mail", "cn", "entryUUID", "modifyTimestamp",
-		"memberOf", "distinguishedName", "nsAccountLock", "ou"}
+		"memberOf", "distinguishedName", "nsAccountLock", "ou",
+		"mobile", "telephoneNumber", "title", "manager"}
 }
 
 func (d *LDAPDirectory) entryToUser(e *ldap.Entry) User {
@@ -352,6 +356,9 @@ func (d *LDAPDirectory) entryToUser(e *ldap.Entry) User {
 		DisplayName: e.GetAttributeValue("displayName"),
 		Groups:      e.GetAttributeValues("memberOf"),
 		Dept:        e.GetAttributeValue("department"),
+		Phone:       firstNonEmpty(e.GetAttributeValue("mobile"), e.GetAttributeValue("telephoneNumber")),
+		Title:       e.GetAttributeValue("title"),
+		ManagerDN:   e.GetAttributeValue("manager"),
 	}
 	if u.DisplayName == "" {
 		u.DisplayName = e.GetAttributeValue("cn")
@@ -396,6 +403,18 @@ func (d *LDAPDirectory) entryToUser(e *ldap.Entry) User {
 		u.ExternalID = strings.ToLower(e.DN)
 	}
 	return u
+}
+
+// firstNonEmpty 取第一个非空值。
+// AD 里手机号可能只填了 mobile，也可能只填了 telephoneNumber（座机转接），
+// 两个都没有时留空——空值不写库，不会覆盖用户自己绑定的号码。
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func (d *LDAPDirectory) entryToGroup(e *ldap.Entry) Group {

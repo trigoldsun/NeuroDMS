@@ -128,3 +128,22 @@ func TestEffectiveLimitsNeverExceedEdition(t *testing.T) {
 		t.Fatalf("商业版单文件上限 10240MB，实际 %d", got)
 	}
 }
+
+// TestPaidCapabilitiesAreOnForPaidEditions 锁住"增值能力在付费档位里必须打开"。
+//
+// 这条用例来自一次真实事故：矩阵里给 Basic 补了 SmsLogin: false，
+// 却在 Professional/Business 里漏了 true —— 代码能编、接口能跑，
+// 表现只是"设置页的开关灰着、点不了"，很难联想到是档位矩阵漏了一行。
+func TestPaidCapabilitiesAreOnForPaidEditions(t *testing.T) {
+	if matrix[Basic].SmsLogin || matrix[Basic].FolderUpload {
+		t.Fatal("基础版不应包含短信登录与文件夹上传")
+	}
+	for _, e := range []Edition{Professional, Business} {
+		if !matrix[e].SmsLogin {
+			t.Fatalf("%s 应包含短信登录能力", matrix[e].Name)
+		}
+		if !matrix[e].FolderUpload {
+			t.Fatalf("%s 应包含文件夹上传能力", matrix[e].Name)
+		}
+	}
+}

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"docvault/internal/db"
+	"docvault/internal/phone"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -121,6 +122,37 @@ func Sync(ctx context.Context, pool *pgxpool.Pool, tenantID string, dir Director
 				res.Conflicts++
 				if len(res.ConflictUsers) < 10 {
 					res.ConflictUsers = append(res.ConflictUsers, u.Username)
+				}
+			}
+		}
+
+		// 4.5) 直线上级
+		//
+		// 必须在用户 upsert 之后：manager 属性给的是上级的 DN，
+		// 要先能把 DN 映射到本地账号 ID，而本地账号正是这一轮刚建出来的。
+		// 解析不到就写 NULL（而不是跳过）：域里删掉上级后，
+		// 保留旧的 manager_id 会让组织关系指向一个不存在的人。
+		if !opt.DryRun {
+			for _, u := range users {
+				uid, ok := userIDByDN[strings.ToLower(u.DN)]
+				if !ok {
+					// 与本地同名账号冲突、被跳过的条目不在映射里
+					continue
+				}
+				var mgrID any
+				if dn := strings.ToLower(strings.TrimSpace(u.ManagerDN)); dn != "" {
+					if id, found := userIDByDN[dn]; found && id != uid {
+						mgrID = id
+					}
+				}
+				ct, merr := tx.Exec(ctx, `
+					UPDATE app_user SET manager_id = $2, updated_at = now()
+					 WHERE id = $1 AND manager_id IS DISTINCT FROM $2::uuid`, uid, mgrID)
+				if merr != nil {
+					return fmt.Errorf("写入 %s 的直线上级失败: %w", u.Username, merr)
+				}
+				if ct.RowsAffected() > 0 && mgrID != nil {
+					res.ManagersLinked++
 				}
 			}
 		}
@@ -479,14 +511,27 @@ func upsertUser(ctx context.Context, tx pgx.Tx, tenantID string, u User, deptID 
 		if _, serr := tx.Exec(ctx, "SAVEPOINT ins_user"); serr != nil {
 			return "", "", serr
 		}
+		// 手机号来自认证源时视为已验证：域控/Entra 里的 mobile 是组织维护的
+		// 权威资料，若还要求本人再验一次，"自动登记"就退回了手工。
+		// 之所以敢这样定，是因为同租户内号码唯一 + 来源写进 phone_source，
+		// 出问题能查到"这个号是从目录同步来的"。
+		phoneVal, perr := dirPhone(ctx, tx, tenantID, u.Phone, "")
+		if perr != nil {
+			return "", "", perr
+		}
 		ierr := tx.QueryRow(ctx, `
 			INSERT INTO app_user (id, tenant_id, principal_type, source, username, email,
-			                      display_name, dept_id, external_id, status, directory_disabled, synced_at)
+			                      display_name, dept_id, external_id, status, directory_disabled, synced_at,
+			                      phone, phone_verified_at, phone_source, title)
 			VALUES (gen_random_uuid(), $1, 'internal', 'ldap', $2, nullif($3,''),
-			        $4, $5, $6, $7, $8, now())
+			        $4, $5, $6, $7, $8, now(),
+			        nullif($9,''),
+			        CASE WHEN $9 = '' THEN NULL ELSE now() END,
+			        CASE WHEN $9 = '' THEN NULL ELSE 'directory' END,
+			        nullif($10,''))
 			RETURNING id::text`,
 			tenantID, u.Username, u.Email, displayName(u), deptID, u.ExternalID,
-			wantStatus, u.Disabled).Scan(&id)
+			wantStatus, u.Disabled, phoneVal, strings.TrimSpace(u.Title)).Scan(&id)
 		if ierr != nil {
 			// 同名账号冲突：租户里已经有同名账号（本地账号，或另一个外部标识的旧记录）。
 			//
@@ -525,18 +570,64 @@ func upsertUser(ctx context.Context, tx pgx.Tx, tenantID string, u User, deptID 
 		return outcome, existingID, nil
 	}
 
+	// 目录里没有手机号时（$9 为空）保持原值：用户可能已经自己绑过，
+	// 域控没填 mobile 不代表"此人没有手机号"。
+	phoneVal, perr := dirPhone(ctx, tx, tenantID, u.Phone, existingID)
+	if perr != nil {
+		return "", "", perr
+	}
+
 	_, err = tx.Exec(ctx, `
 		UPDATE app_user
 		   SET username = $2, email = nullif($3,''), display_name = $4, dept_id = $5,
 		       status = $6, directory_disabled = $7, synced_at = now(), updated_at = now(),
 		       session_epoch = CASE WHEN $6 <> 'active' AND $8 = 'active' THEN session_epoch + 1
-		                            ELSE session_epoch END
+		                            ELSE session_epoch END,
+		       -- 号码变了才重置验证时间；同一号码重复同步不该把已验证打回未验证
+		       phone_verified_at = CASE WHEN $9 = '' THEN phone_verified_at
+		                                WHEN phone = $9 THEN COALESCE(phone_verified_at, now())
+		                                ELSE now() END,
+		       phone_source = CASE WHEN $9 = '' THEN phone_source ELSE 'directory' END,
+		       phone = COALESCE(nullif($9,''), phone),
+		       title = COALESCE(nullif($10,''), title)
 		 WHERE id = $1`,
-		existingID, u.Username, u.Email, displayName(u), deptID, newStatus, newDisabled, status)
+		existingID, u.Username, u.Email, displayName(u), deptID, newStatus, newDisabled, status,
+		phoneVal, strings.TrimSpace(u.Title))
 	if err != nil {
 		return "", "", err
 	}
 	return outcome, existingID, nil
+}
+
+// dirPhone 把目录里的号码规范成 +86；不合法或已被同租户其他账号占用时返回空串。
+//
+// 返回空串的含义是"这次不动手机号"，不是"清空手机号"：
+//   - 域里填分机号、海外号很常见，这类值违反 ck_user_phone_e164，
+//     直接写库会让**整个同步事务** abort（一条脏数据毁掉全公司同步）；
+//   - 号码被别的账号占用时也不抢：那可能是本地管理员给这个人绑的。
+//
+// selfID 为空表示"新账号，还没有自己这一行"。
+func dirPhone(ctx context.Context, tx pgx.Tx, tenantID, raw, selfID string) (string, error) {
+	p, err := phone.Normalize(raw)
+	if err != nil {
+		return "", nil
+	}
+	var self any
+	if selfID != "" {
+		self = selfID
+	}
+	var taken bool
+	if err := tx.QueryRow(ctx, `
+		SELECT EXISTS (SELECT 1 FROM app_user
+		                WHERE tenant_id = $1 AND phone = $2 AND deleted_at IS NULL
+		                  AND ($3::text IS NULL OR id <> $3::uuid))`,
+		tenantID, p, self).Scan(&taken); err != nil {
+		return "", err
+	}
+	if taken {
+		return "", nil
+	}
+	return p, nil
 }
 
 func displayName(u User) string {
@@ -594,11 +685,12 @@ func finishRun(ctx context.Context, pool *pgxpool.Pool, tenantID, runID string, 
 			       users_seen=$3, users_created=$4, users_updated=$5,
 			       users_disabled=$6, users_restored=$7,
 			       groups_synced=$8, members_linked=$9, conflicts=$10,
-			       conflict_users=COALESCE($11::text[], '{}')
+			       conflict_users=COALESCE($11::text[], '{}'),
+			       managers_linked=$12
 			 WHERE id=$1`,
 			runID, res.Watermark, res.Seen, res.Created, res.Updated,
 			res.Disabled, res.Restored, res.GroupsSynced, res.MembersLinked,
-			res.Conflicts, conflictUsers)
+			res.Conflicts, conflictUsers, res.ManagersLinked)
 		return err
 	})
 }

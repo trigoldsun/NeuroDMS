@@ -83,6 +83,15 @@ export default function Login() {
   const [error, setError] = useState('')
   const [hint, setHint] = useState('')
 
+  // 手机验证码登录：只有该组织开通（档位 × 租户开关 × 通道就绪）时才出现入口。
+  // 这个判断要在"输密码之前"完成，所以走公开的 /v1/auth/methods。
+  const [smsReady, setSmsReady] = useState(false)
+  const [bySms, setBySms] = useState(false)
+  const [phone, setPhone] = useState('')
+  const [smsCode, setSmsCode] = useState('')
+  const [smsSent, setSmsSent] = useState('')
+  const [countdown, setCountdown] = useState(0)
+
   // 二次验证：口令通过后服务端返回 202 + challenge，此时**没有任何令牌**。
   // 界面必须把用户停在"输验证码"这一步，不能有任何"已登录"的中间态。
   const [showPass, setShowPass] = useState(false)
@@ -159,6 +168,38 @@ export default function Login() {
     }
   }
 
+  // 组织标识变化时重新探测"是否支持验证码登录"。
+  // 350ms 防抖：组织标识是一个字母一个字母敲进去的，每敲一次都请求没有意义。
+  useEffect(() => {
+    const t = tenantSlug.trim()
+    if (!t) {
+      setSmsReady(false)
+      setBySms(false)
+      return
+    }
+    let alive = true
+    const timer = window.setTimeout(() => {
+      api<{ sms: boolean }>(`/v1/auth/methods?tenant=${encodeURIComponent(t)}`)
+        .then((r) => {
+          if (!alive) return
+          setSmsReady(!!r.sms)
+          // 关掉开关后停留在验证码模式会让人一直等收不到的短信，退回口令
+          if (!r.sms) setBySms(false)
+        })
+        .catch(() => { if (alive) setSmsReady(false) })
+    }, 350)
+    return () => {
+      alive = false
+      window.clearTimeout(timer)
+    }
+  }, [tenantSlug])
+
+  useEffect(() => {
+    if (countdown <= 0) return
+    const t = window.setTimeout(() => setCountdown((n) => n - 1), 1000)
+    return () => window.clearTimeout(t)
+  }, [countdown])
+
   useEffect(() => {
     let alive = true
     ;(async () => {
@@ -203,6 +244,62 @@ export default function Login() {
       goAfterLogin(data.accessToken, data.refreshToken, tenantSlug)
     } catch (err) {
       showError(err, '登录失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function sendSMSCode() {
+    if (busy || countdown > 0) return
+    if (!/^1[3-9]\d{9}$/.test(phone.replace(/[\s-]/g, ''))) {
+      setError('请填写 11 位手机号')
+      setHint('')
+      return
+    }
+    setBusy(true)
+    setError('')
+    setHint('')
+    try {
+      const r = await api<{ sentTo: string; retryAfter: number }>('/v1/auth/sms/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account: phone }),
+      })
+      setSmsSent(r.sentTo || phone)
+      setCountdown(r.retryAfter || 60)
+    } catch (err) {
+      if (err instanceof HttpError && err.code === 'SMS_RATE_LIMITED') {
+        setCountdown(err.status === 429 ? 60 : 0)
+      }
+      showError(err, '验证码发送失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function submitSMS(e: React.FormEvent) {
+    e.preventDefault()
+    if (busy) return
+    setBusy(true)
+    setError('')
+    setHint('')
+    try {
+      const data = await api<LoginResp>('/v1/auth/sms/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account: phone, code: smsCode }),
+      })
+      goAfterLogin(data.accessToken, data.refreshToken, tenantSlug)
+    } catch (err) {
+      if (err instanceof HttpError && err.code === 'SMS_CODE_INVALID') {
+        setError('验证码不正确或已失效')
+        setHint('码 5 分钟内有效；连续失败请重新获取。')
+      } else if (err instanceof HttpError && err.code === 'SMS_NOT_CONFIGURED') {
+        setError('该组织未开通短信登录')
+        setHint('请改用账号口令登录，或联系管理员。')
+      } else {
+        showError(err, '登录失败')
+      }
     } finally {
       setBusy(false)
     }
@@ -304,9 +401,85 @@ export default function Login() {
           <div className="login-head">
             <span className="label">登录 / Sign in</span>
             <h2>进入文档中心</h2>
-            <p>用组织标识与账号登录。组织标识就是你们公司在这套系统里的短名，例如 demo。</p>
+            <p>
+              {bySms
+                ? '用已登记的手机号接收验证码登录。手机号由管理员登记或本人在「账户 → 手机号」绑定。'
+                : '用组织标识与账号登录。组织标识就是你们公司在这套系统里的短名，例如 demo。'}
+            </p>
           </div>
 
+          {smsReady && (
+            <div className="seg" role="group" aria-label="登录方式" style={{ width: '100%', marginBottom: 14 }}>
+              <button type="button" className={!bySms ? 'on' : ''} onClick={() => setBySms(false)} style={{ flex: 1 }}>
+                账号口令
+              </button>
+              <button type="button" className={bySms ? 'on' : ''} onClick={() => setBySms(true)} style={{ flex: 1 }}>
+                手机验证码
+              </button>
+            </div>
+          )}
+
+          {bySms ? (
+            <form onSubmit={submitSMS}>
+              <div className="field">
+                <label htmlFor="phone">手机号</label>
+                <input
+                  id="phone"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="11 位手机号"
+                  inputMode="numeric"
+                  autoComplete="tel"
+                  required
+                />
+              </div>
+
+              <div className="field">
+                <label htmlFor="sms-code">验证码</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    id="sms-code"
+                    value={smsCode}
+                    onChange={(e) => setSmsCode(e.target.value.replace(/\D/g, ''))}
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    required
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    type="button"
+                    disabled={busy || countdown > 0}
+                    onClick={() => void sendSMSCode()}
+                    style={{ flex: 'none', minWidth: 108 }}
+                  >
+                    {countdown > 0 ? `${countdown}s` : '获取验证码'}
+                  </button>
+                </div>
+                {smsSent && (
+                  <div className="hint">
+                    已发送至 <b style={{ color: 'var(--ink)' }}>{smsSent}</b>，5 分钟内有效。
+                  </div>
+                )}
+              </div>
+
+              {error && (
+                <div className="err" role="alert">
+                  <span className="ico"><Icon name="alert" size={15} /></span>
+                  <span>{error}</span>
+                </div>
+              )}
+              {hint && <div className="hint">{hint}</div>}
+
+              <button className="primary lg" type="submit" disabled={busy || smsCode.length < 4}>
+                {busy ? '登录中…' : '登录'}
+              </button>
+
+              <p className="login-note">
+                只有已登记并验证手机号的账号能这样登录；收不到码时请改用账号口令，或联系管理员核对号码。
+              </p>
+            </form>
+          ) : (
           <form onSubmit={submit}>
             <div className="field">
               <label htmlFor="tenant" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -412,6 +585,7 @@ export default function Login() {
               外部协作者账号强制二次验证；如需帮助请联系管理员。
             </p>
           </form>
+          )}
         </div>
       </div>
     </div>

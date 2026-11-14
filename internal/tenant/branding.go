@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"docvault/internal/db"
+	"docvault/internal/edition"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -448,6 +449,58 @@ func (s *Service) GetPolicy(ctx context.Context, tenantID string) (Policy, error
 		return e
 	})
 	return p, err
+}
+
+// LoginMethods 是登录页需要的"这家租户支持哪些登录方式"。
+//
+// 只暴露布尔值：不返回租户名、不返回开关细节，
+// 避免它变成一个"探测某组织配了什么"的接口。
+type LoginMethods struct {
+	Password bool `json:"password"`
+	SMS      bool `json:"sms"`
+}
+
+// LoginMethodsBySlug 判断该租户当前是否对外开放短信验证码登录。
+//
+// 与 /v1/me/capabilities 用的是同一套判定（档位 × 租户开关），
+// 区别只在"没有登录态"——登录页要在输密码之前就知道该不该显示这个入口。
+// 通道是否配置由调用方（httpapi）叠加，这里只管租户侧的两个开关。
+func (s *Service) LoginMethodsBySlug(ctx context.Context, slug string) (LoginMethods, error) {
+	out := LoginMethods{Password: true}
+	slug = strings.ToLower(strings.TrimSpace(slug))
+	if slug == "" {
+		return out, nil
+	}
+	var (
+		id, declared, status string
+		expires              *time.Time
+	)
+	err := s.pool.QueryRow(ctx, `
+		SELECT id::text, edition, status, edition_expires_at
+		  FROM tenant
+		 WHERE slug = $1 AND deleted_at IS NULL`, slug).Scan(&id, &declared, &status, &expires)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// 租户不存在时返回"只有口令登录"，不报错：
+		// 报错等于告诉外面"这个组织标识不存在"，登录页不需要这个信息。
+		return out, nil
+	}
+	if err != nil {
+		return out, err
+	}
+	if !Usable(status) {
+		return out, nil
+	}
+	if !edition.Resolve(declared, expires, time.Now()).Spec.SmsLogin {
+		return out, nil
+	}
+	pol, err := s.GetPolicy(ctx, id)
+	if err != nil {
+		// 策略读不到一律按"未开通"（fail-closed）：不能因为读失败就放出一个
+		// 实际会 503 的登录入口。
+		return out, nil
+	}
+	out.SMS = pol.SmsLogin
+	return out, nil
 }
 
 // CreateState 报告租户当前的可用形态，供中间件与业务入口判断。

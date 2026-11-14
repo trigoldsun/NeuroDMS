@@ -1547,3 +1547,7 @@ a.nav-item { text-decoration: none; }
 }
 .skip-group .skip-row .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
 .skip-group .skip-row .why { flex: none; color: var(--danger); font-size: 11.5px; }
+
+/* 成员编辑里的手机号行：状态与操作按钮同排，避免"按钮孤零零一行" */
+.phone-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.phone-row .hint { margin: 0; }

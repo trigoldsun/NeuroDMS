@@ -21,6 +21,7 @@ import (
 
 	"docvault/internal/auth"
 	"docvault/internal/db"
+	"docvault/internal/phone"
 	"docvault/internal/rbac"
 
 	"github.com/jackc/pgx/v5"
@@ -34,11 +35,14 @@ var (
 	ErrForbidden    = errors.New("无权执行该操作")
 	ErrInvalidInput = errors.New("参数不合法")
 	ErrDuplicate    = errors.New("用户名或邮箱已被占用")
-	ErrLastAdmin    = rbac.ErrLastAdmin
-	ErrSeparation   = rbac.ErrRoleConflict
-	ErrUnknownRole  = rbac.ErrUnknownRole
-	ErrSelfTarget   = errors.New("不能对自己执行该操作")
-	ErrEscalation   = errors.New("不能授予高于自己的密级或封顶")
+	// ErrPhoneTaken 单独一类：手机号冲突时提示要精确到"号码"，
+	// 混进 ErrDuplicate 会让管理员去改用户名，改了也没用。
+	ErrPhoneTaken  = errors.New("该手机号已被其他账号使用")
+	ErrLastAdmin   = rbac.ErrLastAdmin
+	ErrSeparation  = rbac.ErrRoleConflict
+	ErrUnknownRole = rbac.ErrUnknownRole
+	ErrSelfTarget  = errors.New("不能对自己执行该操作")
+	ErrEscalation  = errors.New("不能授予高于自己的密级或封顶")
 )
 
 // 账号主体类型。external 是外部协作账号（独立账号池，同一权限引擎）。
@@ -67,8 +71,14 @@ type Member struct {
 	Username string `json:"username"`
 	Email    string `json:"email"`
 	// PhoneMasked 只回掩码：成员列表是"看花名册"，不是"导出通讯录"。
-	PhoneMasked    string     `json:"phoneMasked"`
-	PhoneVerified  bool       `json:"phoneVerified"`
+	PhoneMasked   string `json:"phoneMasked"`
+	PhoneVerified bool   `json:"phoneVerified"`
+	// PhoneSource 说明号码从哪来（manual / self / directory），排障用：
+	// "这个号是用户自己填的，还是域控里本来就有的"决定该找谁核对。
+	PhoneSource string `json:"phoneSource"`
+	// Title 与 ManagerName 来自认证源同步，只读。
+	Title          string     `json:"title"`
+	ManagerName    string     `json:"managerName"`
 	DisplayName    string     `json:"displayName"`
 	PrincipalType  string     `json:"principalType"`
 	Source         string     `json:"source"`
@@ -154,9 +164,11 @@ func (s *Service) List(ctx context.Context, tenantID string, f ListFilter) ([]Me
 			       COALESCE(u.dept_id::text,''), COALESCE(d.name,''),
 			       COALESCE((SELECT array_agg(r.code ORDER BY r.code)
 			                   FROM user_role ur JOIN role r ON r.id = ur.role_id
-			                  WHERE ur.user_id = u.id AND r.is_system AND r.deleted_at IS NULL), '{}')
+			                  WHERE ur.user_id = u.id AND r.is_system AND r.deleted_at IS NULL), '{}'),
+			       COALESCE(u.title,''), COALESCE(m.display_name,''), COALESCE(u.phone_source,'')
 			  FROM app_user u
 			  LEFT JOIN dept d ON d.id = u.dept_id AND d.deleted_at IS NULL
+			  LEFT JOIN app_user m ON m.id = u.manager_id AND m.deleted_at IS NULL
 			 WHERE `+where+`
 			 ORDER BY u.status = 'active' DESC, lower(u.username)
 			 LIMIT $5 OFFSET $6`,
@@ -193,9 +205,12 @@ func (s *Service) Get(ctx context.Context, tenantID, userID string) (Member, err
 
 // CreateInput 是创建成员的输入。
 type CreateInput struct {
-	Username       string     `json:"username"`
-	DisplayName    string     `json:"displayName"`
-	Email          string     `json:"email"`
+	Username    string `json:"username"`
+	DisplayName string `json:"displayName"`
+	Email       string `json:"email"`
+	// Phone 可选：录入即落库，但**不置为已验证**。
+	// 未验证的号码不能用于任何登录，管理员之后在成员页手动发码验证即可。
+	Phone          string     `json:"phone"`
 	Password       string     `json:"password"`
 	Role           string     `json:"role"`
 	DeptID         string     `json:"deptId"`
@@ -232,6 +247,16 @@ func (s *Service) Create(ctx context.Context, tenantID, actorID string, in Creat
 	}
 	if in.DisplayName == "" {
 		in.DisplayName = in.Username
+	}
+	// 手机号可选；填了就必须是大陆号。这里只规范形态，不要求当场验证——
+	// 管理员手上未必有对方的手机，强制当场验证会让"先建号、入职后再补"卡住。
+	var phoneVal string
+	if strings.TrimSpace(in.Phone) != "" {
+		pv, perr := phone.Normalize(in.Phone)
+		if perr != nil {
+			return Member{}, fmt.Errorf("%w: 手机号格式不正确（仅支持中国大陆 11 位号码）", ErrInvalidInput)
+		}
+		phoneVal = pv
 	}
 	if len([]rune(in.DisplayName)) > maxDisplayLen {
 		return Member{}, fmt.Errorf("%w: 显示名最多 %d 字", ErrInvalidInput, maxDisplayLen)
@@ -299,13 +324,17 @@ func (s *Service) Create(ctx context.Context, tenantID, actorID string, in Creat
 		if e := tx.QueryRow(ctx, `
 			INSERT INTO app_user (id, tenant_id, principal_type, source, username, email,
 			                      display_name, password_hash, dept_id, classification, ceiling,
-			                      mfa_required, status, expires_at)
+			                      mfa_required, status, expires_at, phone, phone_source)
 			VALUES (gen_random_uuid(), $1, $2, 'local', $3, nullif($4,''), $5, $6,
-			        nullif($7,'')::uuid, $8, $9, $10, 'active', $11)
+			        nullif($7,'')::uuid, $8, $9, $10, 'active', $11,
+			        nullif($12,''), CASE WHEN $12 = '' THEN NULL ELSE 'manual' END)
 			RETURNING id::text`,
 			tenantID, in.PrincipalType, in.Username, in.Email, in.DisplayName, hash,
 			in.DeptID, class, ceiling, in.MFARequired || in.PrincipalType == TypeExternal,
-			in.ExpiresAt).Scan(&id); e != nil {
+			in.ExpiresAt, phoneVal).Scan(&id); e != nil {
+			if isPhoneDup(e) {
+				return ErrPhoneTaken
+			}
 			if isDup(e) {
 				return ErrDuplicate
 			}
@@ -326,8 +355,10 @@ func (s *Service) Create(ctx context.Context, tenantID, actorID string, in Creat
 
 // UpdateInput 是可改字段。用指针区分"没传"与"传了空值"。
 type UpdateInput struct {
-	DisplayName *string    `json:"displayName"`
-	Email       *string    `json:"email"`
+	DisplayName *string `json:"displayName"`
+	Email       *string `json:"email"`
+	// Phone 传空串表示清除；传新号会**重置验证状态**（见 Update 里的注释）
+	Phone       *string    `json:"phone"`
 	DeptID      *string    `json:"deptId"`
 	MFARequired *bool      `json:"mfaRequired"`
 	ExpiresAt   *time.Time `json:"expiresAt"`
@@ -385,6 +416,35 @@ func (s *Service) Update(ctx context.Context, tenantID, actorID, userID string, 
 				`UPDATE app_user SET email = nullif($2,''), updated_at = now() WHERE id = $1`, userID, mail); e != nil {
 				if isDup(e) {
 					return ErrDuplicate
+				}
+				return e
+			}
+		}
+		if in.Phone != nil {
+			raw := strings.TrimSpace(*in.Phone)
+			var pv string
+			if raw != "" {
+				p, perr := phone.Normalize(raw)
+				if perr != nil {
+					return fmt.Errorf("%w: 手机号格式不正确（仅支持中国大陆 11 位号码）", ErrInvalidInput)
+				}
+				pv = p
+			}
+			// 改号必须重置验证状态。
+			//
+			// 这一条不能省：把已验证的旧号换成新号、却保留 phone_verified_at，
+			// 就等于"管理员填谁的号，谁就能登录"——验证这一步彻底失效。
+			if _, e := tx.Exec(ctx, `
+				UPDATE app_user
+				   SET phone = nullif($2,''),
+				       phone_verified_at = CASE WHEN $2 = '' THEN NULL
+				                                WHEN phone = $2 THEN phone_verified_at
+				                                ELSE NULL END,
+				       phone_source = CASE WHEN $2 = '' THEN NULL ELSE 'manual' END,
+				       updated_at = now()
+				 WHERE id = $1`, userID, pv); e != nil {
+				if isPhoneDup(e) {
+					return ErrPhoneTaken
 				}
 				return e
 			}
@@ -737,9 +797,11 @@ func getMember(ctx context.Context, tx pgx.Tx, userID string) (Member, error) {
 		       COALESCE(u.dept_id::text,''), COALESCE(d.name,''),
 		       COALESCE((SELECT array_agg(r.code ORDER BY r.code)
 		                   FROM user_role ur JOIN role r ON r.id = ur.role_id
-		                  WHERE ur.user_id = u.id AND r.is_system AND r.deleted_at IS NULL), '{}')
+		                  WHERE ur.user_id = u.id AND r.is_system AND r.deleted_at IS NULL), '{}'),
+		       COALESCE(u.title,''), COALESCE(m.display_name,''), COALESCE(u.phone_source,'')
 		  FROM app_user u
 		  LEFT JOIN dept d ON d.id = u.dept_id AND d.deleted_at IS NULL
+		  LEFT JOIN app_user m ON m.id = u.manager_id AND m.deleted_at IS NULL
 		 WHERE u.id = $1 AND u.deleted_at IS NULL AND u.status <> 'deleted'`, userID)
 	m, err := scanMember(row)
 	if err != nil {
@@ -760,7 +822,8 @@ func scanMember(s scanner) (Member, error) {
 	if err := s.Scan(&m.ID, &m.Username, &m.Email, &phone, &m.PhoneVerified, &m.DisplayName,
 		&m.PrincipalType, &m.Source, &m.Status, &m.Classification, &m.Ceiling,
 		&m.MFARequired, &m.ExpiresAt, &m.LastLoginAt, &m.CreatedAt,
-		&m.DeptID, &m.DeptName, &m.Roles); err != nil {
+		&m.DeptID, &m.DeptName, &m.Roles,
+		&m.Title, &m.ManagerName, &m.PhoneSource); err != nil {
 		return Member{}, err
 	}
 	m.PhoneMasked = maskPhone(phone)
@@ -789,6 +852,13 @@ func likePattern(q string) string {
 	// 转义 LIKE 通配符：否则用户搜 "%" 会匹配全部，看起来像"搜索坏了"
 	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 	return "%" + r.Replace(q) + "%"
+}
+
+// isPhoneDup 判断唯一冲突是否来自手机号。
+// 只看 23505 不够：用户名冲突也会返回同一个码，提示会指向错误的字段。
+func isPhoneDup(err error) bool {
+	var pe *pgconn.PgError
+	return errors.As(err, &pe) && pe.Code == "23505" && pe.ConstraintName == "uq_user_tenant_phone"
 }
 
 func isDup(err error) bool {
