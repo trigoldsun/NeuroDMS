@@ -49,6 +49,11 @@ func main() {
 	case strings.Contains(err.Error(), "InvalidAccessKeyId"):
 		fmt.Println("✗ AccessKeyId 不存在：请确认这个 Key 属于已购买短信包的账号，且未被删除")
 		fmt.Println(" ", err)
+	case strings.Contains(err.Error(), "isv.ValidateFail"):
+		// 核验接口在"该号码没有待核验的验证码"时会返回这个业务错误。
+		// 它出现在鉴权之后，所以恰好证明：Key 有效、签名正确、Action 可用。
+		fmt.Println("✓ 凭据可用（核验返回 isv.ValidateFail：该号码没有待核验的验证码，属预期）")
+		fmt.Println("  下一步：用一个真实号码走一次发送（网页端「账户 → 手机号」）")
 	case strings.Contains(err.Error(), "SignatureDoesNotMatch"):
 		fmt.Println("✗ AccessKeySecret 不正确")
 		fmt.Println(" ", err)
