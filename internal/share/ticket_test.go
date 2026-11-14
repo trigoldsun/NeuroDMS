@@ -85,10 +85,10 @@ func TestApprovalGate(t *testing.T) {
 
 	// 审批必须由**他人**执行：自批会被拒（见 ErrSelfApproval）。
 	approver := seedSecondUser(t, pool, tenantID)
-	if err := Approve(ctx, pool, tenantID, c.ID, userID, false); err != ErrSelfApproval {
+	if _, err := Approve(ctx, pool, tenantID, c.ID, userID, false); err != ErrSelfApproval {
 		t.Fatalf("自批应返回 ErrSelfApproval，实际 %v", err)
 	}
-	if err := Approve(ctx, pool, tenantID, c.ID, approver, false); err != nil {
+	if _, err := Approve(ctx, pool, tenantID, c.ID, approver, false); err != nil {
 		t.Fatalf("拒绝审批失败: %v", err)
 	}
 	if _, err := Redeem(ctx, pool, c.Token, "", "203.0.113.9", "ua"); err != ErrApprovalRejected {
@@ -97,7 +97,7 @@ func TestApprovalGate(t *testing.T) {
 
 	// 另一条链接走通过路径
 	c2 := newShare(t, pool, tenantID, userID, Options{RequireApproval: true})
-	if err := Approve(ctx, pool, tenantID, c2.ID, approver, true); err != nil {
+	if _, err := Approve(ctx, pool, tenantID, c2.ID, approver, true); err != nil {
 		t.Fatalf("通过审批失败: %v", err)
 	}
 	if _, err := Redeem(ctx, pool, c2.Token, "", "203.0.113.9", "ua"); err != nil {

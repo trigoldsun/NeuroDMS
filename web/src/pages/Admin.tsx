@@ -7,15 +7,18 @@ import { api, postJSON, fetchMe, applyTheme, cycleTheme, HttpError, type Me } fr
 import { Shell } from '../components/Shell'
 import { AdminSpaces } from './AdminSpaces'
 import { Icon, InfoDot } from '../components/ui'
+import { actionLabel } from '../activity'
 
 type Summary = { users: number; spaces: number; nodes: number; files: number; usedBytes: number; generatedAt: string }
 type RoleDef = { code: string; name: string; description: string }
 type AuditEvent = {
   seq: number
   actorId: string
+  actorName?: string
   actorType: string
   action: string
   objectId: string
+  objectName?: string
   result: string
   ip: string
   createdAt: string
@@ -458,7 +461,7 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
             <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                 <input
-                  placeholder="动作，如 acl.grant"
+                  placeholder="按动作筛选（可留空）"
                   value={auditFilter.action}
                   onChange={(e) => setAuditFilter((f) => ({ ...f, action: e.target.value }))}
                   style={{ width: 200 }}
@@ -478,19 +481,30 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
               </div>
               <table>
                 <thead>
-                  <tr><th style={{ width: 70 }}>序号</th><th style={{ width: 190 }}>时间</th><th>动作</th><th style={{ width: 80 }}>结果</th><th style={{ width: 150 }}>来源 IP</th><th>主体</th></tr>
+                  <tr><th style={{ width: 70 }}>序号</th><th style={{ width: 180 }}>时间</th><th style={{ width: 190 }}>动作</th><th>对象</th><th style={{ width: 80 }}>结果</th><th style={{ width: 140 }}>来源 IP</th><th style={{ width: 150 }}>操作人</th></tr>
                 </thead>
                 <tbody>
                   {events.length === 0 ? (
-                    <tr><td colSpan={6}><div className="empty">没有符合条件的审计事件</div></td></tr>
+                    <tr><td colSpan={7}><div className="empty">没有符合条件的审计事件</div></td></tr>
                   ) : events.map((e) => (
                     <tr key={e.seq}>
                       <td className="tnum">{e.seq}</td>
                       <td className="tnum">{new Date(e.createdAt).toLocaleString('zh-CN')}</td>
-                      <td className="name"><span className="code">{e.action}</span></td>
+                      <td>
+                        <div>{actionLabel(e.action)}</div>
+                        <div className="hint" style={{ fontSize: 11 }}>{e.action}</div>
+                      </td>
+                      <td style={{ fontSize: 12.5 }}>
+                        {e.objectName
+                          || (e.objectId ? <span className="dim">对象已删除</span> : <span className="dim">—</span>)}
+                      </td>
                       <td>{resultBadge(e.result)}</td>
-                      <td className="tnum">{e.ip || '—'}</td>
-                      <td className="hint">{e.actorType === 'system' ? '系统' : e.actorType === 'anonymous' ? '匿名' : (e.actorId || '—')}</td>
+                      <td className="tnum hint">{e.ip || '—'}</td>
+                      <td>
+                        {e.actorType === 'system' ? '系统'
+                          : e.actorType === 'anonymous' ? '匿名访客'
+                            : (e.actorName || <span className="dim">账号已删除</span>)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

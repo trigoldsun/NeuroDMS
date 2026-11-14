@@ -286,6 +286,7 @@ func TestAC35LabelPolicyOnlyTightens(t *testing.T) {
 // AC-43：达到阈值的对象创建外发链接必须进审批，且审批前不可用。
 func TestAC43ShareOfClassifiedObjectRequiresApproval(t *testing.T) {
 	srv, pool, slug := setup(t)
+	tenantID := tenantOf(t, pool, slug)
 	owner := login(t, srv.URL, slug)
 	bobID := userIDByName(t, slug, "bob")
 	setUserClass(t, pool, bobID, 4)
@@ -295,9 +296,20 @@ func TestAC43ShareOfClassifiedObjectRequiresApproval(t *testing.T) {
 	_, up := uploadClass(t, srv.URL+"/v1/spaces/"+spaceID+"/files", owner, "contract.txt", "合同正文", 3)
 	nodeID := dataMap(t, up)["nodeId"].(string)
 
+	// 审批人必须是"对该对象有 manage_acl、密级足够、且不是发起人"的人。
+	// 发起人自己是 bob，所以另造一个人来批——自批会被拒。
+	seedUser(t, srv.URL, slug, "approver")
+	approverID := userIDByName(t, slug, "approver")
+	grantBits(t, pool, tenantID, "node", nodeID, approverID, 1<<13)
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE app_user SET classification = 6 WHERE id = $1`, approverID); err != nil {
+		t.Fatal(err)
+	}
+
 	// 创建分享：没有显式要求审批，但密级 3 达到默认阈值
 	resp, out := postJSON(t, srv.URL+"/v1/shares", owner, map[string]any{
 		"objectType": "node", "objectId": nodeID, "allowDownload": true,
+		"approverId": approverID,
 	})
 	if resp.StatusCode != 200 {
 		t.Fatalf("创建分享失败 %d: %v", resp.StatusCode, out)

@@ -80,7 +80,16 @@ func (a *API) objectNames(ctx context.Context, tenantID string, rows []audit.Eve
 		rs, err := tx.Query(ctx, `
 			SELECT id::text, name FROM node WHERE id = ANY($1::uuid[])
 			UNION ALL
-			SELECT id::text, name FROM space WHERE id = ANY($1::uuid[])`, ids)
+			SELECT id::text, name FROM space WHERE id = ANY($1::uuid[])
+			UNION ALL
+			-- 分享类日志的 object_id 是 share.id，不是文件 id。
+			-- 不解析它，审计页的"对象"列对 share.create/approve/revoke 全是空，
+			-- 读者只能看到"某人创建了分享"，不知道分享的是哪份文件。
+			SELECT s.id::text, COALESCE(n.name, sp.name, '分享链接')
+			  FROM share s
+			  LEFT JOIN node  n  ON s.object_type = 'node'  AND n.id = s.object_id
+			  LEFT JOIN space sp ON s.object_type = 'space' AND sp.id = s.object_id
+			 WHERE s.id = ANY($1::uuid[])`, ids)
 		if err != nil {
 			return err
 		}

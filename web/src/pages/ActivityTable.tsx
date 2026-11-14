@@ -134,8 +134,10 @@ export default function ActivityTable({ scope }: { scope: 'me' | 'admin' }) {
               <td className="tnum">{new Date(it.createdAt).toLocaleString('zh-CN')}</td>
               {scope === 'admin' && (
                 <td>
-                  <div>{it.actorName || '—'}</div>
-                  <div className="hint" style={{ fontSize: 11 }}>{it.actorType}</div>
+                  <div>{it.actorName || (it.actorType === 'user' ? '账号已删除' : '—')}</div>
+                  <div className="hint" style={{ fontSize: 11 }}>
+                    {it.actorType === 'user' ? '成员' : it.actorType === 'external' ? '外部协作者' : it.actorType === 'system' ? '系统' : '匿名'}
+                  </div>
                 </td>
               )}
               <td>
@@ -149,7 +151,7 @@ export default function ActivityTable({ scope }: { scope: 'me' | 'admin' }) {
                     content={
                       <>
                         <div className="tip-t"><Icon name="file" size={14} /> {it.objectName}</div>
-                        <div className="tip-r"><span>对象 ID</span><b className="mono">{it.objectId.slice(0, 8)}…</b></div>
+                        <div className="tip-r"><span>内部编号</span><b className="mono">{it.objectId.slice(0, 8)}…</b></div>
                         <div className="tip-note">名称按日志发生时的对象解析；对象删除后仍显示名称，便于追溯。</div>
                       </>
                     }
@@ -157,7 +159,18 @@ export default function ActivityTable({ scope }: { scope: 'me' | 'admin' }) {
                     <span style={{ color: 'var(--ink-2)' }}>{it.objectName}</span>
                   </Tooltip>
                 ) : it.objectId ? (
-                  <span className="mono dim" title={it.objectId}>{it.objectId.slice(0, 8)}…</span>
+                  <Tooltip
+                    content={
+                      <>
+                        <b>对象已删除</b>
+                        <div className="tip-note">
+                          这条日志发生时的对象已不在库中，只能保留内部编号用于追溯：{it.objectId.slice(0, 8)}…
+                        </div>
+                      </>
+                    }
+                  >
+                    <span className="dim">对象已删除</span>
+                  </Tooltip>
                 ) : '—'}
               </td>
               <td>

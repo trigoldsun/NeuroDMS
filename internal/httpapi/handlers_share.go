@@ -29,6 +29,7 @@ import (
 func (a *API) registerShare(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/shares", a.requireAuth(a.handleCreateShare))
 	mux.HandleFunc("GET /v1/shares/pending", a.requireAuth(a.handlePendingShareApprovals))
+	mux.HandleFunc("GET /v1/shares/approvers", a.requireAuth(a.handleShareApprovers))
 	mux.HandleFunc("POST /v1/shares/{id}/revoke", a.requireAuth(a.handleRevokeShare))
 	mux.HandleFunc("POST /v1/shares/{id}/approve", a.requireAuth(a.handleApproveShare))
 
@@ -64,6 +65,10 @@ type createShareReq struct {
 	// 注意：这个字段此前在 share 表与 Options 里都存在，但 handler 从未赋值——
 	// 表现为"界面勾了要求验证，实际什么也没发生"。属于典型的假开关。
 	RequireVerify bool `json:"requireVerify"`
+	// ApproverID / OwnerApproverID 由发起人在创建时选定。
+	// 服务端会复核：必须在候选名单里、不是自己、第二层必须是空间所有者。
+	ApproverID      string `json:"approverId"`
+	OwnerApproverID string `json:"ownerApproverId"`
 	// NotifyEmails 是"通过邮件分享"的收件人。
 	//
 	// 服务端只负责把链接投进外发队列，不负责替用户保密：
@@ -219,6 +224,76 @@ func (a *API) handleCreateShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 审批人必须在建链前确定：链接一旦创建就可能被转发，
+	// "先建后找审批人"会留下无人可批的死链。
+	//
+	// 这里的校验是**服务端**的，不依赖前端下拉框：前端可以改，
+	// 而审批关系一旦落库就决定了谁有权批、谁会被追责。
+	plan, plerr := a.resolveShareApprovalPlan(r.Context(), c, req.ObjectType, spaceID, nodeID)
+	if plerr != nil {
+		a.logErr("解析分享审批人失败", "objectType", req.ObjectType, "objectId", req.ObjectID, "err", plerr)
+		writeErr(w, r, http.StatusInternalServerError, "INTERNAL", "读取审批人失败")
+		return
+	}
+	if plan.RequireApproval {
+		if len(plan.Approvers) == 0 {
+			_ = a.emit(r, c.TenantID, AuditEntry{
+				ActorID: c.Subject, Action: "share.create", ObjectID: req.ObjectID, Result: "denied",
+				Detail: map[string]any{"reason": "no_eligible_approver", "objectClass": plan.ObjectClass},
+			})
+			writeErr(w, r, http.StatusConflict, "NO_ELIGIBLE_APPROVER",
+				"没有其他人能审批这份文件。请先给同事授予该文件或空间的管理权限，或提高其密级后再分享")
+			return
+		}
+		if req.ApproverID == "" {
+			writeErr(w, r, http.StatusBadRequest, "APPROVER_REQUIRED", "请选择审批人")
+			return
+		}
+		var chosen *shareApprover
+		for i := range plan.Approvers {
+			if plan.Approvers[i].ID == req.ApproverID {
+				chosen = &plan.Approvers[i]
+				break
+			}
+		}
+		if chosen == nil {
+			writeErr(w, r, http.StatusBadRequest, "INVALID_APPROVER", "所选审批人不符合条件（需有管理权限、密级足够、且不是你本人）")
+			return
+		}
+		opt.ApproverID = chosen.ID
+
+		// 5/6 级：审批人不是空间所有者时，再加一层所有者确认。
+		if plan.TwoLayer && !chosen.IsOwner {
+			switch plan.OwnerLayerSkipped {
+			case "requester_is_owner":
+				// 发起人本人就是所有者：他的发起即代表所有者知情，
+				// 再要求他审批自己会变成死循环。
+				opt.OwnerApproverID = ""
+			case "no_owner":
+				writeErr(w, r, http.StatusConflict, "OWNER_APPROVER_UNAVAILABLE",
+					"这份文件属于 5 级及以上，需要空间所有者确认；但当前没有密级足够的其他所有者。请先提高所有者密级，或改由空间所有者作为审批人")
+				return
+			default:
+				if req.OwnerApproverID == "" {
+					writeErr(w, r, http.StatusBadRequest, "OWNER_APPROVER_REQUIRED", "这份文件属于 5 级及以上，请选择空间所有者作为第二层审批人")
+					return
+				}
+				var owner *shareApprover
+				for i := range plan.Owners {
+					if plan.Owners[i].ID == req.OwnerApproverID && plan.Owners[i].Eligible {
+						owner = &plan.Owners[i]
+						break
+					}
+				}
+				if owner == nil {
+					writeErr(w, r, http.StatusBadRequest, "INVALID_OWNER_APPROVER", "所选所有者不符合条件（需在职、密级不低于文件、且不是你本人）")
+					return
+				}
+				opt.OwnerApproverID = owner.ID
+			}
+		}
+	}
+
 	created, err := share.Create(r.Context(), a.Pool, c.TenantID, c.Subject, req.ObjectType, req.ObjectID,
 		creatorClass, opt)
 	if err != nil {
@@ -252,15 +327,15 @@ func (a *API) handleCreateShare(w http.ResponseWriter, r *http.Request) {
 	// 不返回的话界面会显示"链接已可用"，转发出去才发现打不开。
 	if created.Approval == "pending" {
 		resp["approvalStatus"] = "pending"
-		// 顺便告诉发起人"现在还有几个人能批"。
-		//
-		// 这是为了避免死亡链接：审批权 = 对象 manage_acl + 密级足够 + 非发起人。
-		// 单人项目里这三条同时成立的人可能是 0 个——链接建出来就永远 pending，
-		// 而发起人以为"等审批就行"，实际上没人能批。
-		// 计数只作提示（按空间 ACE 估算，不计继承），不参与任何判定。
-		if n, cerr := a.countEligibleApprovers(r.Context(), c.TenantID, spaceID, nodeID,
-			c.Subject, created.ObjectClass); cerr == nil {
-			resp["approverCount"] = n
+		resp["approverCount"] = len(plan.Approvers)
+		resp["approvalStage"] = created.Stage
+		if chosen := findApprover(plan.Approvers, created.ApproverID); chosen != nil {
+			resp["approver"] = chosen
+		}
+		if created.OwnerApproverID != "" {
+			if owner := findApprover(plan.Owners, created.OwnerApproverID); owner != nil {
+				resp["ownerApprover"] = owner
+			}
 		}
 	}
 
@@ -367,14 +442,19 @@ func (a *API) handlePendingShareApprovals(w http.ResponseWriter, r *http.Request
 // 各写一套 SQL 迟早会出现"首页说有 3 条、点进去 0 条"。
 func (a *API) pendingShareApprovals(ctx context.Context, c auth.Claims) ([]map[string]any, error) {
 	type cand struct {
-		ShareID    string
-		ObjectType string
-		ObjectID   string
-		Name       string
-		Class      int
-		Creator    string
-		CreatedAt  time.Time
-		ExpiresAt  *time.Time
+		ShareID      string
+		ObjectType   string
+		ObjectID     string
+		Name         string
+		Class        int
+		Creator      string
+		Stage        string
+		ApproverID   string
+		ApproverName string
+		OwnerID      string
+		OwnerName    string
+		CreatedAt    time.Time
+		ExpiresAt    *time.Time
 	}
 
 	var cands []cand
@@ -384,14 +464,28 @@ func (a *API) pendingShareApprovals(ctx context.Context, c auth.Claims) ([]map[s
 			       COALESCE(n.name, sp.name, ''),
 			       COALESCE(n.classification, sp.classification, 0),
 			       COALESCE(NULLIF(u.display_name, ''), u.username, ''),
+			       s.approval_stage,
+			       COALESCE(s.approver_id::text, ''),
+			       COALESCE(NULLIF(ua.display_name, ''), ua.username, ''),
+			       COALESCE(s.owner_approver_id::text, ''),
+			       COALESCE(NULLIF(uo.display_name, ''), uo.username, ''),
 			       s.created_at, s.expires_at
 			  FROM share s
 			  LEFT JOIN node n  ON s.object_type = 'node'  AND n.id = s.object_id
 			  LEFT JOIN space sp ON s.object_type = 'space' AND sp.id = s.object_id
-			  LEFT JOIN app_user u ON u.id = s.creator_id
+			  LEFT JOIN app_user u  ON u.id = s.creator_id
+			  LEFT JOIN app_user ua ON ua.id = s.approver_id
+			  LEFT JOIN app_user uo ON uo.id = s.owner_approver_id
 			 WHERE s.approval_status = 'pending'
 			   AND s.revoked_at IS NULL
 			   AND s.creator_id <> $1
+			   -- 指派制：只让我是当前环节审批人的记录出现在待办里。
+			   -- approver_id 为空的旧记录保持原语义（任何合格审批人都能看到）。
+			   AND (
+			     (COALESCE(NULLIF(s.approval_stage, ''), 'first') = 'first'
+			       AND (s.approver_id = $1::uuid OR s.approver_id IS NULL))
+			     OR (s.approval_stage = 'owner' AND s.owner_approver_id = $1::uuid)
+			   )
 			 ORDER BY s.created_at
 			 LIMIT 100`, c.Subject)
 		if err != nil {
@@ -401,7 +495,8 @@ func (a *API) pendingShareApprovals(ctx context.Context, c auth.Claims) ([]map[s
 		for rows.Next() {
 			var x cand
 			if err := rows.Scan(&x.ShareID, &x.ObjectType, &x.ObjectID, &x.Name,
-				&x.Class, &x.Creator, &x.CreatedAt, &x.ExpiresAt); err != nil {
+				&x.Class, &x.Creator, &x.Stage, &x.ApproverID, &x.ApproverName,
+				&x.OwnerID, &x.OwnerName, &x.CreatedAt, &x.ExpiresAt); err != nil {
 				return err
 			}
 			cands = append(cands, x)
@@ -431,6 +526,7 @@ func (a *API) pendingShareApprovals(ctx context.Context, c auth.Claims) ([]map[s
 		out = append(out, map[string]any{
 			"shareId": x.ShareID, "objectType": x.ObjectType, "objectId": x.ObjectID,
 			"name": x.Name, "classification": x.Class, "creator": x.Creator,
+			"stage": x.Stage, "approverName": x.ApproverName, "ownerApproverName": x.OwnerName,
 			"createdAt": x.CreatedAt, "expiresAt": x.ExpiresAt,
 		})
 	}
@@ -516,7 +612,17 @@ func (a *API) handleApproveShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := share.Approve(r.Context(), a.Pool, c.TenantID, id, c.Subject, req.Approve); err != nil {
+	outcome, err := share.Approve(r.Context(), a.Pool, c.TenantID, id, c.Subject, req.Approve)
+	if err != nil {
+		if errors.Is(err, share.ErrNotDesignatedApprover) {
+			_ = a.emit(r, c.TenantID, AuditEntry{
+				ActorID: c.Subject, Action: "share.approve", ObjectID: id, Result: "denied",
+				Detail: map[string]any{"reason": "not_designated_approver"},
+			})
+			writeErr(w, r, http.StatusForbidden, "NOT_DESIGNATED_APPROVER",
+				"这条分享由发起人指定了审批人，你不能代为审批")
+			return
+		}
 		if errors.Is(err, share.ErrSelfApproval) {
 			_ = a.emit(r, c.TenantID, AuditEntry{
 				ActorID: c.Subject, Action: "share.approve", ObjectID: id, Result: "denied",
@@ -529,9 +635,9 @@ func (a *API) handleApproveShare(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusConflict, "INVALID_STATE", "该分享不在待审批状态")
 		return
 	}
-	result := "rejected"
+	decision := "rejected"
 	if req.Approve {
-		result = "approved"
+		decision = "approved"
 	}
 	if err := a.emit(r, c.TenantID, AuditEntry{
 		ActorID: c.Subject, Action: "share.approve", ObjectID: id,
@@ -540,12 +646,20 @@ func (a *API) handleApproveShare(w http.ResponseWriter, r *http.Request) {
 		// 审计写不进 → 接口返回 500，而状态其实已经改了。
 		// 表现为"审批报错，但链接已变成已通过/已驳回"，且审计里没有记录。
 		Result: "ok",
-		Detail: map[string]any{"decision": result},
+		Detail: map[string]any{
+			"decision":     decision,
+			"stage":        outcome.Stage,
+			"ownerPending": outcome.OwnerPending,
+		},
 	}); err != nil {
 		writeErr(w, r, http.StatusInternalServerError, "AUDIT_FAILED", "审计写入失败，操作已拒绝")
 		return
 	}
-	writeOK(w, r, map[string]any{"approvalStatus": result})
+	writeOK(w, r, map[string]any{
+		"approvalStatus": outcome.Status,
+		"stage":          outcome.Stage,
+		"ownerPending":   outcome.OwnerPending,
+	})
 }
 
 // handleRedeem 消费链接，返回票据。

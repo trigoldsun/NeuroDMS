@@ -123,7 +123,9 @@ export default function AclDrawer({
 
   function userName(id: string): string {
     const u = users.find((x) => x.id === id)
-    return u ? u.displayName || u.username : id.slice(0, 8)
+    // 不再回退到 uuid 前 8 位：读者无法判断那是谁，
+    // 反而会以为是某个"名字"。查不到就明确说账号已不存在。
+    return u ? (u.displayName || u.username) : '账号已删除'
   }
 
   return (

@@ -18,6 +18,9 @@ type Approval = {
   name: string
   classification: number
   creator: string
+  stage?: 'first' | 'owner'
+  approverName?: string
+  ownerApproverName?: string
   createdAt: string
   expiresAt?: string | null
 }
@@ -58,8 +61,12 @@ export default function Approvals() {
   async function decide(a: Approval, approve: boolean) {
     setBusy(a.shareId); setMsg('')
     try {
-      await postJSON(`/v1/shares/${a.shareId}/approve`, { approve })
-      setMsg(approve ? '已通过，链接立即可用' : '已驳回，发起人需重新创建链接')
+      const r = await postJSON<{ ownerPending?: boolean }>(`/v1/shares/${a.shareId}/approve`, { approve })
+      setMsg(!approve
+        ? '已驳回，发起人需重新创建链接'
+        : r.ownerPending
+          ? '已通过第一层，接下来等空间所有者确认；确认后链接才可用'
+          : '已通过，链接立即可用')
       await load()
     } catch (e) {
       setMsg(e instanceof HttpError ? e.message : '操作失败')
@@ -86,8 +93,9 @@ export default function Approvals() {
           <div className="sub">
             <span>{loading ? '载入中…' : `${items.length} 条待处理`}</span>
             <InfoDot title="谁能审批、批了会怎样">
-              <p>只列出<b>你有权处置</b>的链接：你对该文件或目录有管理权限，且不是你本人发起。</p>
-              <p>通过后链接立即可用；驳回后发起人需要重新创建。系统不会自动通知发起人，请另行告知。</p>
+              <p>只列出<b>发起人指定给你</b>的链接，且你确实对该文件有管理权限、密级足够、不是发起人本人。</p>
+              <p>5/6 级文件外发分两层：第一层通过后，还要等空间所有者确认；两层都通过链接才可用。</p>
+              <p>驳回后发起人需要重新创建。系统不会自动通知发起人，请另行告知。</p>
               <div className="pop-foot">这条规则和权限内核一致，不因为"你在不在管理台"而不同。</div>
             </InfoDot>
           </div>
@@ -108,6 +116,7 @@ export default function Approvals() {
               <th>文件</th>
               <th style={{ width: 70 }}>密级</th>
               <th style={{ width: 120 }}>发起人</th>
+              <th style={{ width: 130 }}>当前环节</th>
               <th style={{ width: 170 }}>提交时间</th>
               <th style={{ width: 170 }}>链接有效期</th>
               <th style={{ width: 150 }} />
@@ -115,7 +124,7 @@ export default function Approvals() {
           </thead>
           <tbody>
             {items.length === 0 && !loading && (
-              <tr><td colSpan={6}><div className="empty">没有需要你审批的外发链接</div></td></tr>
+              <tr><td colSpan={7}><div className="empty">没有需要你审批的外发链接</div></td></tr>
             )}
             {items.map((a) => (
               <tr key={a.shareId}>
@@ -134,6 +143,19 @@ export default function Approvals() {
                 </td>
                 <td><span className={`badge cls-${a.classification}`}>{a.classification}</span></td>
                 <td>{a.creator}</td>
+                <td>
+                  {a.stage === 'owner' ? (
+                    <>
+                      <span className="badge warn" style={{ height: 18 }}>空间所有者确认</span>
+                      <div className="hint" style={{ fontSize: 11 }}>第一层已通过</div>
+                    </>
+                  ) : (
+                    <>
+                      <span className="badge brand" style={{ height: 18 }}>审批</span>
+                      <div className="hint" style={{ fontSize: 11 }}>由发起人指定你</div>
+                    </>
+                  )}
+                </td>
                 <td className="tnum">{new Date(a.createdAt).toLocaleString('zh-CN')}</td>
                 <td className="tnum">{a.expiresAt ? new Date(a.expiresAt).toLocaleString('zh-CN') : '不限期'}</td>
                 <td className="actions">

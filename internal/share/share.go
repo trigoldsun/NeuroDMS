@@ -49,6 +49,12 @@ var (
 	// 这道控制生效了。
 	ErrSelfApproval = errors.New("不能审批自己发起的分享")
 
+	// ErrNotDesignatedApprover 表示当前登录者不是该分享当前环节指定的审批人。
+	//
+	// 与"权限不足"分开：指定审批人即使有 manage_acl，也不能替别人批。
+	// 否则"申请人选谁"就形同虚设，又回到"谁都能批"。
+	ErrNotDesignatedApprover = errors.New("你不是该分享当前环节指定的审批人")
+
 	// ErrSpaceNotShareable 表示该空间不适合整体外发。
 	//
 	// 触发条件：空间内存在发起人自己也无权查看/密级更高的内容，
@@ -73,6 +79,16 @@ type Options struct {
 	// EmailWhitelist 限定可申请验证码的邮箱或域名（@example.com）。
 	// 为空表示不限制（验证码仍然生效，只是不限制谁可以申请）。
 	EmailWhitelist []string
+
+	// ApproverID 是发起人指定的第一层审批人。
+	//
+	// 为空时保持旧语义（任何对该对象有 manage_acl 的人都能批），
+	// 这是为了不破坏已经发出的 pending 记录与直接调用本包的测试；
+	// HTTP 入口会强制要求选择，不允许新链接再走"无人负责"的路径。
+	ApproverID string
+	// OwnerApproverID 是 5/6 级外发的第二层审批人（空间所有者）。
+	// 仅当第一层审批人不是所有者时才需要。
+	OwnerApproverID string
 }
 
 // Created 是创建结果。Token 明文只在此处返回一次。
@@ -87,6 +103,11 @@ type Created struct {
 	// ObjectClass 是触发审批的那个密级（对象与标签策略取最大值）。
 	// 上层用它判断"是否还有密级足够的审批人"，避免造出无人可批的死链。
 	ObjectClass int
+	// ApproverID / OwnerApproverID 回显指派关系，供界面提示"在等谁"。
+	ApproverID      string
+	OwnerApproverID string
+	// Stage 是审批阶段：none / first / owner。
+	Stage string
 }
 
 // Redeemed 是兑换成功后的上下文，供上层签发短期票据。
@@ -123,9 +144,11 @@ func Create(ctx context.Context, pool *pgxpool.Pool, tenantID, creatorID, object
 	}
 
 	var (
-		id          string
-		approval    string
-		objClassOut int
+		id              string
+		approval        string
+		objClassOut     int
+		approverID      string
+		ownerApproverID string
 	)
 	err = db.WithTenant(ctx, pool, tenantID, func(tx pgx.Tx) error {
 		// 空间级外链的前置闸门：整个空间会被一并开放，因此必须确认
@@ -178,8 +201,16 @@ func Create(ctx context.Context, pool *pgxpool.Pool, tenantID, creatorID, object
 		objClassOut = objClass
 		approval = "not_required"
 		requireApproval := opt.RequireApproval || objClass >= minClass
+		stage := "none"
 		if requireApproval {
 			approval = "pending"
+			// 有指派对象就是第一层待办；没有则保留旧语义。
+			stage = "first"
+		}
+		approverID, ownerApproverID = opt.ApproverID, opt.OwnerApproverID
+		if !requireApproval {
+			// 不需要审批时忽略指派，避免留下"有审批人但状态是 not_required"的脏数据
+			approverID, ownerApproverID = "", ""
 		}
 		return tx.QueryRow(ctx, `
 			INSERT INTO share
@@ -187,23 +218,31 @@ func Create(ctx context.Context, pool *pgxpool.Pool, tenantID, creatorID, object
 				 token_hash, token_hint, password_hash, max_uses, expires_at,
 				 allow_download, watermark, require_verify,
 				 ip_allowlist, require_approval, approval_status, email_whitelist,
-				 max_class)
+				 max_class, approver_id, owner_approver_id, approval_stage)
 			VALUES
 				(gen_random_uuid(), $1, $2, $3, $4, 'link',
 				 $5, $6, nullif($7,''), $8, $9, $10, $11, $12,
 				 $13::cidr[], $14, $15, $16::text[],
-				 $17)
+				 $17, nullif($18,'')::uuid, nullif($19,'')::uuid, $20)
 			RETURNING id`,
 			tenantID, objectType, objectID, creatorID,
 			hash, hint(token), opt.PasswordHash, opt.MaxUses, opt.ExpiresAt,
 			opt.AllowDownload, opt.Watermark, opt.RequireVerify,
 			normalizeCIDRs(opt.IPAllowlist), requireApproval, approval,
-			normalizeEmails(opt.EmailWhitelist), creatorClass).Scan(&id)
+			normalizeEmails(opt.EmailWhitelist), creatorClass,
+			approverID, ownerApproverID, stage).Scan(&id)
 	})
 	if err != nil {
 		return Created{}, fmt.Errorf("创建分享失败: %w", err)
 	}
-	return Created{ID: id, Token: token, Approval: approval, ObjectClass: objClassOut}, nil
+	stage := "none"
+	if approval == "pending" {
+		stage = "first"
+	}
+	return Created{
+		ID: id, Token: token, Approval: approval, ObjectClass: objClassOut,
+		ApproverID: approverID, OwnerApproverID: ownerApproverID, Stage: stage,
+	}, nil
 }
 
 // Redeem 校验策略并消费一次链接，返回换取票据所需的上下文。
@@ -510,47 +549,118 @@ func recordVisit(ctx context.Context, tx pgx.Tx, tenantID, _ /*objectID*/, actio
 	return err
 }
 
+// ApprovalOutcome 是一次审批动作之后的状态。
+//
+// 外层需要它来告诉界面"还差一层"还是"已终结"：
+// 只返回 error 的话，前端无法区分"通过后链接可用"与"通过后仍在等所有者"。
+type ApprovalOutcome struct {
+	Status string // approved | rejected
+	Stage  string // done | owner
+	// OwnerPending 为真表示第一层已通过，仍在等空间所有者。
+	OwnerPending bool
+}
+
 // Approve 审批外发分享：通过或拒绝。
 //
-// 调用方仍需校验审批人对对象有 manage_acl；本函数只负责一件上层查不到的事：
-// **发起人不能审批自己创建的分享**。
+// 分层规则：
+//   - stage=first：指派的第一层审批人；旧记录（approver_id 为空）沿用"任何合格审批人"。
+//   - stage=owner：指派的空间所有者；必须是 owner_approver_id 本人。
 //
-// 这条以前只写在注释里（"由上层 check 保证"），但上层只能保证"有权管理该对象的
-// 授权"——而空间所有者对自己创建的外链恰好就有这个权限。结果是高密文件外发
-// 的审批可以自己点过，审批记录齐全但控制完全失效。
-func Approve(ctx context.Context, pool *pgxpool.Pool, tenantID, shareID, approverID string, ok bool) error {
-	return db.WithTenant(ctx, pool, tenantID, func(tx pgx.Tx) error {
-		// 锁住待审批那一行：并发下两个人同时点"通过/拒绝"时，
+// 调用方仍需校验审批人对对象有 manage_acl；本函数只负责上层查不到的事：
+// **发起人不能自批**、**只能由被指派的人批**、**两层按顺序推进**。
+func Approve(ctx context.Context, pool *pgxpool.Pool, tenantID, shareID, approverID string, ok bool) (ApprovalOutcome, error) {
+	var out ApprovalOutcome
+	err := db.WithTenant(ctx, pool, tenantID, func(tx pgx.Tx) error {
+		// 锁住这一行：并发下两个人同时点"通过/拒绝"时，
 		// 后到的那个必须看到状态已经变了，而不是各自写一次。
-		var creatorID string
+		var (
+			creatorID       string
+			status          string
+			stage           string
+			designated      *string
+			ownerDesignated *string
+		)
 		err := tx.QueryRow(ctx, `
-			SELECT creator_id::text FROM share
-			 WHERE id = $1 AND approval_status = 'pending' FOR UPDATE`, shareID).Scan(&creatorID)
+			SELECT creator_id::text, approval_status, approval_stage,
+			       approver_id::text, owner_approver_id::text
+			  FROM share WHERE id = $1 FOR UPDATE`, shareID).
+			Scan(&creatorID, &status, &stage, &designated, &ownerDesignated)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return ErrUnavailable
 			}
 			return err
 		}
+		if status != "pending" {
+			return ErrUnavailable
+		}
 		if creatorID == approverID {
 			return ErrSelfApproval
 		}
-
-		status := "rejected"
-		if ok {
-			status = "approved"
+		if stage == "" || stage == "none" {
+			stage = "first"
 		}
-		ct, err := tx.Exec(ctx, `
-			UPDATE share SET approval_status = $2, approved_by = $3, approved_at = now()
-			 WHERE id = $1 AND approval_status = 'pending'`, shareID, status, approverID)
-		if err != nil {
+
+		switch stage {
+		case "first":
+			if designated != nil && *designated != "" && *designated != approverID {
+				return ErrNotDesignatedApprover
+			}
+			if !ok {
+				out = ApprovalOutcome{Status: "rejected", Stage: "done"}
+				_, err = tx.Exec(ctx, `
+					UPDATE share
+					   SET approval_status = 'rejected', approval_stage = 'done',
+					       first_approved_by = $2, first_approved_at = now(),
+					       approved_by = $2, approved_at = now()
+					 WHERE id = $1`, shareID, approverID)
+				return err
+			}
+			// 有第二层：先落第一层，链接继续 pending。
+			if ownerDesignated != nil && *ownerDesignated != "" {
+				out = ApprovalOutcome{Status: "pending", Stage: "owner", OwnerPending: true}
+				_, err = tx.Exec(ctx, `
+					UPDATE share
+					   SET approval_stage = 'owner',
+					       first_approved_by = $2, first_approved_at = now()
+					 WHERE id = $1`, shareID, approverID)
+				return err
+			}
+			out = ApprovalOutcome{Status: "approved", Stage: "done"}
+			_, err = tx.Exec(ctx, `
+				UPDATE share
+				   SET approval_status = 'approved', approval_stage = 'done',
+				       first_approved_by = $2, first_approved_at = now(),
+				       approved_by = $2, approved_at = now()
+				 WHERE id = $1`, shareID, approverID)
+			return err
+
+		case "owner":
+			if ownerDesignated == nil || *ownerDesignated == "" || *ownerDesignated != approverID {
+				return ErrNotDesignatedApprover
+			}
+			if !ok {
+				out = ApprovalOutcome{Status: "rejected", Stage: "done"}
+				_, err = tx.Exec(ctx, `
+					UPDATE share
+					   SET approval_status = 'rejected', approval_stage = 'done',
+					       owner_approved_by = $2, owner_approved_at = now(),
+					       approved_by = $2, approved_at = now()
+					 WHERE id = $1`, shareID, approverID)
+				return err
+			}
+			out = ApprovalOutcome{Status: "approved", Stage: "done"}
+			_, err = tx.Exec(ctx, `
+				UPDATE share
+				   SET approval_status = 'approved', approval_stage = 'done',
+				       owner_approved_by = $2, owner_approved_at = now(),
+				       approved_by = $2, approved_at = now()
+				 WHERE id = $1`, shareID, approverID)
 			return err
 		}
-		if ct.RowsAffected() == 0 {
-			return ErrUnavailable
-		}
-		return nil
+		return ErrUnavailable
 	})
+	return out, err
 }
 
 // Revoke 撤销分享，立即生效，并让已发出的票据一并失效。

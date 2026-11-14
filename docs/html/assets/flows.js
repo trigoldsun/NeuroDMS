@@ -107,7 +107,7 @@ window.FLOWS = {
 
   'share-create': {
     id: 'share-create', fig: '图 5-1',
-    title: '创建外链：三道门 + 一次审批',
+    title: '创建外链：三道门 + 选定审批人',
     nodes: [
       { id: 'a', t: 'pill', c: 0, r: 0, label: '选文件 → 分享 → 新建外链' },
       { id: 'b', t: 'dec', c: 0, r: 1, label: '有 share_external（所有者档位）？' },
@@ -116,17 +116,21 @@ window.FLOWS = {
       { id: 'c1', t: 'bad', c: 1, r: 2, label: '拒绝：FEATURE_DISABLED' },
       { id: 'd', t: 'act', c: 0, r: 3, w: 268, label: '设策略：有效期、口令、下载\n水印、邮箱验证、IP 段', sub: '只读交付就关掉「允许下载」', n: 1 },
       { id: 'e', t: 'dec', c: 0, r: 4, label: '密级 ≥ 租户审批阈值？', sub: '默认「秘密」及以上' },
-      { id: 'e1', t: 'warn', c: 1, r: 4, label: '自动进入待审批 pending', sub: '不需要你选审批人' },
-      { id: 'f', t: 'dec', c: 1, r: 5, label: '有管理权限的同事复核' },
-      { id: 'g', t: 'sys', c: 0, r: 5, label: '链接立即可用' },
+      { id: 'e1', t: 'act', c: 1, r: 4, label: '列出合格审批人，由发起人选择', sub: '无候选人则禁止创建', n: 2 },
+      { id: 'f', t: 'act', c: 1, r: 5, label: '第一层审批人复核', n: 3 },
       { id: 'f1', t: 'bad', c: 2, r: 5, label: '驳回：链接作废，需重建' },
-      { id: 'h', t: 'pill', k: 'ok', c: 0, r: 6, label: '等待访客打开' }
+      { id: 'g', t: 'sys', c: 0, r: 7, label: '链接立即可用' },
+      { id: 'f2', t: 'dec', c: 1, r: 6, label: '5/6 级且审批人非所有者？' },
+      { id: 'f3', t: 'act', c: 1, r: 7, label: '空间所有者确认', sub: '多个所有者时先选一位', n: 4 },
+      { id: 'h', t: 'pill', k: 'ok', c: 0, r: 8, label: '等待访客打开' }
     ],
     edges: [
       { f: 'a', t: 'b' }, { f: 'b', t: 'b1', l: '否' }, { f: 'b', t: 'c', l: '是' },
       { f: 'c', t: 'c1', l: '否' }, { f: 'c', t: 'd', l: '是' }, { f: 'd', t: 'e' },
       { f: 'e', t: 'e1', l: '是' }, { f: 'e', t: 'g', l: '否' }, { f: 'e1', t: 'f' },
-      { f: 'f', t: 'g', l: '通过' }, { f: 'f', t: 'f1', l: '驳回' }, { f: 'g', t: 'h' }
+      { f: 'f', t: 'f1', l: '驳回' }, { f: 'f', t: 'f2', l: '通过' },
+      { f: 'f2', t: 'f3', l: '是' }, { f: 'f2', t: 'g', l: '否' },
+      { f: 'f3', t: 'g', l: '通过' }, { f: 'g', t: 'h' }
     ]
   },
 
@@ -209,28 +213,32 @@ window.FLOWS = {
 
   'approve': {
     id: 'approve', fig: '图 6-1',
-    title: '谁在审批：三个条件必须同时成立',
-    hint: '每个「否」都意味着这条链接不会出现在他的列表里',
+    title: '谁在审批：指定到人，5/6 级分两层',
+    hint: '只有当前环节被指定的人能看到和处理',
     nodes: [
       { id: 'a', t: 'pill', c: 0, r: 0, label: '一条外链进入待审批' },
-      { id: 'b', t: 'dec', c: 0, r: 1, label: '对该文件有 manage_acl？' },
-      { id: 'b1', t: 'bad', c: 1, r: 1, label: '不出现在审批列表' },
-      { id: 'c', t: 'dec', c: 0, r: 2, label: '密级 ≥ 文件密级？' },
-      { id: 'c1', t: 'bad', c: 1, r: 2, label: '看不到文件，也批不了' },
+      { id: 'b', t: 'dec', c: 0, r: 1, label: '你是当前环节指定的审批人？' },
+      { id: 'b1', t: 'bad', c: 1, r: 1, label: '列表里看不到，也不能代批' },
+      { id: 'c', t: 'dec', c: 0, r: 2, label: '有 manage_acl 且密级 ≥ 文件？' },
       { id: 'd', t: 'dec', c: 0, r: 3, label: '是发起人本人？' },
       { id: 'd1', t: 'bad', c: 1, r: 3, label: 'SELF_APPROVAL_DENIED，禁止自批' },
-      { id: 'e', t: 'act', c: 0, r: 4, label: '出现在「管理台 → 外发审批」', sub: '列表只显示你有权处置的链接', n: 1 },
-      { id: 'f', t: 'act', c: 0, r: 5, label: '通过＝立即可用；驳回＝需重建', n: 2 },
-      { id: 'g', t: 'sys', c: 0, r: 6, label: '写审计 share.approve（detail.decision）', sub: '审计写不进，操作本身被拒绝' },
-      { id: 'h', t: 'pill', k: 'ok', c: 0, r: 7, label: '审批闭环' }
+      { id: 'e', t: 'act', c: 0, r: 4, label: '通过或驳回', n: 1 },
+      { id: 'e1', t: 'bad', c: 2, r: 4, label: '驳回：链接作废，需重建' },
+      { id: 'f', t: 'dec', c: 0, r: 5, label: '5/6 级且还有第二层？' },
+      { id: 'f1', t: 'sys', c: 1, r: 5, label: '转 owner 待办', sub: '链接仍不可用' },
+      { id: 'g', t: 'act', c: 1, r: 6, label: '空间所有者确认', n: 2 },
+      { id: 'h', t: 'sys', c: 0, r: 8, label: '写审计 share.approve（decision + stage）' },
+      { id: 'i', t: 'pill', k: 'ok', c: 0, r: 9, label: '审批闭环，链接可用' }
     ],
     edges: [
       { f: 'a', t: 'b' }, { f: 'b', t: 'b1', l: '否' }, { f: 'b', t: 'c', l: '是' },
-      { f: 'c', t: 'c1', l: '否' }, { f: 'c', t: 'd', l: '是' },
+      { f: 'c', t: 'b1', l: '否' }, { f: 'c', t: 'd', l: '是' },
       { f: 'd', t: 'd1', l: '是' }, { f: 'd', t: 'e', l: '否' },
-      { f: 'e', t: 'f' }, { f: 'f', t: 'g' }, { f: 'g', t: 'h' }
+      { f: 'e', t: 'e1', l: '驳回' }, { f: 'e', t: 'f', l: '通过' },
+      { f: 'f', t: 'f1', l: '是' }, { f: 'f1', t: 'g' }, { f: 'g', t: 'h' },
+      { f: 'f', t: 'h', l: '否' }, { f: 'h', t: 'i' }
     ],
-    foot: '管理角色不等于审批权：系统管理员 / 安全管理员管配置，不自动获得文件内容权限。'
+    foot: '管理角色不等于审批权；指定审批人也不等于可以代批。'
   },
 
   'flags': {

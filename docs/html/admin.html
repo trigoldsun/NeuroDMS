@@ -368,15 +368,18 @@ UPDATE tenant SET share_approval_min_class = 3 WHERE slug = 'demo';
 
     <h2 id="share-approve" data-nav="7 · 外发审批"><span class="num">7</span>外发审批</h2>
 
-    <h3 id="approve-when" data-nav="6.1 什么时候需要审批">7.1 什么时候需要审批</h3>
+    <h3 id="approve-when" data-nav="7.1 什么时候需要审批">7.1 什么时候需要审批</h3>
     <p>两个触发条件，满足任一即进入 <code>pending</code>：</p>
     <ol>
       <li>创建链接时显式勾选「需要审批」；</li>
       <li>对象密级 ≥ 租户阈值 <code>share_approval_min_class</code>（默认 3 = 秘密）。</li>
     </ol>
-    <p>创建时<b>不需要选审批人</b>：谁是审批人由权限决定，不是由发起人指派。这是刻意的——如果发起人能挑审批人，他总会挑最容易通过的那个。</p>
+    <p><b>创建时必须指定审批人</b>：系统先枚举"对该对象有 <code>manage_acl</code>、密级足够、在职、不是发起人"的候选人，由发起人选择，服务端复核后落库。</p>
+    <p>为什么从"谁都能批"改成"指定一个人"：旧模型下多条链接同时 pending 时，所有合格审批人都以为别人会批，发起人也不知道在等谁。指派把责任落到具体的人。发起人只能在合格的人里挑，不能挑不合格的人；自批始终被拒。</p>
+    <p>没有合格候选人时，创建直接返回 <code>409 NO_ELIGIBLE_APPROVER</code>，<b>不再生成永远 pending 的死链</b>。</p>
 
-    <h3 id="approve-who" data-nav="6.2 谁在审批">7.2 谁在审批：三个条件同时满足</h3>
+    <h3 id="approve-who" data-nav="7.2 谁在审批">7.2 谁在审批</h3>
+    <p>第一层：创建时指定的审批人，且必须仍满足下表条件。<b>只有被指定的人能批</b>——其他人即使有 <code>manage_acl</code> 也不能代批（403 <code>NOT_DESIGNATED_APPROVER</code>）。</p>
     <div class="flow" data-flow="approve"></div>
 
     <div class="tablewrap">
@@ -394,22 +397,33 @@ UPDATE tenant SET share_approval_min_class = 3 WHERE slug = 'demo';
       <p><b>管理角色不等于审批权</b>。系统管理员、安全管理员管的是配置（成员、密级定义、策略），不自动获得内容权限。所以"我是管理员，为什么看不到待审批"是正常现象——缺的是对象级 <code>manage_acl</code>，不是角色。</p>
     </div>
 
-    <div class="danger">
-      <p><b>单人空间的死链风险</b>：如果某个空间的权限只在发起人一个人手里（个人项目、单人负责的目录很常见），三个条件无法同时满足，链接会<b>永远停在审批中</b>。系统在创建时返回 <code>approverCount</code>，为 0 时分享面板会直接提示"当前没有其他人能审批"，避免发起人空等。</p>
+    <h3 id="approve-two" data-nav="7.2.1 5/6 级双层审批">7.2.1 5/6 级：再加一层所有者确认</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>场景</th><th>是否需要第二层</th></tr></thead>
+        <tbody>
+          <tr><td>密级 ≤ 4</td><td>不需要</td></tr>
+          <tr><td>密级 5/6，第一层审批人就是空间所有者</td><td>不需要（同一人重复确认没有意义）</td></tr>
+          <tr><td>密级 5/6，第一层审批人是他人</td><td><b>需要</b>，由空间所有者确认</td></tr>
+          <tr><td>密级 5/6，发起人本人就是空间所有者</td><td>不需要（发起即代表所有者知情，否则会变成自批）</td></tr>
+        </tbody>
+      </table>
     </div>
+    <p>所有者候选来自 <code>space.owner_id</code> 与空间上 <code>preset=owner</code> 的 ACE（含部门/角色/组展开），要求在职且密级 ≥ 对象密级。多个拥有者时，发起人在同一次分享里选一位。没有可用所有者且发起人不是所有者时，返回 <code>409 OWNER_APPROVER_UNAVAILABLE</code>。</p>
+    <div class="note"><p>两层一次选定、按顺序流转：<code>pending(first)</code> → 第一层通过 → <code>pending(owner)</code> → 所有者通过 → <code>approved</code>。任一层驳回即 <code>rejected</code>；第一层通过后链接仍不可用。</p></div>
 
-    <h3 id="approve-where" data-nav="6.3 审批人从哪里操作">7.3 审批人从哪里操作</h3>
+    <h3 id="approve-where" data-nav="7.3 审批人从哪里操作">7.3 审批人从哪里操作</h3>
     <p>三个入口，看到的是同一份列表：工作台「等你处理」的待办、直接访问 <code>/approvals</code>
     （<b>任何登录用户都可访问</b>，不要求管理角色）、管理台「外发审批」
     （<code>/admin/share-approvals</code>）。</p>
     <p>第 2 条是关键：审批判据是对象级 <code>manage_acl</code>，而空间所有者通常不是管理员。
     如果只有管理台有入口，这些人收到待办也点不进去，审批链会在最关键的一步断掉。</p>
-    <p>列表只显示"你有权处置"的链接：服务端逐条按上表三个条件判定，没有权限的链接不会出现，所以不会出现"列出来却点不动"。每行给出文件、密级、发起人、提交时间、链接有效期，可「通过」或「驳回」。</p>
-    <p>通过后链接<b>立即可用</b>，无需重新创建；驳回后发起人需要重新建链。两种结果都写审计（<code>share.approve</code>，结果 <code>ok</code>，<code>detail.decision</code> 记录 approved / rejected）。</p>
+    <p>列表只显示<b>当前轮到你</b>的链接：第一层审批人看不到已经转给所有者的记录，所有者也不会在第一层通过前就看到它。每行给出文件、密级、发起人、当前环节、提交时间、链接有效期。</p>
+    <p>单层通过后链接<b>立即可用</b>；两层则进入 <code>stage=owner</code>，要等所有者确认。驳回在任何一层都直接 <code>rejected</code>。结果都写审计（<code>share.approve</code>，<code>detail.decision</code> 与 <code>detail.stage</code>）。</p>
 
-    <h3 id="approve-nobody" data-nav="6.4 无人可批时怎么办">7.4 无人可批时怎么办</h3>
-    <p>两条路，按业务选：</p>
-    <div class="cards c2">
+    <h3 id="approve-nobody" data-nav="7.4 无人可批时怎么办">7.4 无人可批时怎么办</h3>
+    <p>系统在<b>创建前</b>就会拦住并提示原因。按业务选一条路：</p>
+    <div class="cards c3">
       <div class="card accent">
         <span class="tag f">路线 1 · 推荐</span>
         <h4>给同事授权</h4>
@@ -417,22 +431,28 @@ UPDATE tenant SET share_approval_min_class = 3 WHERE slug = 'demo';
       </div>
       <div class="card">
         <span class="tag">路线 2</span>
+        <h4>改由所有者审批</h4>
+        <p>5/6 级且所有者密级不足时：先提密，或把第一层审批人改为空间所有者本人（此时只需一层）。</p>
+      </div>
+      <div class="card">
+        <span class="tag">路线 3</span>
         <h4>降低文件密级</h4>
-        <p>走降密审批（管理台 → 降密审批），降到阈值以下后新链接不再需要审批。<b>已经 pending 的链接不会因此自动放行</b>，需要重新创建。</p>
+        <p>走降密审批，降到阈值以下后新链接不再需要审批。<b>已 pending 的链接不会自动放行</b>，需要重建。</p>
       </div>
     </div>
     <div class="note">
       <p>如果这种情况反复出现，说明阈值（默认 3）对本租户偏低，或空间权限过度集中在单人手里。前者调 <code>share_approval_min_class</code>，后者应治理授权结构——不要用"关掉审批"来解决。</p>
     </div>
 
-    <h3 id="approve-limits" data-nav="6.5 当前约束">7.5 当前约束（需知）</h3>
+    <h3 id="approve-limits" data-nav="7.5 当前约束">7.5 当前约束（需知）</h3>
     <ul>
-      <li><b>没有通知</b>：待审批不会主动提醒任何人，发起人与审批人都要靠"自己去看列表"。外发邮件只发给收件人，不发给审批人。流程上需要约定"谁每天看一次外发审批"。</li>
+      <li><b>没有通知</b>：待审批不会主动提醒任何人，发起人与审批人都要靠"自己去看列表"。两层之间转给所有者时也不推送，建议发起人另行告知。</li>
+      <li><b>指定后不能换人</b>：要换审批人只能撤销重建，审核中途不能改指派。</li>
       <li><b>一人一票，不能改判</b>：通过或驳回之后不能再改，只能重新建链。</li>
       <li><b>审计写不进就拒绝操作</b>：审批先改状态、再写审计；审计失败返回 500 并提示。此前的缺陷是审计 <code>result</code> 写了 <code>approved</code>（不在 <code>ok/denied/error</code> 约束内），导致<b>审批一提交就 500，而状态其实已改</b>——现已修正为 <code>ok</code> + <code>detail.decision</code>。</li>
     </ul>
 
-    <h3 id="approve-space" data-nav="6.6 空间级外链的额外闸门">7.6 空间级外链的额外闸门</h3>
+    <h3 id="approve-space" data-nav="7.6 空间级外链的额外闸门">7.6 空间级外链的额外闸门</h3>
     <p>对空间生成外链时，若空间内存在：<b>密级高于发起人的节点</b>，或<b>带显式拒绝条目的节点</b>，直接拒绝（403 <code>SPACE_NOT_SHAREABLE</code>）。</p>
     <div class="warn">
       <p>这道闸门是刻意的：空间级外链面向匿名访客，子树的任何例外都会被绕过。遇到这个提示，正确做法是改为分享具体文件 / 目录，而不是让管理员去删例外配置。</p>
@@ -660,7 +680,7 @@ docker exec -i docvault-postgres pg_restore -U docvault -d docvault --clean &lt;
 
 <footer class="foot">
   <span>NeuroDMS · 管理员手册 · 租户与系统配置 V1.2.0</span>
-  <span>网页版 v1.1.0 · 源文件 docs/31-管理员手册-租户与系统配置-v1.3.0.md</span>
+  <span>网页版 v1.2.0 · 源文件 docs/31-管理员手册-租户与系统配置-v1.4.0.md</span>
 </footer>
 
 <button class="totop" type="button" aria-label="回到顶部">

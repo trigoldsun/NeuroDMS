@@ -282,12 +282,19 @@ func (a *API) handleAuditEvents(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusInternalServerError, "INTERNAL", "查询审计失败")
 		return
 	}
+	// 审计页是给人看的，不是给 DBA 看的：必须带显示名。
+	// 之前这里只回 actorId/objectId，界面只能渲染一串 uuid，
+	// 读者无法判断"这条是谁做的、对什么做的"。
+	names := a.actorNames(r.Context(), c.TenantID, rows)
+	objs := a.objectNames(r.Context(), c.TenantID, rows)
 	items := make([]map[string]any, 0, len(rows))
 	for _, x := range rows {
 		item := map[string]any{
-			"seq": x.Seq, "actorId": x.ActorID, "actorType": x.ActorType,
-			"action": x.Action, "objectId": x.ObjectID, "result": x.Result,
-			"ip": x.IP, "requestId": x.RequestID,
+			"seq": x.Seq, "actorId": x.ActorID, "actorName": names[x.ActorID],
+			"actorType": x.ActorType,
+			"action":    x.Action, "objectId": x.ObjectID, "objectName": objs[x.ObjectID],
+			"result": x.Result,
+			"ip":     x.IP, "requestId": x.RequestID,
 			"createdAt": x.CreatedAt.UTC().Format(time.RFC3339),
 		}
 		if len(x.Detail) > 0 {
