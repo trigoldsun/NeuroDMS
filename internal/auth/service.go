@@ -53,6 +53,10 @@ type Service struct {
 	otp    *OTPStore
 	sender CodeSender
 	dir    DirectoryAuthenticator
+	// sms 是"短信认证服务"通道；nil 表示未配置，短信登录 fail-closed。
+	sms SMSProvider
+	// rate 是短信入口的频控参数（号码 / IP / 失败冷却）。
+	rate SMSRate
 }
 
 // DirectoryAuthenticator 是"域账号认证"的最小接口。
@@ -81,7 +85,7 @@ func (s *Service) SetMFA(otp *OTPStore, sender CodeSender) {
 // New 构造认证服务。
 func New(pool *pgxpool.Pool, secret []byte, cfg Config) *Service {
 	return &Service{pool: pool, secret: secret, cfg: cfg, now: time.Now,
-		guard: NewGuard(pool, DefaultRevocationTTL)}
+		guard: NewGuard(pool, DefaultRevocationTTL), rate: DefaultSMSRate()}
 }
 
 // Guard 暴露吊销检查器，便于 HTTP 层主动失效缓存。
@@ -106,6 +110,24 @@ type Tokens struct {
 // 不带来源去查会命中两条，取哪一条都可能是错的——必须由用户选择，
 // 而不是由服务端"猜"。
 func (s *Service) Login(ctx context.Context, tenantSlug, username, password string, mode LoginMode, ip, ua string) (Tokens, error) {
+	return s.loginScoped(ctx, tenantSlug, username, password, mode, "", ip, ua)
+}
+
+// LoginAccount 用"一个账号字段"登录：支持 username / username@tenant / phone / phone@tenant。
+//
+// channel=mp 时额外要求"已登记并验证手机号"：小程序只对这类账号开放。
+// 把它放在服务层而不是小程序前端，是因为前端检查只能拦住界面，拦不住直接调接口。
+func (s *Service) LoginAccount(ctx context.Context, account, password string, mode LoginMode, channel, ip, ua string) (Tokens, error) {
+	ref, err := s.ResolveAccount(ctx, account)
+	if err != nil {
+		BurnTime(password)
+		return Tokens{}, err
+	}
+	return s.loginScoped(ctx, ref.TenantSlug, ref.Username, password, mode, channel, ip, ua)
+}
+
+// loginScoped 是登录的公共实现（口令校验 → 状态 → 可选二次验证 → 签发会话）。
+func (s *Service) loginScoped(ctx context.Context, tenantSlug, username, password string, mode LoginMode, channel, ip, ua string) (Tokens, error) {
 	if mode == "" {
 		mode = LoginAuto
 	}
@@ -143,6 +165,12 @@ func (s *Service) Login(ctx context.Context, tenantSlug, username, password stri
 	}
 	if u.status != "active" || (u.expiresAt != nil && u.expiresAt.Before(now)) {
 		return Tokens{}, ErrAccountDisabled
+	}
+	// 小程序只对"已登记并验证手机号"的账号开放（docs/42）。
+	// 放在这里而不是 handler：口令校验通过之后、签发令牌之前，
+	// 任何调用路径都绕不过去。
+	if channel == "mp" && (u.phone == "" || u.phoneVerified == nil) {
+		return Tokens{}, ErrPhoneNotRegistered
 	}
 
 	verifyErr := errors.New("未设置口令")
@@ -251,6 +279,9 @@ type loginUser struct {
 	email        *string
 	mfaNeeded    bool
 	source       string
+	phone        string
+	// phoneVerified 非空表示号码经过一次验证码校验，可用于登录。
+	phoneVerified *time.Time
 }
 
 // findLoginUser 按登录方式定位账号。
@@ -263,7 +294,7 @@ func (s *Service) findLoginUser(ctx context.Context, tenantID, username string, 
 
 	query := `
 		SELECT id, password_hash, status, session_epoch, failed_attempts, locked_until, expires_at,
-		       email, mfa_required, source
+		       email, mfa_required, source, COALESCE(phone,''), phone_verified_at
 		  FROM app_user
 		 WHERE lower(username) = lower($1) AND deleted_at IS NULL`
 	args := []any{username}
@@ -283,7 +314,8 @@ func (s *Service) findLoginUser(ctx context.Context, tenantID, username string, 
 	err := db.WithTenant(ctx, s.pool, tenantID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, query, args...).Scan(
 			&out.id, &out.passwordHash, &out.status, &out.epoch, &out.failed,
-			&out.lockedUntil, &out.expiresAt, &out.email, &out.mfaNeeded, &out.source)
+			&out.lockedUntil, &out.expiresAt, &out.email, &out.mfaNeeded, &out.source,
+			&out.phone, &out.phoneVerified)
 	})
 	return out, err
 }

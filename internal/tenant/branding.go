@@ -225,6 +225,13 @@ type Policy struct {
 	// 而不是升级后被动生效。档位不支持时这个值不起作用（见 capabilities）。
 	FolderUpload bool `json:"folderUpload"`
 
+	// SmsLogin 是否允许"手机号 + 短信验证码"登录。
+	//
+	// 与 FolderUpload 同构：档位之上再要一次租户确认，默认关闭。
+	// 理由是按条计费——开通即产生费用；而且手机号属于个人信息，
+	// 不该因为升级到专业版就自动开始收集与使用。
+	SmsLogin bool `json:"smsLogin"`
+
 	// AllowedExts：允许上传的扩展名白名单（小写、带点，如 ".pdf"）。空表示不限制。
 	//
 	// 这是**入口约束**，不是安全边界——真正的安全检查靠危险扩展名与可执行魔数。

@@ -129,6 +129,18 @@ type Config struct {
 	// LDAPAllowPlaintext 允许明文绑定（仅实验网；生产必须装 LDAP 证书）
 	LDAPAllowPlaintext bool
 
+	// ---- 短信认证服务（阿里云号码认证 PNVS / dypnsapi）----
+	// 注意不是"短信服务 SMS"：本系统用 SendSmsVerifyCode / CheckSmsVerifyCode，
+	// 验证码由阿里云生成与核验。签名与模板使用控制台赠送的那一套。
+	SMSAccessKeyID     string
+	SMSAccessKeySecret string
+	SMSSignName        string
+	SMSTemplateCode    string
+	SMSSchemeName      string
+	// SMSMock 仅用于本地开发与自动化测试：不联网、固定验证码。
+	// 生产模式（DOCVAULT_MODE=production）下启用会拒绝启动。
+	SMSMock bool
+
 	// ---- 通知通道（二选一或都配，都配时 SMTP 为主、Graph 为备）----
 	SMTPHost     string
 	SMTPPort     int
@@ -250,6 +262,14 @@ func Load(getenv Getenv) (Config, error) {
 		LDAPTLSName:         strings.TrimSpace(getenv("DOCVAULT_LDAP_TLS_NAME")),
 		LDAPADMode:          strings.TrimSpace(getenv("DOCVAULT_LDAP_AD_MODE")) == "1",
 		LDAPAllowPlaintext:  strings.TrimSpace(getenv("DOCVAULT_LDAP_ALLOW_PLAINTEXT")) == "1",
+
+		// 短信认证服务
+		SMSAccessKeyID:     strings.TrimSpace(getenv("DOCVAULT_SMS_ACCESS_KEY_ID")),
+		SMSAccessKeySecret: getenv("DOCVAULT_SMS_ACCESS_KEY_SECRET"),
+		SMSSignName:        strings.TrimSpace(getenv("DOCVAULT_SMS_SIGN_NAME")),
+		SMSTemplateCode:    strings.TrimSpace(getenv("DOCVAULT_SMS_TEMPLATE_CODE")),
+		SMSSchemeName:      strings.TrimSpace(getenv("DOCVAULT_SMS_SCHEME_NAME")),
+		SMSMock:            strings.TrimSpace(getenv("DOCVAULT_SMS_MOCK")) == "1",
 
 		// 通知通道
 		SMTPHost:     strings.TrimSpace(getenv("DOCVAULT_SMTP_HOST")),

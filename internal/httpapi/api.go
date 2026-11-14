@@ -72,6 +72,9 @@ type API struct {
 	PlatformAuth *platformauth.Service
 	// SecretBox 用于加密落库的证书私钥与目录服务账号口令；nil 表示未配置密钥
 	SecretBox *secretbox.Box
+	// SMSConfigured 表示短信通道（阿里云短信认证服务 / 本地 mock）已就绪。
+	// 只用于 capabilities 与设置页提示；真正的调用在 auth.Service 内。
+	SMSConfigured bool
 
 	// 目录认证（LDAP/AD）：Store 管配置，Resolver 供登录按租户取连接，
 	// Runner 负责触发同步与自动调度。三者都可为 nil（未启用）。
@@ -131,6 +134,7 @@ func (a *API) Register(mux *http.ServeMux) {
 		a.startedAt = time.Now()
 	}
 	mux.HandleFunc("POST /v1/auth/login", a.handleLogin)
+	a.registerSMSAuth(mux)
 	a.registerSSO(mux)
 	mux.HandleFunc("POST /v1/auth/mfa/verify", a.handleMFAVerify)
 	mux.HandleFunc("POST /v1/auth/refresh", a.handleRefresh)
@@ -221,9 +225,17 @@ func claimsFrom(ctx context.Context) (auth.Claims, bool) {
 // ---------------- 认证 ----------------
 
 type loginReq struct {
+	// Account 是"一个字段登录"：username / username@tenant / phone / phone@tenant。
+	// 小程序用它；Web 端仍用 tenantSlug + username（两条路径都保留，互不影响）。
+	Account    string `json:"account"`
 	TenantSlug string `json:"tenantSlug"`
 	Username   string `json:"username"`
 	Password   string `json:"password"`
+	// Channel 标识客户端类型；"mp" 表示小程序，会额外要求已验证手机号。
+	//
+	// 由客户端自述而不是靠 UA 猜：UA 可伪造，而这里的作用是"限制更严"，
+	// 伪造只会让自己受限，不构成越权。
+	Channel string `json:"channel,omitempty"`
 	// Mode 指定用哪种身份校验：local / domain / 省略（auto）。
 	//
 	// 同一租户允许本地与域账号同名，所以"用哪个身份"必须由用户决定。
@@ -236,8 +248,14 @@ func (a *API) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &req) {
 		return
 	}
-	if req.TenantSlug == "" || req.Username == "" || req.Password == "" {
-		writeErr(w, r, http.StatusBadRequest, "INVALID_ARGUMENT", "租户、用户名与口令均为必填")
+	if req.Password == "" {
+		writeErr(w, r, http.StatusBadRequest, "INVALID_ARGUMENT", "口令不能为空")
+		return
+	}
+	// 两种入参形态：新客户端给 account，老客户端给 tenantSlug + username。
+	// 二者都没有时直接拒，避免空账号走进跨租户查询。
+	if req.Account == "" && (req.TenantSlug == "" || req.Username == "") {
+		writeErr(w, r, http.StatusBadRequest, "INVALID_ARGUMENT", "请填写账号")
 		return
 	}
 
@@ -247,8 +265,17 @@ func (a *API) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tk, err := a.Auth.Login(r.Context(), req.TenantSlug, req.Username, req.Password, mode,
-		clientIP(r), r.UserAgent())
+	var (
+		tk  auth.Tokens
+		err error
+	)
+	if req.Account != "" {
+		tk, err = a.Auth.LoginAccount(r.Context(), req.Account, req.Password, mode,
+			req.Channel, clientIP(r), r.UserAgent())
+	} else {
+		tk, err = a.Auth.Login(r.Context(), req.TenantSlug, req.Username, req.Password, mode,
+			clientIP(r), r.UserAgent())
+	}
 	if err != nil {
 		var ch *auth.MFAChallenge
 		if errors.As(err, &ch) {
@@ -270,7 +297,7 @@ func (a *API) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := a.emit(r, tk.TenantID, AuditEntry{
 		ActorID: tk.UserID, Action: "auth.login", Result: "ok",
-		Detail: map[string]any{"username": req.Username},
+		Detail: map[string]any{"username": loginNameOf(req), "method": "password", "channel": req.Channel},
 	}); err != nil {
 		writeErr(w, r, http.StatusInternalServerError, "AUDIT_FAILED", "审计写入失败，登录已拒绝")
 		return
@@ -283,6 +310,17 @@ func (a *API) handleLogin(w http.ResponseWriter, r *http.Request) {
 		"tenantId":      tk.TenantID,
 		"sessionId":     tk.SessionID,
 	})
+}
+
+// loginNameOf 取审计里要记的账号字段（不回显完整手机号）。
+func loginNameOf(req loginReq) string {
+	if req.Username != "" {
+		return req.Username
+	}
+	if p, err := auth.NormalizePhone(req.Account); err == nil {
+		return auth.MaskPhone(p)
+	}
+	return req.Account
 }
 
 // handleMFAVerify 用验证码完成登录。
@@ -403,15 +441,26 @@ func (a *API) handleMe(w http.ResponseWriter, r *http.Request) {
 	// 界面据此显示/隐藏入口，真正的拦截始终在服务端。
 	var (
 		username, displayName, email string
+		phone                        string
+		phoneVerified                bool
 		// 用空切片而非 nil：nil slice 序列化是 null，前端 .length 会直接抛错
 		roles                   = []string{}
 		classification, ceiling int
+		tenantSlug, tenantName  string
 	)
 	_ = db.WithTenant(r.Context(), a.Pool, c.TenantID, func(tx pgx.Tx) error {
 		if err := tx.QueryRow(r.Context(), `
-			SELECT username, COALESCE(display_name,''), COALESCE(email,''), classification, ceiling
+			SELECT username, COALESCE(display_name,''), COALESCE(email,''), COALESCE(phone,''),
+			       phone_verified_at IS NOT NULL, classification, ceiling
 			  FROM app_user WHERE id = $1`, c.Subject).
-			Scan(&username, &displayName, &email, &classification, &ceiling); err != nil {
+			Scan(&username, &displayName, &email, &phone, &phoneVerified, &classification, &ceiling); err != nil {
+			return err
+		}
+		// 租户标识用于界面显示"当前组织"；放在同一事务里读，
+		// 避免请求路径直接摸连接池（会绕过 RLS，见 docs/28 S-13）。
+		if err := tx.QueryRow(r.Context(), `
+			SELECT slug, COALESCE(name,'') FROM tenant WHERE id = $1`, c.TenantID).
+			Scan(&tenantSlug, &tenantName); err != nil {
 			return err
 		}
 		rs, err := rbac.RolesOf(r.Context(), tx, c.TenantID, c.Subject)
@@ -424,6 +473,8 @@ func (a *API) handleMe(w http.ResponseWriter, r *http.Request) {
 		"sessionId": c.SessionID, "epoch": c.Epoch,
 		"expiresAt": c.ExpiresAt.UTC().Format(time.RFC3339),
 		"username":  username, "displayName": displayName, "email": email,
+		"phoneMasked": auth.MaskPhone(phone), "phoneVerified": phoneVerified,
+		"tenantSlug": tenantSlug, "tenantName": tenantName,
 		"classification": classification, "ceiling": ceiling,
 		"roles": roles,
 	})
@@ -517,6 +568,14 @@ func writeAuthErr(w http.ResponseWriter, r *http.Request, err error) {
 		writeErrHint(w, r, status, code, err.Error(), hint)
 	}
 
+	var rl *auth.RateLimitError
+	if errors.As(err, &rl) {
+		writeRetryAfter(w, rl.RetryAfter)
+		writeErrHint(w, r, http.StatusTooManyRequests, "SMS_RATE_LIMITED", rl.Reason,
+			"请稍后再试，或改用口令登录")
+		return
+	}
+
 	switch {
 	case errors.Is(err, auth.ErrInvalidCredentials):
 		write(http.StatusUnauthorized, "INVALID_CREDENTIALS")
@@ -545,6 +604,23 @@ func writeAuthErr(w http.ResponseWriter, r *http.Request, err error) {
 		write(http.StatusForbidden, "DIRECTORY_PASSWORD_CHANGE_REQUIRED")
 	case errors.Is(err, auth.ErrDomainDisabledInDir):
 		write(http.StatusForbidden, "DIRECTORY_ACCOUNT_DISABLED")
+	case errors.Is(err, auth.ErrAmbiguousAccount):
+		// 409：凭据可能都对，只是"不知道进哪个组织"，不是失败
+		write(http.StatusConflict, "AMBIGUOUS_ACCOUNT")
+	case errors.Is(err, auth.ErrPhoneNotRegistered):
+		write(http.StatusForbidden, "PHONE_NOT_REGISTERED")
+	case errors.Is(err, auth.ErrPhoneRequired):
+		write(http.StatusBadRequest, "PHONE_REQUIRED")
+	case errors.Is(err, auth.ErrPhoneInvalid):
+		write(http.StatusBadRequest, "INVALID_PHONE")
+	case errors.Is(err, auth.ErrPhoneTaken):
+		write(http.StatusConflict, "PHONE_TAKEN")
+	case errors.Is(err, auth.ErrSMSNotConfigured):
+		write(http.StatusServiceUnavailable, "SMS_NOT_CONFIGURED")
+	case errors.Is(err, auth.ErrSMSUnavailable):
+		write(http.StatusServiceUnavailable, "SMS_UNAVAILABLE")
+	case errors.Is(err, auth.ErrCodeInvalid):
+		write(http.StatusUnauthorized, "SMS_CODE_INVALID")
 	default:
 		writeErr(w, r, http.StatusInternalServerError, "INTERNAL", "处理失败")
 	}

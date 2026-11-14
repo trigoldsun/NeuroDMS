@@ -40,6 +40,7 @@ import (
 	"docvault/internal/preview"
 	"docvault/internal/scan"
 	"docvault/internal/secretbox"
+	"docvault/internal/sms"
 	"docvault/internal/tenant"
 	"docvault/internal/watermark"
 	"docvault/migrations"
@@ -163,6 +164,39 @@ func main() {
 				os.Exit(2)
 			}
 			authSvc := auth.New(pool, []byte(cfg.JWTSecret), auth.DefaultConfig())
+
+			// 短信认证服务（阿里云 PNVS）。三种状态都要显式：
+			// 已配置 / 未配置（功能关闭）/ 配置了但启用失败（打日志，不阻断启动——
+			// 短信登录只是登录方式之一，不该让整个系统起不来）。
+			var smsProvider sms.Provider
+			switch {
+			case cfg.SMSMock:
+				if cfg.Mode == "production" {
+					log.Error("生产环境禁止使用短信 mock（DOCVAULT_SMS_MOCK=1），拒绝启动")
+					os.Exit(2)
+				}
+				smsProvider = sms.NewMock("123456")
+				log.Warn("短信认证服务使用模拟通道（固定验证码 123456），仅限开发环境")
+			case cfg.SMSAccessKeyID != "":
+				p, serr := sms.NewAliyun(sms.AliyunConfig{
+					AccessKeyID:     cfg.SMSAccessKeyID,
+					AccessKeySecret: cfg.SMSAccessKeySecret,
+					SignName:        cfg.SMSSignName,
+					TemplateCode:    cfg.SMSTemplateCode,
+					SchemeName:      cfg.SMSSchemeName,
+				})
+				if serr != nil {
+					log.Error("短信认证服务配置不完整，短信登录未启用", "err", serr.Error())
+				} else {
+					smsProvider = p
+					log.Info("短信认证服务已启用（阿里云 dypnsapi）")
+				}
+			default:
+				log.Info("短信认证服务未配置（DOCVAULT_SMS_* 为空），短信登录不可用")
+			}
+			if smsProvider != nil {
+				authSvc.SetSMS(smsProvider)
+			}
 
 			// 配置加密密钥：证书私钥与目录服务账号口令都用它。
 			// 在这里创建（只依赖 cfg），后面几处复用同一个实例。
@@ -451,22 +485,23 @@ func main() {
 				PlatformToken: cfg.PlatformToken,
 				Scanner:       scan.New(cfg.ClamAVAddr, time.Duration(cfg.ClamAVTimeout)*time.Second),
 				// 预览一律叠加溯源水印（AC-55）：这是"通过预览取回原件"的唯一防线
-				Watermark:    wm,
-				Tenants:      tenantSvc,
-				IAM:          iam.New(pool),
-				Metering:     meterSvc,
-				Features:     featureSvc,
-				PlatformAuth: platformAuth,
-				Outbox:       notifierOutbox,
-				Mail:         mailStore,
-				MailRouter:   mailRouter,
-				Geo:          geo,
-				SecretBox:    box,
-				Directory:    dirStore,
-				DirResolver:  dirResolver,
-				DirRunner:    dirRunner,
-				SSO:          ssoSettings,
-				Log:          log,
+				Watermark:     wm,
+				Tenants:       tenantSvc,
+				IAM:           iam.New(pool),
+				Metering:      meterSvc,
+				Features:      featureSvc,
+				PlatformAuth:  platformAuth,
+				Outbox:        notifierOutbox,
+				Mail:          mailStore,
+				MailRouter:    mailRouter,
+				Geo:           geo,
+				SecretBox:     box,
+				SMSConfigured: smsProvider != nil,
+				Directory:     dirStore,
+				DirResolver:   dirResolver,
+				DirRunner:     dirRunner,
+				SSO:           ssoSettings,
+				Log:           log,
 				// 外发链接的对外地址：邮件里的分享链接必须指向公网域名，
 				// 不能用请求头推导（反代后面拿到的常是内网 Host）
 				PublicBaseURL: cfg.OfficePublicURL,

@@ -7,12 +7,18 @@ import (
 	"net/http"
 
 	"docvault/internal/auth"
+	"docvault/internal/db"
 	"docvault/internal/iam"
+
+	"github.com/jackc/pgx/v5"
 )
 
 func (a *API) registerProfile(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/me/email/request", a.requireAuth(a.handleEmailChangeRequest))
 	mux.HandleFunc("POST /v1/me/email/confirm", a.requireAuth(a.handleEmailChangeConfirm))
+	// 手机号换绑：口令 + 新号码验证码。手机号是登录凭据，少一道就等于交账号。
+	mux.HandleFunc("POST /v1/me/phone/request", a.requireAuth(a.handlePhoneChangeRequest))
+	mux.HandleFunc("POST /v1/me/phone/confirm", a.requireAuth(a.handlePhoneChangeConfirm))
 
 	// 账号生命周期：注销 + 数字资产交接（详见 internal/iam/account.go）
 	mux.HandleFunc("GET /v1/me/handover-candidates", a.requireAuth(a.handleHandoverCandidates))
@@ -206,4 +212,76 @@ func (a *API) handleEmailChangeConfirm(w http.ResponseWriter, r *http.Request) {
 		"changed": true,
 		"note":    "换绑成功，所有会话已失效，请重新登录",
 	})
+}
+
+// handlePhoneChangeRequest 校验当前口令后，向新号码发验证码。
+func (a *API) handlePhoneChangeRequest(w http.ResponseWriter, r *http.Request) {
+	c, _ := claimsFrom(r.Context())
+	var req struct {
+		Phone    string `json:"phone"`
+		Password string `json:"password"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	sentTo, err := a.Auth.RequestPhoneChange(r.Context(), c.TenantID, c.Subject, req.Phone, req.Password)
+	if err != nil {
+		_ = a.emit(r, c.TenantID, AuditEntry{
+			ActorID: c.Subject, Action: "profile.phone.request", Result: "denied",
+			Detail: map[string]any{"phone": auth.MaskPhone(mustPhone(req.Phone)), "reason": err.Error()},
+		})
+		writeAuthErr(w, r, err)
+		return
+	}
+	_ = a.emit(r, c.TenantID, AuditEntry{
+		ActorID: c.Subject, Action: "profile.phone.request", Result: "ok",
+		Detail: map[string]any{"phone": sentTo},
+	})
+	writeOK(w, r, map[string]any{
+		"sentTo": sentTo,
+		"next":   "请输入收到的验证码完成绑定",
+	})
+}
+
+// handlePhoneChangeConfirm 校验验证码并落库。
+func (a *API) handlePhoneChangeConfirm(w http.ResponseWriter, r *http.Request) {
+	c, _ := claimsFrom(r.Context())
+	var req struct {
+		Phone string `json:"phone"`
+		Code  string `json:"code"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	// 改前值：手机号能直接登录，必须能回答"从哪个号换成哪个号"
+	var before string
+	_ = db.WithTenant(r.Context(), a.Pool, c.TenantID, func(tx pgx.Tx) error {
+		return tx.QueryRow(r.Context(), `
+			SELECT COALESCE(phone,'') FROM app_user WHERE id = $1`, c.Subject).Scan(&before)
+	})
+	masked, err := a.Auth.ConfirmPhoneChange(r.Context(), c.TenantID, c.Subject, req.Phone, req.Code)
+	if err != nil {
+		_ = a.emit(r, c.TenantID, AuditEntry{
+			ActorID: c.Subject, Action: "profile.phone.confirm", Result: "denied",
+			Detail: map[string]any{"phone": auth.MaskPhone(mustPhone(req.Phone))},
+		})
+		writeAuthErr(w, r, err)
+		return
+	}
+	_ = a.emit(r, c.TenantID, AuditEntry{
+		ActorID: c.Subject, Action: "profile.phone.confirm", Result: "ok",
+		Detail: auditDiff(
+			map[string]any{"phone": auth.MaskPhone(before)},
+			map[string]any{"phone": masked},
+		),
+	})
+	writeOK(w, r, map[string]any{"phoneMasked": masked, "phoneVerified": true})
+}
+
+// mustPhone 把用户输入规范化后用于掩码；失败则原样送进掩码函数（会被打满星）。
+func mustPhone(raw string) string {
+	if p, err := auth.NormalizePhone(raw); err == nil {
+		return p
+	}
+	return raw
 }

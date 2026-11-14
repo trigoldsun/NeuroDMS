@@ -63,9 +63,12 @@ const (
 
 // Member 是成员的对外视图（不含任何口令材料）。
 type Member struct {
-	ID             string     `json:"id"`
-	Username       string     `json:"username"`
-	Email          string     `json:"email"`
+	ID       string `json:"id"`
+	Username string `json:"username"`
+	Email    string `json:"email"`
+	// PhoneMasked 只回掩码：成员列表是"看花名册"，不是"导出通讯录"。
+	PhoneMasked    string     `json:"phoneMasked"`
+	PhoneVerified  bool       `json:"phoneVerified"`
 	DisplayName    string     `json:"displayName"`
 	PrincipalType  string     `json:"principalType"`
 	Source         string     `json:"source"`
@@ -144,7 +147,8 @@ func (s *Service) List(ctx context.Context, tenantID string, f ListFilter) ([]Me
 		}
 
 		rows, e := tx.Query(ctx, `
-			SELECT u.id::text, u.username, COALESCE(u.email,''), u.display_name,
+			SELECT u.id::text, u.username, COALESCE(u.email,''), COALESCE(u.phone,''),
+			       u.phone_verified_at IS NOT NULL, u.display_name,
 			       u.principal_type, u.source, u.status, u.classification, u.ceiling,
 			       u.mfa_required, u.expires_at, u.last_login_at, u.created_at,
 			       COALESCE(u.dept_id::text,''), COALESCE(d.name,''),
@@ -726,7 +730,8 @@ func actorOf(ctx context.Context, tx pgx.Tx, userID string) (Actor, error) {
 
 func getMember(ctx context.Context, tx pgx.Tx, userID string) (Member, error) {
 	row := tx.QueryRow(ctx, `
-		SELECT u.id::text, u.username, COALESCE(u.email,''), u.display_name,
+		SELECT u.id::text, u.username, COALESCE(u.email,''), COALESCE(u.phone,''),
+		       u.phone_verified_at IS NOT NULL, u.display_name,
 		       u.principal_type, u.source, u.status, u.classification, u.ceiling,
 		       u.mfa_required, u.expires_at, u.last_login_at, u.created_at,
 		       COALESCE(u.dept_id::text,''), COALESCE(d.name,''),
@@ -751,18 +756,29 @@ type scanner interface{ Scan(dest ...any) error }
 
 func scanMember(s scanner) (Member, error) {
 	var m Member
-	if err := s.Scan(&m.ID, &m.Username, &m.Email, &m.DisplayName,
+	var phone string
+	if err := s.Scan(&m.ID, &m.Username, &m.Email, &phone, &m.PhoneVerified, &m.DisplayName,
 		&m.PrincipalType, &m.Source, &m.Status, &m.Classification, &m.Ceiling,
 		&m.MFARequired, &m.ExpiresAt, &m.LastLoginAt, &m.CreatedAt,
 		&m.DeptID, &m.DeptName, &m.Roles); err != nil {
 		return Member{}, err
 	}
+	m.PhoneMasked = maskPhone(phone)
 	if m.Roles == nil {
 		m.Roles = []string{}
 	}
 	m.CanLogin = m.Status == StatusActive &&
 		(m.ExpiresAt == nil || m.ExpiresAt.After(time.Now()))
 	return m, nil
+}
+
+// maskPhone 只保留前 3 位与后 4 位；非 11 位一律打满星。
+func maskPhone(e164 string) string {
+	s := strings.TrimPrefix(strings.TrimSpace(e164), "+86")
+	if len(s) != 11 {
+		return ""
+	}
+	return s[:3] + "****" + s[7:]
 }
 
 func likePattern(q string) string {

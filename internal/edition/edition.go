@@ -49,6 +49,12 @@ type Spec struct {
 	// （配额、审计量、预览转码队列同时被打满）。
 	FolderUpload bool
 
+	// SmsLogin 表示是否提供"手机号 + 短信验证码"登录。
+	//
+	// 归到专业版及以上：短信按条计费，且需要企业侧的短信服务开通与实名，
+	// 基础版（多为小团队试用）不该被默认拖进这项成本。
+	SmsLogin bool
+
 	// VersionKeep 是每个文件保留的历史版本数上限。
 	VersionKeep int
 	// MaxUploadMB 是单文件上传上限（MB）。
@@ -68,6 +74,7 @@ var matrix = map[Edition]Spec{
 		ShareMail:        false,
 		CustomDomain:     false,
 		FolderUpload:     false,
+		SmsLogin:         false,
 		VersionKeep:      3,
 		MaxUploadMB:      1024,
 		StorageGBPerSeat: 10,

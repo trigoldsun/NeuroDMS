@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
-  clearTokens, deleteAccount, deletionPreview, handoverCandidates, logout,
+  clearTokens, confirmPhoneChange, deleteAccount, deletionPreview, handoverCandidates,
+  logout, requestPhoneChange,
   HttpError, type HandoverCandidate, type HandoverSummary, type Me,
 } from '../api'
 
@@ -14,7 +15,15 @@ import {
 export default function AccountDrawer({ me, onClose }: { me: Me | null; onClose: () => void }) {
   // ui-route-exempt: 抽屉内部的临时分栏（会话/注销），随抽屉一起关闭，
   // 不存在"收藏、分享、后退回到这一栏"的场景；主菜单与列表不适用此豁免。
-  const [tab, setTab] = useState<'session' | 'delete'>('session')
+  const [tab, setTab] = useState<'session' | 'phone' | 'delete'>('session')
+  // 手机号绑定：与邮箱换绑同构（口令 + 新号码验证码）。
+  // 小程序只允许"已验证手机号"的账号登录，这里是唯一的登记入口。
+  const [phone, setPhone] = useState('')
+  const [pw, setPw] = useState('')
+  const [code, setCode] = useState('')
+  const [phoneStep, setPhoneStep] = useState<'input' | 'code'>('input')
+  const [phoneMsg, setPhoneMsg] = useState('')
+  const [phoneBusy, setPhoneBusy] = useState(false)
   const [sum, setSum] = useState<HandoverSummary | null>(null)
   const [cands, setCands] = useState<HandoverCandidate[]>([])
   const [picked, setPicked] = useState('')
@@ -62,6 +71,36 @@ export default function AccountDrawer({ me, onClose }: { me: Me | null; onClose:
     }
   }
 
+  async function onSendPhone() {
+    setPhoneMsg('')
+    setPhoneBusy(true)
+    try {
+      const r = await requestPhoneChange(phone, pw)
+      setPhoneStep('code')
+      setPhoneMsg(`验证码已发送至 ${r.sentTo}，5 分钟内有效`)
+    } catch (err) {
+      setPhoneMsg(err instanceof HttpError ? err.message : '发送失败')
+    } finally {
+      setPhoneBusy(false)
+    }
+  }
+
+  async function onConfirmPhone() {
+    setPhoneMsg('')
+    setPhoneBusy(true)
+    try {
+      const r = await confirmPhoneChange(phone, code)
+      setPhoneMsg(`已绑定 ${r.phoneMasked}，现在可以用手机号登录小程序`)
+      setPhoneStep('input')
+      setCode('')
+      setPw('')
+    } catch (err) {
+      setPhoneMsg(err instanceof HttpError ? err.message : '绑定失败')
+    } finally {
+      setPhoneBusy(false)
+    }
+  }
+
   return (
     <>
       <div className="drawer-backdrop" onClick={onClose} />
@@ -73,6 +112,7 @@ export default function AccountDrawer({ me, onClose }: { me: Me | null; onClose:
 
         <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
           <button className={tab === 'session' ? 'primary' : ''} onClick={() => setTab('session')}>会话</button>
+          <button className={tab === 'phone' ? 'primary' : ''} onClick={() => setTab('phone')}>手机号</button>
           <button className={tab === 'delete' ? 'primary' : ''} onClick={() => setTab('delete')}>注销账号</button>
         </div>
 
@@ -92,6 +132,62 @@ export default function AccountDrawer({ me, onClose }: { me: Me | null; onClose:
             <button className="primary" onClick={() => void logout()} style={{ width: '100%' }}>
               退出登录
             </button>
+          </>
+        )}
+
+        {tab === 'phone' && (
+          <>
+            <p className="hint" style={{ marginTop: 0 }}>
+              当前：
+              {me?.phoneMasked && me.phoneVerified
+                ? <b style={{ color: 'var(--ink)' }}>{me.phoneMasked}</b>
+                : '未绑定'}
+              {me?.phoneMasked && !me.phoneVerified ? '（未验证，不可用于登录）' : ''}
+              <br />
+              手机号用于小程序登录，必须先验证。换绑需要当前口令 + 新号码验证码——
+              拿到会话就能改号，等于把账号交出去，所以两道都不能省。
+            </p>
+            <div className="field">
+              <label htmlFor="phone">新手机号</label>
+              <input
+                id="phone"
+                value={phone}
+                placeholder="13800138000"
+                onChange={(e) => setPhone(e.target.value)}
+                disabled={phoneStep === 'code'}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="phone-pw">当前口令</label>
+              <input
+                id="phone-pw"
+                type="password"
+                value={pw}
+                onChange={(e) => setPw(e.target.value)}
+                disabled={phoneStep === 'code'}
+              />
+            </div>
+            {phoneStep === 'code' && (
+              <div className="field">
+                <label htmlFor="phone-code">验证码</label>
+                <input
+                  id="phone-code"
+                  value={code}
+                  placeholder="6 位数字"
+                  onChange={(e) => setCode(e.target.value)}
+                />
+              </div>
+            )}
+            {phoneMsg && <div className="hint" style={{ marginBottom: 10 }}>{phoneMsg}</div>}
+            {phoneStep === 'input' ? (
+              <button className="primary" style={{ width: '100%' }} disabled={phoneBusy || !phone || !pw} onClick={() => void onSendPhone()}>
+                {phoneBusy ? '发送中…' : '发送验证码'}
+              </button>
+            ) : (
+              <button className="primary" style={{ width: '100%' }} disabled={phoneBusy || code.length < 4} onClick={() => void onConfirmPhone()}>
+                {phoneBusy ? '校验中…' : '确认绑定'}
+              </button>
+            )}
           </>
         )}
 

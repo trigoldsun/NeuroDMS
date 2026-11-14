@@ -38,6 +38,8 @@ func (a *API) handleMyCapabilities(w http.ResponseWriter, r *http.Request) {
 	// folderUpload 是"档位允许 **且** 租户已开启"的结果；
 	// folderUploadAllowed 只表示档位允许，用来决定设置页的开关是否可点。
 	folderUpload := false
+	// smsLogin：档位允许 + 租户开启 + 通道就绪，三者缺一不可
+	smsLogin := false
 	if pol, perr := a.tenantPolicy(r.Context(), c.TenantID); perr == nil {
 		policyKeep, policyMB = pol.VersionKeep, pol.MaxUploadMB
 		if pol.UploadTimeoutSeconds > 0 {
@@ -45,6 +47,7 @@ func (a *API) handleMyCapabilities(w http.ResponseWriter, r *http.Request) {
 		}
 		allowedExts = pol.AllowedExts
 		folderUpload = st.Spec.FolderUpload && pol.FolderUpload
+		smsLogin = st.Spec.SmsLogin && pol.SmsLogin && a.SMSConfigured
 	}
 
 	var expires any
@@ -67,9 +70,13 @@ func (a *API) handleMyCapabilities(w http.ResponseWriter, r *http.Request) {
 			"customDomain":   st.Spec.CustomDomain,
 			// folderUpload：整目录上传此刻是否可用（档位允许 + 租户已开启）
 			"folderUpload": folderUpload,
+			"smsLogin":     smsLogin,
 		},
 		// 档位层面是否允许（租户关掉时它仍为 true，便于设置页提示"可开启"）
-		"folderUploadAllowed":  st.Spec.FolderUpload,
+		"folderUploadAllowed": st.Spec.FolderUpload,
+		// 短信登录是否具备开通条件（档位 + 通道）。必须与"当前生效值"分开：
+		// 只用有效值判断，设置页在关闭状态下永远是灰的，点了也没法开通。
+		"smsLoginAllowed":      st.Spec.SmsLogin && a.SMSConfigured,
 		"classificationLevels": st.SelectableClasses(),
 		"limits": map[string]any{
 			"versionKeep": st.EffectiveVersionKeep(policyKeep),

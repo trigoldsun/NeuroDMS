@@ -80,6 +80,8 @@ type TenantPolicy = {
   allowedExts: string[] | null
   // 是否启用"整目录上传"（增值功能，默认关）
   folderUpload: boolean
+  // 手机号验证码登录（增值功能，默认关）
+  smsLogin: boolean
 }
 
 // 格式目录来自服务端 /v1/meta/formats。
@@ -145,7 +147,7 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
   const [caps, setCaps] = useState<Capabilities | null>(null)
   const [tpolicy, setTpolicy] = useState<TenantPolicy>({
     shareDefaultExpireDays: 0, maxUploadMB: 0, auditRetentionDays: 730,
-    uploadTimeoutSeconds: 300, allowedExts: null, folderUpload: false,
+    uploadTimeoutSeconds: 300, allowedExts: null, folderUpload: false, smsLogin: false,
   })
   // 服务端下发的格式目录（含预览能力）；拉不到时设置页仍可手填，只是没有勾选列表
   const [catalog, setCatalog] = useState<FormatCatalog | null>(null)
@@ -259,6 +261,7 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
           uploadTimeoutSeconds: d.uploadTimeoutSeconds || 300,
           allowedExts: d.allowedExts ?? null,
           folderUpload: d.folderUpload ?? false,
+          smsLogin: d.smsLogin ?? false,
         })
         // 清单单独拉：拉失败不该连带让整页报错，用户仍能改超时等其它项
         try {
@@ -746,6 +749,32 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
                     </div>
                   </>
                 )}
+              </div>
+
+              <div className="card pad">
+                <h3 style={{ marginTop: 0, marginBottom: 10 }}>登录方式</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '180px 240px 1fr', gap: 10, alignItems: 'center' }}>
+                  <label htmlFor="pol-sms">手机验证码登录</label>
+                  <label htmlFor="pol-sms" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: caps?.smsLoginAllowed ? 'pointer' : 'not-allowed' }}>
+                    <input
+                      id="pol-sms"
+                      type="checkbox"
+                      checked={tpolicy.smsLogin}
+                      disabled={!caps?.smsLoginAllowed}
+                      onChange={(e) => setTpolicy((p) => ({ ...p, smsLogin: e.target.checked }))}
+                    />
+                    <span style={{ fontSize: 12.5, color: tpolicy.smsLogin ? 'var(--forest-d)' : 'var(--slate)' }}>
+                      {tpolicy.smsLogin ? '已启用' : '未启用'}
+                    </span>
+                    <span className="badge brand" style={{ height: 17 }}>增值功能</span>
+                  </label>
+                  <span className="hint">
+                    {caps && !caps.smsLoginAllowed
+                      ? <>未满足开通条件：需专业版及以上、通道已配置，并在此开启。开启后用户可用「手机号 + 验证码」登录（短信按条计费）。</>
+                      : <>允许已登记手机号的账号用「手机号 + 验证码」登录；默认关闭，开启即按条计费。<br />
+                        小程序登录始终要求手机号已验证，与此开关无关。</>}
+                  </span>
+                </div>
               </div>
 
               <div className="card pad">

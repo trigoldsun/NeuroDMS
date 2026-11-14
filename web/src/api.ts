@@ -127,9 +127,13 @@ export type Capabilities = {
     customDomain: boolean
     // 整目录上传此刻是否可用（档位允许 + 租户已开启）
     folderUpload: boolean
+    // 短信验证码登录：档位 + 租户开关 + 通道就绪，三者都满足才为 true
+    smsLogin: boolean
   }
   // 档位层面是否允许（租户关掉时仍为 true，用于设置页提示"可开启"）
   folderUploadAllowed: boolean
+  // 短信登录是否具备开通条件（档位 + 通道）；与 capabilities.smsLogin（当前生效值）区分
+  smsLoginAllowed: boolean
   classificationLevels: number[] | null
   limits: {
     versionKeep: number
@@ -235,12 +239,26 @@ export function del<T = unknown>(path: string): Promise<T> {
 export type Me = {
   userId: string
   tenantId: string
+  tenantSlug: string
+  tenantName: string
   username: string
   displayName: string
   email: string
+  // 手机号只回掩码：界面展示"有没有绑"，不需要完整号码
+  phoneMasked: string
+  phoneVerified: boolean
   classification: number
   ceiling: number
   roles: string[]
+}
+
+// 手机号换绑：口令 + 新号码验证码，与邮箱换绑同构。
+export function requestPhoneChange(phone: string, password: string): Promise<{ sentTo: string; next: string }> {
+  return postJSON('/v1/me/phone/request', { phone, password })
+}
+
+export function confirmPhoneChange(phone: string, code: string): Promise<{ phoneMasked: string; phoneVerified: boolean }> {
+  return postJSON('/v1/me/phone/confirm', { phone, code })
 }
 
 export function fetchMe(): Promise<Me> {
