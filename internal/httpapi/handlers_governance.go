@@ -79,11 +79,13 @@ func (a *API) handlePatchACL(w http.ResponseWriter, r *http.Request) {
 
 	// 先定位 ACE 所属对象，再按对象判 manage_acl
 	var objectType, objectID string
+	// 旧档位一起取：权限从"可管理"降到"只读"是事后最常被追问的一类变更
+	var oldPreset string
 	var err error
 	err = db.WithTenant(r.Context(), a.Pool, c.TenantID, func(tx pgx.Tx) error {
 		return tx.QueryRow(r.Context(),
-			`SELECT object_type, object_id::text FROM ace WHERE id = $1`, aceID).
-			Scan(&objectType, &objectID)
+			`SELECT object_type, object_id::text, COALESCE(preset, '') FROM ace WHERE id = $1`, aceID).
+			Scan(&objectType, &objectID, &oldPreset)
 	})
 	if err != nil {
 		writeErr(w, r, http.StatusNotFound, "NOT_FOUND", "权限条目不存在")
@@ -129,10 +131,18 @@ func (a *API) handlePatchACL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	detail := auditDiff(
+		map[string]any{"preset": oldPreset},
+		map[string]any{"preset": req.Preset},
+	)
+	detail["aceId"] = aceID
+	if req.ExpiresInHours != 0 || req.ClearExpiry {
+		detail["expiresInHours"] = req.ExpiresInHours
+		detail["clearExpiry"] = req.ClearExpiry
+	}
 	if err := a.emit(r, c.TenantID, AuditEntry{
 		ActorID: c.Subject, Action: "acl.update", ObjectID: objectID, Result: "ok",
-		Detail: map[string]any{"aceId": aceID, "preset": req.Preset,
-			"expiresInHours": req.ExpiresInHours, "clearExpiry": req.ClearExpiry},
+		Detail: detail,
 	}); err != nil {
 		writeErr(w, r, http.StatusInternalServerError, "AUDIT_FAILED", "审计写入失败，操作已拒绝")
 		return

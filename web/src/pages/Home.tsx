@@ -94,6 +94,55 @@ function greeting(): string {
   return '晚上好'
 }
 
+// 手册入口按"账号类型"排好。
+//
+// 为什么不是只给一个"打开手册"按钮：手册有四份（场景/角色/管理员/中心），
+// 用户点开中心页还要再判断"我该看哪一本"。这里直接按角色给出该看的章节，
+// 普通成员与三类管理员各一组；管理员同时保留成员那组——他也要用文件。
+const MANUAL = '/manual'
+
+type GuideGroup = { who: string; links: { label: string; href: string }[] }
+
+function guideGroups(roles: string[]): GuideGroup[] {
+  const out: GuideGroup[] = [{
+    who: '普通成员',
+    links: [
+      { label: '快速上手', href: `${MANUAL}/scenarios.html#s1` },
+      { label: '外发分享', href: `${MANUAL}/scenarios.html#s5` },
+      { label: '我的角色能做什么', href: `${MANUAL}/roles.html#matrix` },
+    ],
+  }]
+  if (roles.includes('sysadmin')) {
+    out.push({
+      who: '系统管理员',
+      links: [
+        { label: '系统设置每个参数', href: `${MANUAL}/admin.html#settings` },
+        { label: '邮件服务', href: `${MANUAL}/admin.html#p-mail` },
+        { label: '空间台账与移交', href: `${MANUAL}/admin.html#spaces` },
+      ],
+    })
+  }
+  if (roles.includes('secadmin')) {
+    out.push({
+      who: '安全管理员',
+      links: [
+        { label: '密级与标签策略', href: `${MANUAL}/admin.html#class` },
+        { label: '外发审批', href: `${MANUAL}/admin.html#share-approve` },
+      ],
+    })
+  }
+  if (roles.includes('auditor')) {
+    out.push({
+      who: '审计管理员',
+      links: [
+        { label: '审计与证据', href: `${MANUAL}/admin.html#audit` },
+        { label: '三权分立', href: `${MANUAL}/roles.html#separation` },
+      ],
+    })
+  }
+  return out
+}
+
 function iconFor(name: string): string {
   const ext = name.split('.').pop()?.toLowerCase() ?? ''
   if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'heic', 'bmp', 'svg', 'tif', 'tiff'].includes(ext)) return 'file'
@@ -186,6 +235,31 @@ export default function Home() {
             <span>{err}</span>
           </div>
         )}
+
+        {/* 使用手册：登录后第一屏就能看到，按账号类型给出该看的章节 */}
+        <section className="guide-band" aria-label="使用手册">
+          <span className="gb-ico"><Icon name="book" size={17} /></span>
+          <div className="gb-txt">
+            <b>使用手册</b>
+            <span>{roles.length > 0 ? '按你的角色挑好了章节' : '从这里开始'}</span>
+          </div>
+          <div className="gb-links">
+            {guideGroups(roles).map((g) => (
+              <div className="gb-group" key={g.who}>
+                <span className="gb-role">{g.who}</span>
+                {g.links.map((l) => (
+                  <a className="gb-link" key={l.href + l.label} href={l.href} target="_blank" rel="noopener">
+                    {l.label}
+                    <Icon name="external" size={11} />
+                  </a>
+                ))}
+              </div>
+            ))}
+          </div>
+          <a className="gb-all" href={`${MANUAL}/`} target="_blank" rel="noopener">
+            手册中心 ›
+          </a>
+        </section>
 
         {/* 待办：有才显示，避免首页永远挂一块空区块 */}
         {todos.length > 0 && (

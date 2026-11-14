@@ -203,6 +203,14 @@ func (a *API) handleMemberUpdate(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &in) {
 		return
 	}
+	// 改前值：成员的密级/档位决定他能看到什么，改错一次就是一次越权，
+	// 所以必须能回答"从几级调到几级"。
+	// 读失败就给 nil：审计会显示"— → 新值"，而不是编一个 0 级当作旧值
+	prev, perr := a.IAM.Get(r.Context(), c.TenantID, id)
+	var beforeSnap map[string]any
+	if perr == nil {
+		beforeSnap = memberSnapshot(prev)
+	}
 	m, err := a.IAM.Update(r.Context(), c.TenantID, c.Subject, id, in)
 	if err != nil {
 		a.iamErr(w, r, c.TenantID, "admin.member.update", id, err)
@@ -210,8 +218,7 @@ func (a *API) handleMemberUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = a.emit(r, c.TenantID, AuditEntry{
 		ActorID: c.Subject, Action: "admin.member.update", ObjectID: id, Result: "ok",
-		Detail: map[string]any{"classification": m.Classification, "ceiling": m.Ceiling,
-			"deptId": m.DeptID, "mfaRequired": m.MFARequired},
+		Detail: auditDiff(beforeSnap, memberSnapshot(m)),
 	})
 	writeOK(w, r, m)
 }
@@ -228,6 +235,7 @@ func (a *API) handleMemberStatus(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &req) {
 		return
 	}
+	prev, perr := a.IAM.Get(r.Context(), c.TenantID, id)
 	m, err := a.IAM.SetStatus(r.Context(), c.TenantID, c.Subject, id, req.Status)
 	if err != nil {
 		// 名下还有空间：不能只回一句"失败"，要把清单交回去，
@@ -245,9 +253,16 @@ func (a *API) handleMemberStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// 停用会吊销会话，这个事实必须留痕：否则事后无法解释"某人为什么突然掉线"
+	var beforeStatus map[string]any
+	if perr == nil {
+		beforeStatus = map[string]any{"status": prev.Status}
+	}
+	statusDetail := auditDiff(beforeStatus, map[string]any{"status": m.Status})
+	// 停用会吊销会话，这个事实必须留痕：否则事后无法解释"某人为什么突然掉线"
+	statusDetail["sessionsRevoked"] = m.Status != iam.StatusActive
 	if err := a.emit(r, c.TenantID, AuditEntry{
 		ActorID: c.Subject, Action: "admin.member.status", ObjectID: id, Result: "ok",
-		Detail: map[string]any{"status": m.Status, "sessionsRevoked": m.Status != iam.StatusActive},
+		Detail: statusDetail,
 	}); err != nil {
 		writeErr(w, r, http.StatusInternalServerError, "AUDIT_FAILED", "审计写入失败")
 		return
@@ -411,4 +426,16 @@ func writeOwnsSpaces(w http.ResponseWriter, r *http.Request, oe *iam.OwnsSpacesE
 		"requestId": httpmw.RequestIDFrom(r.Context()),
 		"data":      map[string]any{"spaces": oe.Spaces, "count": len(oe.Spaces)},
 	})
+}
+
+// memberSnapshot 取成员配置里"会改变可见范围"的字段。
+//
+// 用户名、邮箱不进来：它们不决定权限，且频繁变更时会淹没真正的越权改动。
+func memberSnapshot(m iam.Member) map[string]any {
+	return map[string]any{
+		"classification": m.Classification,
+		"ceiling":        m.Ceiling,
+		"deptId":         m.DeptID,
+		"mfaRequired":    m.MFARequired,
+	}
 }

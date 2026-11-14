@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import Members from './Members'
 import ActivityTable from './ActivityTable'
 import DirectorySettings from './DirectorySettings'
@@ -8,6 +8,7 @@ import { api, postJSON, fetchMe, applyTheme, cycleTheme, getBranding, saveBrandi
 import { Shell } from '../components/Shell'
 import { AdminSpaces } from './AdminSpaces'
 import { Icon, InfoDot } from '../components/ui'
+import AuditDetail, { changeSummary } from '../components/AuditDetail'
 import { actionLabel } from '../activity'
 
 type Summary = { users: number; spaces: number; nodes: number; files: number; usedBytes: number; generatedAt: string }
@@ -127,6 +128,8 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
 
   const [events, setEvents] = useState<AuditEvent[]>([])
   const [auditFilter, setAuditFilter] = useState({ action: '', result: '' })
+  // 展开的是哪一条（按 seq）：审计要能就地看到改前改后，而不是再点一次跳转
+  const [openAudit, setOpenAudit] = useState<number | null>(null)
   const [chainOK, setChainOK] = useState<boolean | null>(null)
 
   const [classes, setClasses] = useState<ClassLabel[]>([])
@@ -514,32 +517,68 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
               </div>
               <table>
                 <thead>
-                  <tr><th style={{ width: 70 }}>序号</th><th style={{ width: 180 }}>时间</th><th style={{ width: 190 }}>动作</th><th>对象</th><th style={{ width: 80 }}>结果</th><th style={{ width: 140 }}>来源 IP</th><th style={{ width: 150 }}>操作人</th></tr>
+                  <tr><th style={{ width: 70 }}>序号</th><th style={{ width: 172 }}>时间</th><th style={{ width: 190 }}>动作</th><th style={{ width: 170 }}>对象</th><th>参数变化（改前 → 改后）</th><th style={{ width: 76 }}>结果</th><th style={{ width: 132 }}>来源 IP</th><th style={{ width: 140 }}>操作人</th></tr>
                 </thead>
                 <tbody>
                   {events.length === 0 ? (
-                    <tr><td colSpan={7}><div className="empty">没有符合条件的审计事件</div></td></tr>
-                  ) : events.map((e) => (
-                    <tr key={e.seq}>
-                      <td className="tnum">{e.seq}</td>
-                      <td className="tnum">{new Date(e.createdAt).toLocaleString('zh-CN')}</td>
-                      <td>
-                        <div>{actionLabel(e.action)}</div>
-                        <div className="hint" style={{ fontSize: 11 }}>{e.action}</div>
-                      </td>
-                      <td style={{ fontSize: 12.5 }}>
-                        {e.objectName
-                          || (e.objectId ? <span className="dim">对象已删除</span> : <span className="dim">—</span>)}
-                      </td>
-                      <td>{resultBadge(e.result)}</td>
-                      <td className="tnum hint">{e.ip || '—'}</td>
-                      <td>
-                        {e.actorType === 'system' ? '系统'
-                          : e.actorType === 'anonymous' ? '匿名访客'
-                            : (e.actorName || <span className="dim">账号已删除</span>)}
-                      </td>
-                    </tr>
-                  ))}
+                    <tr><td colSpan={8}><div className="empty">没有符合条件的审计事件</div></td></tr>
+                  ) : events.map((e) => {
+                    const summary = changeSummary(e.detail)
+                    const open = openAudit === e.seq
+                    const hasDetail = !!e.detail && Object.keys(e.detail).length > 0
+                    return (
+                      <Fragment key={e.seq}>
+                        <tr>
+                          <td className="tnum">{e.seq}</td>
+                          <td className="tnum">{new Date(e.createdAt).toLocaleString('zh-CN')}</td>
+                          <td>
+                            <div>{actionLabel(e.action)}</div>
+                            <div className="hint" style={{ fontSize: 11 }}>{e.action}</div>
+                          </td>
+                          <td style={{ fontSize: 12.5 }}>
+                            {e.objectName
+                              || (e.objectId ? <span className="dim">对象已删除</span> : <span className="dim">—</span>)}
+                          </td>
+                          <td style={{ fontSize: 12.5 }}>
+                            {summary ? (
+                              <button
+                                className={`row-toggle${open ? ' on' : ''}`}
+                                style={{ display: 'block', textAlign: 'left', lineHeight: 1.55, padding: 0 }}
+                                title="展开完整明细"
+                                onClick={() => setOpenAudit(open ? null : e.seq)}
+                              >
+                                {summary}
+                                <Icon name={open ? 'chevronUp' : 'chevronDown'} size={12} />
+                              </button>
+                            ) : hasDetail ? (
+                              <button
+                                className={`row-toggle${open ? ' on' : ''}`}
+                                onClick={() => setOpenAudit(open ? null : e.seq)}
+                              >
+                                查看明细
+                              </button>
+                            ) : (
+                              <span className="dim">—</span>
+                            )}
+                          </td>
+                          <td>{resultBadge(e.result)}</td>
+                          <td className="tnum hint">{e.ip || '—'}</td>
+                          <td>
+                            {e.actorType === 'system' ? '系统'
+                              : e.actorType === 'anonymous' ? '匿名访客'
+                                : (e.actorName || <span className="dim">账号已删除</span>)}
+                          </td>
+                        </tr>
+                        {open && hasDetail && (
+                          <tr className="audit-expand">
+                            <td colSpan={8}>
+                              <AuditDetail detail={e.detail} compact />
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    )
+                  })}
                 </tbody>
               </table>
               <div className="hint">审计只可查询与校验，任何修改都会破坏哈希链并被检出。</div>

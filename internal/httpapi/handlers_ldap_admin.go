@@ -93,6 +93,9 @@ func (a *API) handlePutDirectory(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// 改前值必须在 Save 之前读（Save 会覆盖同一行）
+	beforeCfg, _ := a.Directory.Load(r.Context(), c.TenantID)
+
 	saved, err := a.Directory.Save(r.Context(), c.TenantID, c.Subject, in)
 	if err != nil {
 		switch {
@@ -112,15 +115,21 @@ func (a *API) handlePutDirectory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	host, port := ldapHostPort(saved.URL)
+	// 目录配置决定"谁能登录"，是最高危的一类参数变更：
+	// 只记新值无法回答"是不是有人把 baseDn 换成了另一个组织"。
+	// 域口令不进 detail（那等于把服务账号交出去），只记"换过"。
+	detail := auditDiff(directorySnapshot(beforeCfg), directorySnapshot(saved))
+	detail["host"], detail["port"] = host, port
+	detail["plaintext"] = !saved.StartTLS && !strings.HasPrefix(saved.URL, "ldaps://")
+	if in.BindPassword != "" {
+		detail["bindPasswordChanged"] = true
+	}
+	if strings.TrimSpace(in.CAPEM) != "" && in.CAPEM != beforeCfg.CAPEM {
+		detail["caChanged"] = true
+	}
 	_ = a.emit(r, c.TenantID, AuditEntry{
 		ActorID: c.Subject, Action: "directory.config.update", Result: "ok",
-		Detail: map[string]any{
-			"enabled": saved.Enabled, "host": host, "port": port,
-			"baseDn": saved.BaseDN, "adMode": saved.ADMode,
-			"startTls":  saved.StartTLS,
-			"plaintext": !saved.StartTLS && !strings.HasPrefix(saved.URL, "ldaps://"),
-			"syncEvery": saved.SyncIntervalMinutes,
-		},
+		Detail: detail,
 	})
 	writeOK(w, r, publicDirectoryView(saved))
 }
@@ -255,4 +264,30 @@ func ldapHostPort(raw string) (string, int) {
 		port = 389
 	}
 	return u.Hostname(), port
+}
+
+// directorySnapshot 取目录配置里"可比较且不含口令"的字段。
+//
+// BindPassword 永不进审计；CA 是证书正文，同样只记"换过"。
+func directorySnapshot(s directory.Settings) map[string]any {
+	exclude := s.ExcludeAccounts
+	if exclude == nil {
+		exclude = []string{}
+	}
+	return map[string]any{
+		"enabled":             s.Enabled,
+		"url":                 s.URL,
+		"startTls":            s.StartTLS,
+		"insecureSkipVerify":  s.InsecureSkipVerify,
+		"tlsName":             s.TLSName,
+		"bindDn":              s.BindDN,
+		"baseDn":              s.BaseDN,
+		"userFilter":          s.UserFilter,
+		"syncFilter":          s.SyncFilter,
+		"groupFilter":         s.GroupFilter,
+		"excludeAccounts":     append([]string{}, exclude...),
+		"adMode":              s.ADMode,
+		"allowPlaintext":      s.AllowPlaintext,
+		"syncIntervalMinutes": s.SyncIntervalMinutes,
+	}
 }

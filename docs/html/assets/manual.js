@@ -206,6 +206,34 @@
     });
   }
 
+  /* ---------- 品牌名：跟随租户配置 ----------
+     手册现在是应用托管的静态页（/manual/），同一个实例下不同租户看到的
+     系统名称可能不同。这里读一次公开品牌接口把顶栏与标题换掉；
+     用 file:// 直接打开手册时请求会失败，失败就保留默认名，属于预期行为。 */
+  (function applyTenantBrand() {
+    const el = document.querySelector('[data-brand-name]');
+    if (!el || !location.protocol.startsWith('http')) return;
+    // 品牌是租户级的：同一个实例下 A 租户叫【甲公司】、B 租户叫【乙公司】。
+    // 手册是静态页，拿不到令牌，所以按 slug 读公开品牌接口；
+    // slug 优先取 URL 参数（外部链接可显式指定），否则用登录页记住的那个。
+    let slug = '';
+    try {
+      slug = (new URLSearchParams(location.search).get('slug') || localStorage.getItem('dv_tenant') || '').trim();
+    } catch (e) { /* 隐私模式下 localStorage 可能抛错，忽略 */ }
+    const url = '/v1/tenant/branding' + (slug ? '?slug=' + encodeURIComponent(slug) : '');
+    fetch(url, { headers: { accept: 'application/json' } })
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => {
+        const name = (j && j.data && j.data.productName || '').trim();
+        if (!name) return;
+        el.textContent = name;
+        if (document.title.indexOf('NeuroDMS') === 0) {
+          document.title = name + document.title.slice('NeuroDMS'.length);
+        }
+      })
+      .catch(() => {});
+  })();
+
   /* ---------- 流程图 ---------- */
   document.querySelectorAll('.flow[data-flow]').forEach(el => {
     const spec = window.FLOWS && window.FLOWS[el.dataset.flow];

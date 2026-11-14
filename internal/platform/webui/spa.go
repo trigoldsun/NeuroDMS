@@ -74,9 +74,20 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if st, err := os.Stat(abs); err == nil && !st.IsDir() {
-		http.ServeFile(w, r, abs)
-		return
+	if st, err := os.Stat(abs); err == nil {
+		if !st.IsDir() {
+			http.ServeFile(w, r, abs)
+			return
+		}
+		// 目录请求（例如 /manual/）优先给它的 index.html。
+		//
+		// 不这么做会落到下面的 SPA 回退：从工作台点"使用手册"，打开的却是
+		// 应用首页——比 404 更让人困惑，因为界面上完全看不出哪里错了。
+		idx := filepath.Join(abs, "index.html")
+		if ist, e := os.Stat(idx); e == nil && !ist.IsDir() {
+			http.ServeFile(w, r, idx)
+			return
+		}
 	}
 
 	// SPA 回退：入口 HTML 不缓存，避免发版后用户仍拿到旧页面

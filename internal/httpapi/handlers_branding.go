@@ -72,6 +72,9 @@ func (a *API) handlePutBranding(w http.ResponseWriter, r *http.Request) {
 		}
 		req.Logo = raw
 	}
+	// 改前值必须在 Update 之前读：Update 之后库里已经是新值，
+	// 再"读旧值"只会读到新值，审计就变成两侧相同的假对照。
+	beforeBrand := a.brandingSnapshot(r.Context(), c.TenantID)
 	if err := a.Tenants.UpdateBranding(r.Context(), c.TenantID, req.BrandingInput); err != nil {
 		if errors.Is(err, tenant.ErrInvalidInput) {
 			writeErr(w, r, http.StatusBadRequest, "INVALID_ARGUMENT", err.Error())
@@ -81,10 +84,23 @@ func (a *API) handlePutBranding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 品牌是"所有分享页都会变"的配置，必须留痕且能追到人
+	// 品牌是"所有分享页都会变"的配置，必须留痕且能追到人。
+	// 记改动前后：只记"改过"回答不了"改成什么了"，而品牌名会印在
+	// 邮件主题与分享页页眉上，事后追查时需要精确值。
+	detail := auditDiff(beforeBrand, map[string]any{
+		"productName":  req.ProductName,
+		"primaryColor": req.PrimaryColor,
+		"accentColor":  req.AccentColor,
+		"footerText":   req.FooterText,
+		"privacyUrl":   req.PrivacyURL,
+	})
+	if len(req.Logo) > 0 {
+		// Logo 是二进制，不放进 before/after（会撑爆审计行），只记"换了"
+		detail["logoChanged"] = true
+	}
 	if err := a.emit(r, c.TenantID, AuditEntry{
 		ActorID: c.Subject, Action: "tenant.branding.update", Result: "ok",
-		Detail: map[string]any{"productName": req.ProductName},
+		Detail: detail,
 	}); err != nil {
 		writeErr(w, r, http.StatusInternalServerError, "AUDIT_FAILED", "审计写入失败，配置未生效")
 		return
@@ -102,6 +118,31 @@ func stripDataURL(s string) string {
 		return s[i+1:]
 	}
 	return s
+}
+
+// brandingSnapshot 取品牌里"可修改且会被展示"的几个字段，用于审计前后对照。
+//
+// 读失败返回 nil：审计会退化成"只有新值"，但配置保存本身不受影响——
+// 不能因为审计取不到旧值就把一次正常的配置变更拒掉。
+func (a *API) brandingSnapshot(ctx context.Context, tenantID string) map[string]any {
+	if a.Tenants == nil {
+		return nil
+	}
+	slug, err := a.Tenants.SlugOf(ctx, tenantID)
+	if err != nil {
+		return nil
+	}
+	b, err := a.Tenants.BrandingBySlug(ctx, slug)
+	if err != nil {
+		return nil
+	}
+	return map[string]any{
+		"productName":  b.ProductName,
+		"primaryColor": b.PrimaryColor,
+		"accentColor":  b.AccentColor,
+		"footerText":   b.FooterText,
+		"privacyUrl":   b.PrivacyURL,
+	}
 }
 
 // ---------------- 策略 ----------------
@@ -122,6 +163,7 @@ func (a *API) handlePutPolicy(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &p) {
 		return
 	}
+	before, _ := a.Tenants.GetPolicy(r.Context(), c.TenantID)
 	effective, err := a.Tenants.SetPolicy(r.Context(), c.TenantID, p)
 	if err != nil {
 		if errors.Is(err, tenant.ErrInvalidInput) {
@@ -132,13 +174,22 @@ func (a *API) handlePutPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p = effective
+	// 策略是"最容易在事后被质疑"的一组参数（上传上限、日志保留期），
+	// 必须能回答"谁在几号把它从多少改成了多少"。
+	// 两侧都换成生效值：SetPolicy 会把 0 落成默认值，
+	// 直接比 0 与 10 会把"原样保存"记成一次变更。
+	oldMap, newMap := jsonMap(before.WithDefaults()), jsonMap(p.WithDefaults())
+	// allowedExts 带 omitempty：清空白名单时键会消失，两侧都补成 [] 才能比对出变化
+	for _, m := range []map[string]any{oldMap, newMap} {
+		if m != nil {
+			if _, ok := m["allowedExts"]; !ok {
+				m["allowedExts"] = []string{}
+			}
+		}
+	}
 	_ = a.emit(r, c.TenantID, AuditEntry{
 		ActorID: c.Subject, Action: "tenant.policy.update", Result: "ok",
-		Detail: map[string]any{
-			"shareDefaultExpireDays": p.ShareDefaultExpireDays,
-			"maxUploadMB":            p.MaxUploadMB,
-			"auditRetentionDays":     p.AuditRetentionDays,
-		},
+		Detail: auditDiff(oldMap, newMap),
 	})
 	writeOK(w, r, p)
 }

@@ -296,6 +296,27 @@ func PolicyFor(ctx context.Context, tx pgx.Tx, tenantID string) (Policy, error) 
 	return p, nil
 }
 
+// WithDefaults 把"0 = 用系统默认"的字段填成生效值。
+//
+// 用途是与 SetPolicy 的落库值对齐：保存时它会把 0 换成默认值，
+// 若审计拿"读取值（0）"去比"落库值（10）"，用户原样保存一次
+// 也会被记成"版本保留数 0 → 10"的假变更。
+//
+// 刻意不做范围校验：只补默认值，校验仍由 SetPolicy 负责，
+// 这里被错用也不会放过非法值。
+func (p Policy) WithDefaults() Policy {
+	if p.VersionKeep == 0 {
+		p.VersionKeep = DefaultVersionKeep
+	}
+	if p.AuditRetentionDays == 0 {
+		p.AuditRetentionDays = DefaultAuditRetentionDays
+	}
+	if p.UploadTimeoutSeconds == 0 {
+		p.UploadTimeoutSeconds = DefaultUploadTimeoutSeconds
+	}
+	return p
+}
+
 // AllowsExt 判断文件名是否在白名单内。白名单为空表示不限制。
 func (p Policy) AllowsExt(name string) bool {
 	if len(p.AllowedExts) == 0 {

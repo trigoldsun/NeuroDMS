@@ -345,7 +345,14 @@ func (a *API) handleSetUserExpiry(w http.ResponseWriter, r *http.Request) {
 		expires = &t
 	}
 
+	var oldExpires *time.Time
 	err := db.WithTenant(r.Context(), a.Pool, c.TenantID, func(tx pgx.Tx) error {
+		// 先读旧有效期：账号延期/提前失效是常见的"事后说不清"操作
+		if e := tx.QueryRow(r.Context(),
+			`SELECT expires_at FROM app_user WHERE id = $1 AND deleted_at IS NULL`,
+			userID).Scan(&oldExpires); e != nil {
+			return e
+		}
 		ct, e := tx.Exec(r.Context(), `
 			UPDATE app_user SET expires_at = $2, updated_at = now()
 			 WHERE id = $1 AND deleted_at IS NULL`, userID, expires)
@@ -373,7 +380,10 @@ func (a *API) handleSetUserExpiry(w http.ResponseWriter, r *http.Request) {
 
 	_ = a.emit(r, c.TenantID, AuditEntry{
 		ActorID: c.Subject, Action: "admin.user.expiry", ObjectID: userID, Result: "ok",
-		Detail: map[string]any{"expiresAt": req.ExpiresAt},
+		Detail: auditDiff(
+			map[string]any{"expiresAt": fmtExpiry(oldExpires)},
+			map[string]any{"expiresAt": fmtExpiry(expires)},
+		),
 	})
 	writeOK(w, r, map[string]any{"userId": userID, "expiresAt": req.ExpiresAt})
 }
@@ -448,4 +458,13 @@ func (a *API) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		ActorID: c.Subject, Action: "admin.user.delete", ObjectID: userID, Result: "ok",
 	})
 	writeOK(w, r, map[string]any{"userId": userID, "deleted": true})
+}
+
+// fmtExpiry 把"可能为空的有效期"转成审计里可读的字符串。
+// nil 表示永不过期，这里用空串而不是 "<nil>"：界面上显示"—"更清楚。
+func fmtExpiry(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
 }

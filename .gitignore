@@ -21,3 +21,7 @@ Thumbs.db
 # 前端依赖与构建产物（npm ci / npm run build 可完整重建，不入快照）
 web/node_modules/
 web/dist/
+# TypeScript 增量编译缓存：本地产物，随 tsc 重新生成
+web/tsconfig.tsbuildinfo
+# 手册产物：由 docs/html 在构建时同步（scripts/sync-manual.mjs），不重复入库
+web/public/manual/

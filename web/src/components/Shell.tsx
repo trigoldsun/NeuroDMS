@@ -81,6 +81,31 @@ export function Shell({
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
+  // 侧栏产品名跟随租户品牌（管理台「系统设置 · 品牌与名称」）。
+  // 硬编码 NeuroDMS 会出现"邮件写【森莘科创】、界面写 NeuroDMS"的分裂，
+  // 而品牌名正是收件人判断"这是不是我们单位的系统"的依据。
+  const [productName, setProductName] = useState('')
+  useEffect(() => {
+    let tenant = ''
+    try { tenant = localStorage.getItem('dv_tenant') || '' } catch { /* 隐私模式 */ }
+    const url = '/v1/tenant/branding' + (tenant ? '?slug=' + encodeURIComponent(tenant) : '')
+    let alive = true
+    fetch(url, { headers: { accept: 'application/json' } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        const n = (j?.data?.productName ?? '').trim()
+        if (alive && n) {
+          setProductName(n)
+          // 页签标题也换掉：多标签页时人靠标题区分系统
+          if (document.title.startsWith('NeuroDMS')) {
+            document.title = n + document.title.slice('NeuroDMS'.length)
+          }
+        }
+      })
+      .catch(() => { /* 读不到就用默认名，不影响使用 */ })
+    return () => { alive = false }
+  }, [])
+
   return (
     <div className="app">
       <aside className="side">
@@ -89,7 +114,7 @@ export function Shell({
         <a className="side-brand" href="/home" title="回到工作台" onClick={(e) => { e.preventDefault(); navigate('/home') }}>
           <Mark size={30} />
           <span className="word">
-            <b>NeuroDMS</b>
+            <b>{productName || 'NeuroDMS'}</b>
             <span className="tenant">受控文档 · 全程留痕</span>
           </span>
         </a>
@@ -159,6 +184,13 @@ export function Shell({
                   <span className="ico"><Icon name="share" size={16} /></span>
                   <span className="txt">我的分享</span>
                 </button>
+                {/* 手册是独立的静态页（docs/html 构建时同步到 /manual），
+                    用真实链接而不是前端路由：它能被新标签页打开、能收藏、能打印。 */}
+                <a className="nav-item" href="/manual/" target="_blank" rel="noopener">
+                  <span className="ico"><Icon name="book" size={16} /></span>
+                  <span className="txt">使用手册</span>
+                  <span className="meta"><Icon name="external" size={12} /></span>
+                </a>
                 {me && (me.roles ?? []).length > 0 && (
                   <button className="nav-item" onClick={() => navigate(adminPath(''))}>
                     <span className="ico"><Icon name="shield" size={16} /></span>

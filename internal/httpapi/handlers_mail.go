@@ -140,6 +140,9 @@ func (a *API) handlePutMail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 改前值：Save 会覆盖，必须在它之前读
+	beforeCfg, _ := a.Mail.Load(r.Context(), c.TenantID)
+
 	saved, err := a.Mail.Save(r.Context(), c.TenantID, c.Subject, in)
 	if err != nil {
 		switch {
@@ -155,15 +158,22 @@ func (a *API) handlePutMail(w http.ResponseWriter, r *http.Request) {
 	}
 	a.invalidateMail(c.TenantID)
 
+	// 只记主机与发件地址，不记口令、密钥与用户名（用户名常含个人信息）。
+	// 但这些"不记值"的字段仍然要留一个"是否被改过"的标记：
+	// 否则调查"邮件为什么发不出去"时，无法判断是不是有人换过口令。
+	detail := auditDiff(mailSnapshot(beforeCfg), mailSnapshot(saved))
+	if beforeCfg.SMTPUser != saved.SMTPUser {
+		detail["smtpUserChanged"] = true
+	}
+	if in.SMTPPassword != "" {
+		detail["smtpPasswordChanged"] = true
+	}
+	if in.GraphClientSecret != "" {
+		detail["graphSecretChanged"] = true
+	}
 	if err := a.emit(r, c.TenantID, AuditEntry{
 		ActorID: c.Subject, Action: "mail.config.update", Result: "ok",
-		Detail: map[string]any{
-			"mode": saved.Mode,
-			// 只记主机与发件地址，不记口令、密钥与用户名（用户名常含个人信息）
-			"smtpHost": saved.SMTPHost, "smtpPort": saved.SMTPPort,
-			"smtpTls": saved.SMTPTLS, "from": saved.FromAddr,
-			"graphTenantId": saved.GraphTenantID, "graphSender": saved.GraphSender,
-		},
+		Detail: detail,
 	}); err != nil {
 		writeErr(w, r, http.StatusInternalServerError, "AUDIT_FAILED", "审计写入失败，操作已拒绝")
 		return
@@ -300,4 +310,27 @@ func firstNonEmpty(vals ...string) string {
 		}
 	}
 	return ""
+}
+
+// mailSnapshot 取邮件配置里"可比较且不含机密"的字段。
+//
+// 不含口令、客户端密钥与用户名：前两者进了审计就等于泄密，
+// 后者常含个人信息（hu.zhangsan@corp 这类）。它们的变化用 xxxChanged 标记。
+func mailSnapshot(s notify.Settings) map[string]any {
+	return map[string]any{
+		"mode":               s.Mode,
+		"fromAddr":           s.FromAddr,
+		"fromName":           s.FromName,
+		"replyTo":            s.ReplyTo,
+		"smtpHost":           s.SMTPHost,
+		"smtpPort":           s.SMTPPort,
+		"smtpTls":            s.SMTPTLS,
+		"smtpInsecure":       s.SMTPInsecure,
+		"smtpAllowPlaintext": s.SMTPAllowPlaintext,
+		"graphTenantId":      s.GraphTenantID,
+		"graphClientId":      s.GraphClientID,
+		"graphSender":        s.GraphSender,
+		"graphLoginBase":     s.GraphLoginBase,
+		"graphBase":          s.GraphBase,
+	}
 }

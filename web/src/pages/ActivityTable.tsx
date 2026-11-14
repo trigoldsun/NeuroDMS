@@ -7,6 +7,7 @@ import {
   actionLabel, ADMIN_GROUPS, resultBadgeClass, resultText, RESULT_OPTIONS, USER_GROUPS,
 } from '../activity'
 import { Icon, Tooltip } from '../components/ui'
+import AuditDetail, { changeSummary } from '../components/AuditDetail'
 
 // 日志表格：用户日志与管理日志共用一套交互。
 //
@@ -180,10 +181,10 @@ export default function ActivityTable({ scope }: { scope: 'me' | 'admin' }) {
               <td>
                 {it.detail && Object.keys(it.detail).length > 0 ? (
                   <details>
-                    <summary className="hint" style={{ cursor: 'pointer' }}>查看</summary>
-                    <pre className="preview-text" style={{ maxWidth: 420, maxHeight: 180, overflow: 'auto', fontSize: 11 }}>
-                      {JSON.stringify(it.detail, null, 2)}
-                    </pre>
+                    <summary className="hint" style={{ cursor: 'pointer' }}>
+                      {changeSummary(it.detail) || '查看明细'}
+                    </summary>
+                    <AuditDetail detail={it.detail} compact />
                   </details>
                 ) : '—'}
               </td>

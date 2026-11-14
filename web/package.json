@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "predev": "node scripts/sync-manual.mjs",
+    "prebuild": "node scripts/sync-manual.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview"
   },

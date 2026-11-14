@@ -646,7 +646,8 @@ html[data-theme='dark'] .cls-6 { background: #DDE6DD; color: #0A120E; border-col
   vertical-align: -3px;
 }
 .info-dot:hover { border-color: var(--forest); color: var(--forest); background: transparent; }
-.info-dot svg { width: 11px; height: 11px; }
+/* 图标只画"i"，外圈由按钮的 1px 边框提供——两者都画会出现双圈 */
+.info-dot svg { width: 13px; height: 13px; }
 
 /* 菜单 */
 .menu {
@@ -1415,3 +1416,101 @@ html[data-theme='dark'] *::-webkit-scrollbar-thumb { background: #2C3A32; backgr
   .pdf-pages { max-height: none; overflow: visible; background: none; padding: 0; }
   .pdf-page { box-shadow: none; page-break-after: always; }
 }
+
+/* ---------- 审计明细：改前 / 改后 ---------- */
+/* 目的不是"显示 JSON"，而是让人一眼看出"哪个参数从多少变成了多少"。 */
+.audit-detail { display: flex; flex-direction: column; gap: 10px; }
+.audit-detail.compact { gap: 8px; font-size: 12.5px; }
+.audit-detail .diff {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.audit-detail .diff th,
+.audit-detail .diff td {
+  padding: 7px 10px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 12.5px;
+}
+.audit-detail .diff th {
+  background: var(--surface-3);
+  font-weight: 600;
+  color: var(--ink-2);
+  font-size: 11.5px;
+  letter-spacing: .02em;
+}
+.audit-detail .diff tr:last-child td { border-bottom: 0; }
+.audit-detail .diff td.old { color: var(--slate); text-decoration: line-through; text-decoration-color: var(--line); }
+.audit-detail .diff td.new { color: var(--forest-d); font-weight: 600; }
+.audit-detail .diff .arrow { color: var(--mist); margin-right: 5px; vertical-align: -1px; }
+.audit-detail .extras {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 4px 14px;
+}
+.audit-detail .kv { display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; }
+.audit-detail .kv > span { color: var(--slate); flex: none; }
+.audit-detail .kv > b { font-weight: 600; color: var(--ink-2); word-break: break-all; }
+.audit-detail .dim { color: var(--mist); font-size: 12.5px; }
+
+/* 审计表格的展开行：不要边框线，避免看起来像一条新记录 */
+tr.audit-expand > td { background: var(--surface-2); padding: 10px 14px 12px; }
+button.row-toggle {
+  border: 0; background: transparent; padding: 2px 4px; cursor: pointer;
+  color: var(--mist); display: inline-flex; align-items: center; gap: 3px;
+}
+button.row-toggle:hover { color: var(--forest); }
+button.row-toggle.on { color: var(--forest); }
+
+/* 侧栏里的手册入口是 <a>：去掉链接默认下划线，其余沿用 .nav-item */
+a.nav-item { text-decoration: none; }
+
+/* ---------- 工作台：使用手册 ---------- */
+/* 目的：让"怎么用"随手可得，但不抢"等你处理"的位置。
+   一条横带，角色相关的章节按账号类型排好，不用先想"我该看哪一本"。 */
+.guide-band {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 100%);
+}
+.guide-band .gb-ico {
+  width: 32px; height: 32px; flex: none;
+  display: grid; place-items: center;
+  border-radius: 9px;
+  background: var(--surface-3);
+  color: var(--forest);
+}
+.guide-band .gb-txt { display: flex; flex-direction: column; gap: 2px; min-width: 150px; }
+.guide-band .gb-txt b { font-size: 13.5px; }
+.guide-band .gb-txt span { font-size: 11.5px; color: var(--slate); }
+.guide-band .gb-links { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; }
+.guide-band .gb-group { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.guide-band .gb-role {
+  font-size: 10.5px; letter-spacing: .06em; color: var(--slate);
+  padding: 2px 7px; border-radius: 20px; background: var(--surface-3);
+  border: 1px solid var(--line-soft); white-space: nowrap;
+}
+.guide-band a.gb-link {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 26px; padding: 0 10px;
+  border: 1px solid var(--line); border-radius: 20px;
+  background: var(--surface); color: var(--ink-2);
+  font-size: 12.5px; text-decoration: none;
+}
+.guide-band a.gb-link:hover { border-color: var(--forest); color: var(--forest); }
+.guide-band a.gb-link svg { color: var(--mist); }
+.guide-band a.gb-all {
+  margin-left: auto; font-size: 12.5px; color: var(--forest);
+  text-decoration: none; white-space: nowrap;
+}
+.guide-band a.gb-all:hover { text-decoration: underline; }

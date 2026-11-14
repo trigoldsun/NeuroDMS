@@ -11,7 +11,7 @@
 
 <header class="topbar">
   <div class="topbar-in">
-    <a class="brand" href="index.html"><span class="mark"></span><b>NeuroDMS</b><span>手册</span></a>
+    <a class="brand" href="index.html"><span class="mark"></span><b data-brand-name>NeuroDMS</b><span>手册</span></a>
     <nav class="docnav">
       <a href="index.html">手册中心</a>
       <a href="scenarios.html" aria-current="page">场景操作</a>
@@ -99,12 +99,13 @@
       <span class="chip">入口 <b>登录后自动进入 /home；点左上角产品名随时回来</b></span>
     </div>
 
-    <p>工作台不是"又一个首页"，它按<b>你下一刻要做什么</b>排顺序：待办 → 职责 → 数字 → 最近 → 空间。</p>
+    <p>工作台不是"又一个首页"，它按<b>你下一刻要做什么</b>排顺序：手册 → 待办 → 职责 → 数字 → 最近 → 空间。</p>
 
     <div class="tablewrap">
       <table>
         <thead><tr><th>区块</th><th>回答的问题</th><th>什么时候出现</th></tr></thead>
         <tbody>
+          <tr><td><b>使用手册</b></td><td>这个功能怎么用、我这个角色该看哪一章</td><td>始终显示（最上方）</td></tr>
           <tr><td><b>等你处理</b></td><td>有没有事必须由我拍板（移交确认、外发审批）</td><td>有待办才出现</td></tr>
           <tr><td><b>职责视图</b></td><td>作为管理员，我该关注哪些数字</td><td>有管理角色</td></tr>
           <tr><td><b>关键数字</b></td><td>能进几个空间、占多少存储、最近打开过几个</td><td>有内容或待办</td></tr>
@@ -121,7 +122,8 @@
           <tr><td class="n"><b>1</b></td><td><span class="who user">所有人</span></td><td>先看「等你处理」</td><td>里面每一条都必须由你处理，别人替不了</td></tr>
           <tr><td class="n"><b>2</b></td><td><span class="who user">所有人</span></td><td>点「最近打开」的卡片直接预览</td><td>新页签打开；记录来自你自己的审计日志，同事看不到</td></tr>
           <tr><td class="n"><b>3</b></td><td><span class="who user">所有人</span></td><td>点空间卡片进空间根目录</td><td>卡片上显示所有者与最近更新时间</td></tr>
-          <tr><td class="n"><b>4</b></td><td><span class="who admin">管理员</span></td><td>「职责视图」的橙色/红色提示优先处理</td><td>提示的是"资产没人管"（仅所有者可达 / 孤儿空间），不是"文件多不多"</td></tr>
+          <tr><td class="n"><b>4</b></td><td><span class="who user">所有人</span></td><td>不知道某个功能怎么用，先看最上方的「使用手册」</td><td>链接按账号类型排好：普通成员、系统 / 安全 / 审计管理员各一组；新页签打开对应章节</td></tr>
+          <tr><td class="n"><b>5</b></td><td><span class="who admin">管理员</span></td><td>「职责视图」的橙色/红色提示优先处理</td><td>提示的是"资产没人管"（仅所有者可达 / 孤儿空间），不是"文件多不多"</td></tr>
         </tbody>
       </table>
     </div>
@@ -325,6 +327,15 @@
       <p><b>边界</b>：前端能挡的是"顺手保存"（工具栏、右键、快捷键、拖拽）；<b>截图、拍屏、开发者工具无法阻止</b>。强管控靠：不外发、开水印（可追到链接与访问者）、查访问记录。</p>
     </div>
 
+    <h3 id="s5-who-saw">发出去之后，谁看了？</h3>
+    <p>左侧「我的分享」列出你创建的每一条链接：预览 / 下载 / 打印次数、独立 IP 数、最近访问时间；点进去是逐条明细（时间、动作、IP、内网 / 公网、浏览器与系统）。</p>
+    <ul>
+      <li>明细挂在地址上（<code>/shares?share={id}</code>），刷新、后退、转给同事都能落到同一条；</li>
+      <li>同一条链接出现 <b>3 个及以上不同 IP</b> 时标红「疑似被转发」——外发场景里多人用同一链接通常就是转发；</li>
+      <li><b>打印只能记到"对方点了打印按钮"</b>，不能证明真的打出来了；</li>
+      <li><b>主机名与电脑登录用户名浏览器不提供</b>，任何网页都拿不到，这是技术边界。</li>
+    </ul>
+
     <h3 id="s5-approve">审批：你选谁批，高密级还要所有者确认</h3>
     <p>密级达到租户阈值（默认「秘密」）时，分享面板会出现「审批人」选择：系统先算出所有合格审批人，列成清单由你选；服务端再复核，不在清单里的人选会被拒绝。</p>
     <p>为什么由发起人指定：审批要落到具体的人，否则多条链接同时在等，没人知道该谁处理。但"能选"不等于"能挑软的"——候选人由权限与密级决定，自批永远被拒。</p>
@@ -517,7 +528,7 @@
 
 <footer class="foot">
   <span>NeuroDMS · 用户手册 · 场景操作 V1.1.0</span>
-  <span>网页版 v1.3.1 · 源文件 docs/29-用户手册-场景操作-v1.3.2.md</span>
+  <span>网页版 v1.4.0 · 源文件 docs/29-用户手册-场景操作-v1.3.4.md</span>
 </footer>
 
 <button class="totop" type="button" aria-label="回到顶部">

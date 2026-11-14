@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -145,7 +146,11 @@ func TestAuthCodeURLHasPKCEStateNonce(t *testing.T) {
 	rp := newRP(t, f)
 
 	verifier, _ := NewCodeVerifier()
-	u, err := url.Parse(rp.AuthCodeURL("st-1", "no-1", verifier))
+	authURL, aerr := rp.AuthCodeURL("st-1", "no-1", verifier)
+	if aerr != nil {
+		t.Fatalf("生成授权地址失败: %v", aerr)
+	}
+	u, err := url.Parse(authURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,4 +294,50 @@ func TestStateIsOneTimeAndExpires(t *testing.T) {
 		t.Fatalf("过期项已被删除，Sweep 应为 0，实际 %d", n)
 	}
 	_ = strings.TrimSpace("")
+}
+
+// TestAuthCodeURLRejectsEmptyParams：三个一次性参数任一为空都必须拒绝。
+//
+// 这条用例锁的是一个"静默失效"：nonce 为空时，id_token 里也没有 nonce，
+// 比对结果是"相等"，重放照样通过，而日志上看不出任何异常。
+func TestAuthCodeURLRejectsEmptyParams(t *testing.T) {
+	f := newFakeIDP(t, "client-1")
+	rp := newRP(t, f)
+	cases := []struct{ state, nonce, verifier string }{
+		{"", "no-1", "verifier-1"},
+		{"st-1", "", "verifier-1"},
+		{"st-1", "no-1", ""},
+	}
+	for _, c := range cases {
+		if _, err := rp.AuthCodeURL(c.state, c.nonce, c.verifier); err == nil {
+			t.Fatalf("空参数应被拒绝: state=%q nonce=%q verifier=%q", c.state, c.nonce, c.verifier)
+		}
+	}
+}
+
+// TestExchangeRejectsEmptyNonce：回调侧同样不能接受空 nonce。
+func TestExchangeRejectsEmptyNonce(t *testing.T) {
+	f := newFakeIDP(t, "client-1")
+	rp := newRP(t, f)
+	if _, err := rp.Exchange(context.Background(), "code-1", "verifier-1", ""); err == nil {
+		t.Fatal("空 nonce 的回调必须被拒绝")
+	}
+}
+
+// TestStateStoreRejectsWhenFull：容量上限生效，满时必须拒绝而不是无限增长。
+func TestStateStoreRejectsWhenFull(t *testing.T) {
+	st := NewStateStore(time.Minute)
+	for i := 0; i < maxPending; i++ {
+		if !st.Put(Pending{State: "s" + strconv.Itoa(i)}) {
+			t.Fatalf("第 %d 条不应被拒绝", i)
+		}
+	}
+	if st.Put(Pending{State: "overflow"}) {
+		t.Fatal("超过上限后必须拒绝写入")
+	}
+	// 过期后腾出空间：仍然可以继续用，而不是永久锁死
+	st.now = func() time.Time { return time.Now().Add(2 * time.Minute) }
+	if !st.Put(Pending{State: "after-sweep"}) {
+		t.Fatal("清理过期项后应允许写入")
+	}
 }

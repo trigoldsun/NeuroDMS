@@ -28,6 +28,10 @@ const PATHS: Record<string, ReactNode> = {
   chevronL: <path d="m14.4 6.4-5.6 5.6 5.6 5.6" />,
   close: <path d="M6.4 6.4l11.2 11.2M17.6 6.4 6.4 17.6" />,
   info: <><circle cx="12" cy="12" r="8.4" /><path d="M12 11v5.4" /><circle cx="12" cy="8.2" r=".9" fill="currentColor" stroke="none" /></>,
+  // infoBare 只画"i"本身，不画外圈。
+  // 用在已有 CSS 圆边框的按钮里（InfoDot）：图标自带的圆 + 按钮的边框
+  // 会叠成"两个圈"，看起来像没有对齐的残影。
+  infoBare: <><path d="M12 10.6v6.4" /><circle cx="12" cy="7.6" r="1.5" fill="currentColor" stroke="none" /></>,
   check: <path d="m5.6 12.4 4.2 4.2 8.6-9" />,
   alert: <><path d="M12 4.2 3.6 19h16.8L12 4.2Z" /><path d="M12 10v4.2" /><circle cx="12" cy="16.7" r=".9" fill="currentColor" stroke="none" /></>,
   clock: <><circle cx="12" cy="12" r="8.2" /><path d="M12 7.4V12l3.2 2" /></>,
@@ -47,6 +51,7 @@ const PATHS: Record<string, ReactNode> = {
   external: <><path d="M14 4.6h5.4V10" /><path d="M19.4 4.6 11 13" /><path d="M18 14.4v4.2c0 .5-.4.9-.9.9H5.5c-.5 0-.9-.4-.9-.9V6.9c0-.5.4-.9.9-.9h4.2" /></>,
   eye: <><path d="M2.6 12S6 5.8 12 5.8 21.4 12 21.4 12 18 18.2 12 18.2 2.6 12 2.6 12Z" /><circle cx="12" cy="12" r="3.2" /></>,
   eyeOff: <><path d="M4 4l16 16" /><path d="M9.9 5.2A9.9 9.9 0 0 1 12 5c6 0 9.4 7 9.4 7a17 17 0 0 1-2.7 3.5" /><path d="M6.3 7.4A16.6 16.6 0 0 0 2.6 12S6 19 12 19a9.6 9.6 0 0 0 4.2-.9" /><path d="M10.2 10.3a2.6 2.6 0 0 0 3.5 3.6" /></>,
+  book: <><path d="M4.4 5.4c2.6-1 5.1-.9 7.6.6 2.5-1.5 5-1.6 7.6-.6v13.2c-2.6-1-5.1-.9-7.6.6-2.5-1.5-5-1.6-7.6-.6V5.4Z" /><path d="M12 6v13.2" /></>,
   sparkle: <><path d="M12 4.2 13.7 9l4.8 1.7-4.8 1.7L12 17.2 10.3 12.4 5.5 10.7 10.3 9 12 4.2Z" /><path d="M18.6 15.4l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2Z" /></>,
   grid: <><rect x="4.4" y="4.4" width="6.4" height="6.4" rx="1.4" /><rect x="13.2" y="4.4" width="6.4" height="6.4" rx="1.4" /><rect x="4.4" y="13.2" width="6.4" height="6.4" rx="1.4" /><rect x="13.2" y="13.2" width="6.4" height="6.4" rx="1.4" /></>,
   command: <path d="M9 6.6a2.4 2.4 0 1 0-2.4 2.4H17.4A2.4 2.4 0 1 0 15 6.6v10.8A2.4 2.4 0 1 0 17.4 15H6.6A2.4 2.4 0 1 0 9 17.4V6.6Z" />,
@@ -241,7 +246,7 @@ export function InfoDot({ title, children, label = '更多说明' }: {
         onClick={(e) => { e.stopPropagation(); toggle() }}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <Icon name="info" size={11} stroke={2} />
+        <Icon name="infoBare" size={13} stroke={2.2} />
       </button>
       {pos && createPortal(
         <div

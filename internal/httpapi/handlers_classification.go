@@ -302,7 +302,18 @@ func (a *API) handleSetClassLabel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var ownerApproval bool
+	// 改前值：名称与"是否需要所有者确认"都是审批链的输入，
+	// 只记改后值无法解释"为什么上周的分享是一层、这周变成两层"。
+	beforeLabel := classification.Label{Level: level}
 	err = db.WithTenant(r.Context(), a.Pool, c.TenantID, func(tx pgx.Tx) error {
+		if ls, e := classification.Levels(r.Context(), tx, c.TenantID); e == nil {
+			for _, l := range ls {
+				if l.Level == level {
+					beforeLabel = l
+					break
+				}
+			}
+		}
 		if e := classification.SaveLabel(r.Context(), tx, c.TenantID, level,
 			req.Name, req.Description, req.OwnerApproval); e != nil {
 			return e
@@ -316,9 +327,16 @@ func (a *API) handleSetClassLabel(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, "INVALID_ARGUMENT", err.Error())
 		return
 	}
+	detail := auditDiff(
+		map[string]any{"name": beforeLabel.Name, "description": beforeLabel.Description,
+			"ownerApproval": beforeLabel.OwnerApproval},
+		map[string]any{"name": req.Name, "description": req.Description,
+			"ownerApproval": ownerApproval},
+	)
+	detail["level"] = level
 	if err := a.emit(r, c.TenantID, AuditEntry{
 		ActorID: c.Subject, Action: "classification.label.set", Result: "ok",
-		Detail: map[string]any{"level": level, "name": req.Name, "ownerApproval": ownerApproval},
+		Detail: detail,
 	}); err != nil {
 		writeErr(w, r, http.StatusInternalServerError, "AUDIT_FAILED", "审计写入失败，操作已拒绝")
 		return
@@ -443,16 +461,28 @@ func (a *API) handleSetLabelPolicy(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &req) {
 		return
 	}
+	var beforeMin int
+	var hadBefore bool
 	err := db.WithTenant(r.Context(), a.Pool, c.TenantID, func(tx pgx.Tx) error {
+		if ps, e := classification.Policies(r.Context(), tx, c.TenantID); e == nil {
+			beforeMin, hadBefore = ps[label]
+		}
 		return classification.SetPolicy(r.Context(), tx, c.TenantID, label, req.MinLevel)
 	})
 	if err != nil {
 		writeErr(w, r, http.StatusBadRequest, "INVALID_ARGUMENT", err.Error())
 		return
 	}
+	// 标签策略决定"贴了这个标签的文件最低要几级密级"，是密级治理的输入参数
+	var beforePolicy map[string]any
+	if hadBefore {
+		beforePolicy = map[string]any{"minLevel": beforeMin}
+	}
+	detail := auditDiff(beforePolicy, map[string]any{"minLevel": req.MinLevel})
+	detail["label"] = label
 	_ = a.emit(r, c.TenantID, AuditEntry{
 		ActorID: c.Subject, Action: "classification.label_policy.set", Result: "ok",
-		Detail: map[string]any{"label": label, "minLevel": req.MinLevel},
+		Detail: detail,
 	})
 	writeOK(w, r, map[string]any{"label": label, "minLevel": req.MinLevel})
 }

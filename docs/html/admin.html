@@ -11,7 +11,7 @@
 
 <header class="topbar">
   <div class="topbar-in">
-    <a class="brand" href="index.html"><span class="mark"></span><b>NeuroDMS</b><span>手册</span></a>
+    <a class="brand" href="index.html"><span class="mark"></span><b data-brand-name>NeuroDMS</b><span>手册</span></a>
     <nav class="docnav">
       <a href="index.html">手册中心</a>
       <a href="scenarios.html">场景操作</a>
@@ -540,6 +540,29 @@ UPDATE tenant SET share_approval_min_class = 3 WHERE slug = 'demo';
       <p><b>边界</b>：前端能挡"顺手保存"；截图、拍屏、开发者工具无法阻止。强管控靠：不外发、水印、访问记录。</p>
     </div>
 
+    <h3 id="share-access" data-nav="7.8 访问记录：谁打开过我的链接">7.8 访问记录：谁打开过我的链接</h3>
+    <p>入口：左侧 <b>我的分享</b>（所有登录用户可见，不需要管理角色）。这一页回答三个问题：链接有没有被打开、从哪来、最近一次是什么时候。</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>动作</th><th>记不记</th><th>可信度</th></tr></thead>
+        <tbody>
+          <tr><td class="nowrap">打开链接（兑换票据）</td><td>✅</td><td>服务端记录，准确</td></tr>
+          <tr><td class="nowrap">在线预览（含 Office 转 PDF）</td><td>✅</td><td>服务端在取内容时记录，准确</td></tr>
+          <tr><td class="nowrap">下载原件</td><td>✅</td><td>同上</td></tr>
+          <tr><td class="nowrap">打印</td><td>⚠️ 前端上报</td><td>只能证明"对方点了打印按钮"，<b>不能证明纸出来了</b></td></tr>
+          <tr><td class="nowrap">被拒绝（口令错、超限、审批中）</td><td>✅</td><td>服务端记录</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>明细每行包含：时间、动作、IP、可见范围（内网 / 公网 / 本机）、归属地（需配置 IP 库）、浏览器与操作系统（由浏览器上报）。同一条链接出现 <b>3 个及以上不同 IP</b> 时标红「疑似被转发」——阈值偏低是刻意的，外发场景里多人用同一链接通常就是转发。</p>
+    <div class="warn">
+      <p><b>主机名与电脑登录用户名拿不到</b>。浏览器沙箱不提供，任何网页都不提供，这不是本系统的缺陷。可行的替代：让对方用 SSO 登录（拿到真实账号）、开邮箱验证（拿到邮箱）、开水印（截图可溯源）；企业版如需主机名，只能装终端代理，属单独立项。</p>
+    </div>
+    <div class="note">
+      <p><b>IP 归属地</b>需要 IP 库：配置 <code>DOCVAULT_GEOIP_DB</code>（GeoLite2 / GeoIP2 的 <code>.mmdb</code>）后生效；未配置时只显示"内网 / 公网"，缺库不影响启动。</p>
+      <p><b>隐私</b>：访问记录里的 IP 属于个人信息。外发邮件正文底部会自动附上隐私说明，并在配置了「隐私政策链接」时给出完整条款（见 3.8）。</p>
+    </div>
+
     <h2 id="brand" data-nav="8 · 品牌与域名"><span class="num">8</span>品牌与域名</h2>
     <p>入口：管理台 → 系统设置（品牌部分）。</p>
     <div class="tablewrap">
@@ -571,6 +594,35 @@ UPDATE tenant SET share_approval_min_class = 3 WHERE slug = 'demo';
       <p>导证据包时注意：导出行为本身也会写审计（"谁导出了什么范围"），这是可核查性的一部分。</p>
     </div>
 
+    <h3 id="audit-diff" data-nav="9.1 参数变更的改前 / 改后">9.1 参数变更的「改前 / 改后」</h3>
+    <p>审计列表里有一列「参数变化（改前 → 改后）」。配置类操作会直接写出"哪个参数从多少变成了多少"，点一下展开看完整明细（字段 / 改前 / 改后 三列）。</p>
+    <p><b>为什么必须这样记</b>：只记"某人改过策略"回答不了三个最常被追问的问题——这次提交是真改了还是原样保存了一遍？某个参数是哪天从 100 变成 200 的？出事那次变更到底动了哪一项？</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>动作</th><th>记录的前后字段</th></tr></thead>
+        <tbody>
+          <tr><td class="nowrap">系统设置（策略）</td><td>外链默认有效期、上传上限、日志保留期、版本保留数、上传超时、允许的扩展名</td></tr>
+          <tr><td class="nowrap">品牌与名称</td><td>系统名称、主色、辅色、页脚文案、隐私政策链接（Logo 只记"更换了"）</td></tr>
+          <tr><td class="nowrap">邮件服务</td><td>模式、发件地址、发件人显示名、SMTP 主机 / 端口 / 加密、Graph 租户与发件人</td></tr>
+          <tr><td class="nowrap">目录认证</td><td>启用、URL、StartTLS、绑定账号、基准 DN、各过滤条件、AD 模式、同步间隔</td></tr>
+          <tr><td class="nowrap">成员修改</td><td>密级、权限档位上限、部门、强制二次验证</td></tr>
+          <tr><td class="nowrap">成员停用 / 启用</td><td>状态（正常 / 停用）</td></tr>
+          <tr><td class="nowrap">账号有效期</td><td>原到期时间 → 新到期时间（"永不过期"显示为 —）</td></tr>
+          <tr><td class="nowrap">权限档位修改</td><td>原档位 → 新档位（只读 / 读写 / 可管理 / 所有者）</td></tr>
+          <tr><td class="nowrap">密级定义</td><td>名称、说明、外发需所有者确认</td></tr>
+          <tr><td class="nowrap">标签策略</td><td>最低密级</td></tr>
+          <tr><td class="nowrap">文件定密</td><td>原密级 → 新密级（这条一直就有）</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li><b>没有变化就显示"无字段变化"</b>：管理员点了一次保存但什么都没改，会如实记成"原样保存"——这本身是有价值的事实；</li>
+      <li><b>"— → 新值"表示旧值读不到</b>（例如首次配置）。系统不会编一个 0 当旧值，那会让事后追溯误以为"原来是 0"；</li>
+      <li><b>口令、客户端密钥、域绑定口令不含值</b>：进了审计等于把凭据交出去。只记 <code>SMTP 口令更换 / 客户端密钥更换 / 域口令更换</code> 这样的布尔标记，排查"邮件为什么突然发不出去"时足够判断"是不是有人换过口令"；</li>
+      <li><b>只列发生变化的字段</b>，不是全量快照。全量快照会把"改了哪一项"埋在几十行未变字段里。</li>
+    </ul>
+    <div class="note"><p>操作日志（管理角色可看）用同一个明细组件，读法完全一致。两者的区别是<b>定位</b>：审计日志是取证入口（含被拒事件与哈希链序号），操作日志是业务流水。</p></div>
+
     <h2 id="platform" data-nav="10 · 平台运营台"><span class="num">10</span>平台运营台（仅 SaaS 形态）</h2>
     <p>入口：<code>/platform/{tab}</code>，账号在 <code>platform_user</code> 表，与租户账号完全分离。</p>
 
@@ -587,7 +639,7 @@ UPDATE tenant SET share_approval_min_class = 3 WHERE slug = 'demo';
       </table>
     </div>
 
-    <h3 id="flags" data-nav="9.1 能力开关：三级求值">9.1 能力开关：全局、放量、租户覆盖（三级）</h3>
+    <h3 id="flags" data-nav="10.1 能力开关：三级求值">10.1 能力开关：全局、放量、租户覆盖（三级）</h3>
     <p>这是一处<b>最容易互相误解</b>的配置。2026-11 有过一次真实事故：平台把 <code>share.external</code> 的放量从 100 调到 0（总开关仍是"开启"），运营台显示"已开启"，而所有租户创建外链都收到"未开启对外分享能力，请联系平台运营"——运营进去看，每个开关都是开启的，找不到任何关闭动作。</p>
 
     <div class="flow" data-flow="flags"></div>
@@ -665,13 +717,13 @@ UPDATE tenant SET share_approval_min_class = 3 WHERE slug = 'demo';
 
     <h2 id="ops" data-nav="11 · 运维：备份、升级、回滚"><span class="num">11</span>运维：备份、升级、回滚</h2>
 
-    <h3 id="ops-backup" data-nav="10.1 发布前必做">10.1 发布前必做</h3>
+    <h3 id="ops-backup" data-nav="11.1 发布前必做">10.1 发布前必做</h3>
     <pre><code># 1) 备份数据库
 docker exec docvault-postgres sh -c \
   'pg_dump -U docvault -d docvault -Fc -f /tmp/ndms-$(date +%Y%m%d).dump'
 docker cp docvault-postgres:/tmp/ndms-$(date +%Y%m%d).dump docker/data/backup/</code></pre>
 
-    <h3 id="ops-release" data-nav="10.2 发布">10.2 发布</h3>
+    <h3 id="ops-release" data-nav="11.2 发布">10.2 发布</h3>
     <pre><code>docker compose build server &amp;&amp; docker compose up -d server</code></pre>
     <p>启动时自动执行迁移，并做两项自检：</p>
     <ul>
@@ -679,7 +731,7 @@ docker cp docvault-postgres:/tmp/ndms-$(date +%Y%m%d).dump docker/data/backup/</
       <li><b>权限模型告警</b>：连接角色是超级用户时提示"请求路径不得直接使用连接池"。</li>
     </ul>
 
-    <h3 id="ops-iron" data-nav="10.3 铁律：镜像与迁移同批">10.3 铁律：镜像与迁移必须同批</h3>
+    <h3 id="ops-iron" data-nav="11.3 铁律：镜像与迁移同批">10.3 铁律：镜像与迁移必须同批</h3>
     <ul>
       <li>旧镜像 + 新库：可能因新增列 / 函数缺失而报错；</li>
       <li>新镜像 + 旧库：启动时自动迁移，正常；</li>
@@ -687,7 +739,7 @@ docker cp docvault-postgres:/tmp/ndms-$(date +%Y%m%d).dump docker/data/backup/</
     </ul>
     <p>迁移文件的纪律：已有函数改签名要 <code>DROP + CREATE</code>，返回列只在末尾追加。这样旧镜像回滚到新库时仍能跑。</p>
 
-    <h3 id="ops-tasks" data-nav="10.4 后台任务">10.4 后台任务</h3>
+    <h3 id="ops-tasks" data-nav="11.4 后台任务">10.4 后台任务</h3>
     <div class="tablewrap">
       <table>
         <thead><tr><th>任务</th><th>频率</th><th>做什么</th></tr></thead>
@@ -700,7 +752,7 @@ docker cp docvault-postgres:/tmp/ndms-$(date +%Y%m%d).dump docker/data/backup/</
       </table>
     </div>
 
-    <h3 id="ops-rollback" data-nav="10.5 回滚">10.5 回滚</h3>
+    <h3 id="ops-rollback" data-nav="11.5 回滚">10.5 回滚</h3>
     <pre><code>docker compose down server
 # 恢复上一版镜像 tag
 docker compose up -d server
@@ -762,7 +814,7 @@ docker exec -i docvault-postgres pg_restore -U docvault -d docvault --clean &lt;
 
 <footer class="foot">
   <span>NeuroDMS · 管理员手册 · 租户与系统配置 V1.2.0</span>
-  <span>网页版 v1.3.1 · 源文件 docs/31-管理员手册-租户与系统配置-v1.5.1.md</span>
+  <span>网页版 v1.4.0 · 源文件 docs/31-管理员手册-租户与系统配置-v1.7.0.md</span>
 </footer>
 
 <button class="totop" type="button" aria-label="回到顶部">
