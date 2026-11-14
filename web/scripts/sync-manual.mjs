@@ -26,6 +26,8 @@ async function exists(p) {
   }
 }
 
+let copied = 0
+
 async function copyTree(from, to) {
   await mkdir(to, { recursive: true })
   for (const ent of await readdir(from, { withFileTypes: true })) {
@@ -39,6 +41,7 @@ async function copyTree(from, to) {
     const ext = dot >= 0 ? ent.name.slice(dot).toLowerCase() : ''
     if (!KEEP.has(ext)) continue
     await cp(s, d)
+    copied++
   }
 }
 
@@ -56,5 +59,4 @@ if (!(await exists(join(dest, 'index.html')))) {
   console.warn('[manual] docs/html 缺少 index.html：/manual/ 将无法作为手册首页')
 }
 
-const files = (await readdir(dest, { recursive: true })).filter((f) => !f.includes('\\'))
-console.log(`[manual] 已同步 ${files.length} 个文件 → web/public/manual`)
+console.log(`[manual] 已同步 ${copied} 个文件 → web/public/manual`)
