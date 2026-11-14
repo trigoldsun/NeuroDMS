@@ -142,6 +142,9 @@ func BuildMIME(from string, m Message) []byte {
 	var b strings.Builder
 	b.WriteString("From: " + from + "\r\n")
 	b.WriteString("To: " + m.To + "\r\n")
+	if strings.TrimSpace(m.ReplyTo) != "" {
+		b.WriteString("Reply-To: " + m.ReplyTo + "\r\n")
+	}
 	b.WriteString("Subject: " + encodeHeader(m.Subject) + "\r\n")
 	b.WriteString("Date: " + time.Now().Format(time.RFC1123Z) + "\r\n")
 	b.WriteString("MIME-Version: 1.0\r\n")

@@ -204,6 +204,34 @@ UPDATE tenant SET share_approval_min_class = 3 WHERE slug = 'demo';
 -- 每文件保留的历史版本数（默认按档位，上限 50）
 -- 由租户策略 versionKeep 承载，界面暂未提供输入框</code></pre>
 
+    <h3 id="p-mail" data-nav="3.7 邮件服务（SMTP / Exchange Online）">3.7 邮件服务：SMTP / Exchange Online</h3>
+    <p>入口：管理台 → <b>邮件服务</b>（与「系统设置」「目录认证」并列，仅系统管理员）。验证码、外发分享邮件、审批提醒都靠这条通道，此前只能靠环境变量 <code>DOCVAULT_SMTP_*</code> / <code>DOCVAULT_GRAPH_*</code> 配置，改一次要动 <code>.env</code> 并重建容器。</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>模式</th><th>适用</th><th>关键参数</th></tr></thead>
+        <tbody>
+          <tr><td>跟随平台默认</td><td>小客户、试用；由部署方在环境变量里配好</td><td>—</td></tr>
+          <tr><td>SMTP 服务器</td><td>企业邮箱、内网中继、自建 Postfix</td><td>主机、端口、加密方式、账号口令、发件地址</td></tr>
+          <tr><td>Exchange Online / M365</td><td>用 Microsoft 365 邮箱发信</td><td>目录（租户）ID、应用（客户端）ID、客户端密钥、发件邮箱</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="warn">
+      <p><b>M365 邮箱不要用「SMTP 服务器」+ 邮箱口令。</b>微软已对 Exchange Online 的 SMTP AUTH 基本认证排定停用：2026 年 12 月底起对存量租户默认关闭（可临时重新开启），2026 年 12 月之后新建租户不再提供该选项。失败是静默的——邮件只是不到，不报错给用户。正确做法是走 Microsoft Graph 的 <code>sendMail</code>（应用权限 <code>Mail.Send</code>）：Entra ID 注册应用 → 添加<b>应用权限</b> → 管理员同意 → 新建客户端密钥 → 四个参数填进本页。21Vianet 运营的 M365 在「高级」里把端点改为 <code>login.chinacloudapi.cn</code> 与 <code>microsoftgraph.chinacloudapi.cn</code>。</p>
+    </div>
+
+    <p><b>口令与密钥</b>：只写不读（输入框留空提交 = 不修改），落库为密文且 AAD 绑定租户与用途；服务端未配置 <code>DOCVAULT_SECRET_KEY</code> 时<b>拒绝保存口令</b>（<code>NO_SECRET_KEY</code>），不会降级成明文，但地址端口等非敏感项仍可保存。</p>
+
+    <p><b>发送测试</b>：用表单<b>当前参数</b>真发一封，不必先保存。结果写在按钮下方并记入「上次测试」。收不到时按顺序查：垃圾箱与 SPF/DKIM → 端口与加密方式是否匹配（587/STARTTLS、465/隐式 TLS）→ Graph 是否完成管理员同意（未同意返回 403 <code>Authorization_RequestDenied</code>）→ 服务器能否出网。</p>
+
+    <p><b>队列</b>：页面底部汇总最近 7 天（24h 已发 / 待发 / 失败待重试 / 已终止）与最近 5 条失败原因。失败按 30 秒 → 1 分 → 2 分 → 4 分 → 8 分重试，<b>5 次后进入「已终止」</b>；修好配置后待重试的会自己发出，已终止的需要重新触发业务动作（例如再点一次"发送邮件"）。</p>
+
+    <div class="note">
+      <p><b>边界</b>：本页配的是本租户的通道，平台默认仍由运维用环境变量维护；开启独立通道后<b>不做回退</b>——租户通道失败就是失败，不会偷用平台邮箱代发（否则邮件从意料之外的域名发出，既难排查也像钓鱼）。「允许明文连接」只在带口令时强制勾选确认。</p>
+    </div>
+
     <h2 id="class" data-nav="4 · 密级与标签策略"><span class="num">4</span>密级与标签策略</h2>
     <p>入口：管理台 → 密级定义 / 标签策略（仅安全管理员）。</p>
 
@@ -252,6 +280,24 @@ UPDATE tenant SET share_approval_min_class = 3 WHERE slug = 'demo';
       <span class="step">通过后密级下调</span>
     </div>
     <p>升密不需要审批（收紧方向不设障）。</p>
+
+    <h3 id="class-owner" data-nav="4.5 外发需所有者确认（按密级配置）">4.5 「外发需所有者确认」：按密级配置</h3>
+    <p>这条规则原本写死在代码里（<b>5、6 级</b>外发时，第一层审批人若不是空间所有者，还要所有者确认）。不同租户的密级语义差别很大——有的把 4 级当"绝密"用，有的 5 级只是"内部机密"——写死阈值的结果是一头管不住、一头说不清。现在改为在<b>密级定义</b>页逐级勾选。</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>配置</th><th>效果</th></tr></thead>
+        <tbody>
+          <tr><td>勾选</td><td>该密级外发时，第一层审批人若不是空间所有者，还要所有者确认（第二层）</td></tr>
+          <tr><td>不勾选</td><td>只走第一层审批（若密级达到"必须审批"阈值）</td></tr>
+          <tr><td>缺省</td><td><b>与旧行为一致：5、6 级勾选</b>，其余不勾选（升级瞬间线上行为不变）</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li><b>勾选即意味着必须审批</b>：即使密级低于"必须审批"阈值，也会进入审批流程——否则会出现"要所有者确认、却没有人先批"的自相矛盾状态；</li>
+      <li><b>规则不追溯</b>：已发起或已审批的分享按<b>创建时</b>的指派关系与阶段执行。收紧不会让老链接突然多一层，放宽也不会让老链接被放行；</li>
+      <li><b>发起人本人是所有者时跳过第二层</b>：否则会变成自批；多个所有者时由发起人选择一位。</li>
+    </ul>
 
     <h2 id="auth" data-nav="5 · 目录认证与单点登录"><span class="num">5</span>目录认证与单点登录</h2>
     <p>入口：管理台 → 目录认证（仅系统管理员）。</p>
@@ -397,15 +443,16 @@ UPDATE tenant SET share_approval_min_class = 3 WHERE slug = 'demo';
       <p><b>管理角色不等于审批权</b>。系统管理员、安全管理员管的是配置（成员、密级定义、策略），不自动获得内容权限。所以"我是管理员，为什么看不到待审批"是正常现象——缺的是对象级 <code>manage_acl</code>，不是角色。</p>
     </div>
 
-    <h3 id="approve-two" data-nav="7.2.1 5/6 级双层审批">7.2.1 5/6 级：再加一层所有者确认</h3>
+    <h3 id="approve-two" data-nav="7.2.1 双层审批：再加一层所有者确认">7.2.1 双层审批：再加一层所有者确认</h3>
+    <p>是否加这一层由<b>密级定义</b>里该密级的「外发需所有者确认」决定（见 4.5，缺省 5/6 级）。</p>
     <div class="tablewrap">
       <table>
         <thead><tr><th>场景</th><th>是否需要第二层</th></tr></thead>
         <tbody>
-          <tr><td>密级 ≤ 4</td><td>不需要</td></tr>
-          <tr><td>密级 5/6，第一层审批人就是空间所有者</td><td>不需要（同一人重复确认没有意义）</td></tr>
-          <tr><td>密级 5/6，第一层审批人是他人</td><td><b>需要</b>，由空间所有者确认</td></tr>
-          <tr><td>密级 5/6，发起人本人就是空间所有者</td><td>不需要（发起即代表所有者知情，否则会变成自批）</td></tr>
+          <tr><td>该密级未勾选「外发需所有者确认」</td><td>不需要</td></tr>
+          <tr><td>已勾选，第一层审批人就是空间所有者</td><td>不需要（同一人重复确认没有意义）</td></tr>
+          <tr><td>已勾选，第一层审批人是他人</td><td><b>需要</b>，由空间所有者确认</td></tr>
+          <tr><td>已勾选，发起人本人就是空间所有者</td><td>不需要（发起即代表所有者知情，否则会变成自批）</td></tr>
         </tbody>
       </table>
     </div>
@@ -432,7 +479,7 @@ UPDATE tenant SET share_approval_min_class = 3 WHERE slug = 'demo';
       <div class="card">
         <span class="tag">路线 2</span>
         <h4>改由所有者审批</h4>
-        <p>5/6 级且所有者密级不足时：先提密，或把第一层审批人改为空间所有者本人（此时只需一层）。</p>
+        <p>需要所有者确认且所有者密级不足时：先提密，或把第一层审批人改为空间所有者本人（此时只需一层）。</p>
       </div>
       <div class="card">
         <span class="tag">路线 3</span>
@@ -680,7 +727,7 @@ docker exec -i docvault-postgres pg_restore -U docvault -d docvault --clean &lt;
 
 <footer class="foot">
   <span>NeuroDMS · 管理员手册 · 租户与系统配置 V1.2.0</span>
-  <span>网页版 v1.2.0 · 源文件 docs/31-管理员手册-租户与系统配置-v1.4.0.md</span>
+  <span>网页版 v1.3.0 · 源文件 docs/31-管理员手册-租户与系统配置-v1.5.0.md</span>
 </footer>
 
 <button class="totop" type="button" aria-label="回到顶部">

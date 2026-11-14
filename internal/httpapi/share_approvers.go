@@ -21,9 +21,6 @@ import (
 // 名单为空时，链接建出来就永远停在 pending。
 
 const (
-	// 第二层审批的起算密级：5 级（机密）与 6 级（绝密）。
-	// 这两个级别一旦外发，除正常审批外还要空间所有者确认。
-	ownerApprovalMinClass = 5
 	// 候选人上限：超过这个数说明授权面过宽（例如给全员角色授了管理权），
 	// 继续枚举既慢也没有选择意义。返回 truncated 让界面提示收窄授权。
 	maxApproverCandidates = 500
@@ -41,14 +38,16 @@ type shareApprover struct {
 }
 
 type shareApprovalPlan struct {
-	RequireApproval bool            `json:"requireApproval"`
-	Reason          string          `json:"reason"` // classification | manual | none
-	ObjectClass     int             `json:"objectClass"`
-	MinClass        int             `json:"minClass"`
-	TwoLayer        bool            `json:"twoLayer"`
-	Approvers       []shareApprover `json:"approvers"`
-	Owners          []shareApprover `json:"owners"`
-	CreatorIsOwner  bool            `json:"creatorIsOwner"`
+	RequireApproval bool   `json:"requireApproval"`
+	Reason          string `json:"reason"` // classification | owner_policy | manual | none
+	ObjectClass     int    `json:"objectClass"`
+	MinClass        int    `json:"minClass"`
+	// OwnerApproval 来自「密级定义」页的逐级配置（不是写死的阈值）。
+	OwnerApproval  bool            `json:"ownerApproval"`
+	TwoLayer       bool            `json:"twoLayer"`
+	Approvers      []shareApprover `json:"approvers"`
+	Owners         []shareApprover `json:"owners"`
+	CreatorIsOwner bool            `json:"creatorIsOwner"`
 	// OwnerLayerSkipped 说明为什么没有第二层：
 	// requester_is_owner（发起人就是所有者）或 no_owner（空间没有可用所有者）。
 	OwnerLayerSkipped string `json:"ownerLayerSkipped,omitempty"`
@@ -98,7 +97,12 @@ func (a *API) handleShareApprovers(w http.ResponseWriter, r *http.Request) {
 //
 // 判定口径与 Approve 接口一致：
 //   - 第一层：对该对象有 manage_acl、密级 ≥ 对象有效密级、在职、不是发起人；
-//   - 第二层：空间所有者（owner_id 或 owner 档位 ACE 的主体），且同样满足密级与在职。
+//   - 第二层：空间所有者（owner_id 或 owner 档位 ACE 的主体），
+//     仅当该密级在「密级定义」里被配置为需要所有者确认时才有；同样要求密级与在职。
+//
+// 重要：这里算出来的结果只是**创建时的建议**。一旦落库，share 行上的
+// approver_id / owner_approver_id / approval_stage 就是快照，
+// 管理员之后改密级策略不会回头改已发起的分享（老分享老政策）。
 //
 // 与旧实现（countEligibleApprovers）的区别：这里走权限内核逐人复核，
 // 因此包含部门/角色/组继承、显式拒绝、继承断开与标签策略；旧实现只数了
@@ -125,6 +129,13 @@ func (a *API) resolveShareApprovalPlan(ctx context.Context, c auth.Claims, objec
 			`SELECT share_approval_min_class FROM tenant WHERE id = $1`, c.TenantID).Scan(&plan.MinClass); e != nil {
 			return e
 		}
+		// 第二层是否必要：由「密级定义」页对该密级的配置决定，
+		// 不再写死 5/6 级（不同租户的密级语义差别很大）。
+		ownerApproval, e := classification.RequiresOwnerApproval(ctx, tx, c.TenantID, objClass)
+		if e != nil {
+			return e
+		}
+		plan.OwnerApproval = ownerApproval
 
 		// 空间所有者集合：owner_id + owner 档位 ACE 展开到人。
 		owners, creatorIsOwner, e := loadSpaceOwners(ctx, tx, c.TenantID, spaceID, c.Subject)
@@ -222,11 +233,18 @@ func (a *API) resolveShareApprovalPlan(ctx context.Context, c auth.Claims, objec
 		return plan, err
 	}
 
-	plan.RequireApproval = plan.ObjectClass >= plan.MinClass
-	plan.TwoLayer = plan.ObjectClass >= ownerApprovalMinClass
-	if plan.RequireApproval {
+	// 审批要求的两个来源，取并集：
+	//   1) 密级达到租户的"必须审批"阈值（tenant.share_approval_min_class）；
+	//   2) 该密级被配置为"外发需空间所有者确认"——这条本身就意味着要审批，
+	//      否则会出现"需要所有者确认、却没有人先批"的自相矛盾状态。
+	plan.RequireApproval = plan.ObjectClass >= plan.MinClass || plan.OwnerApproval
+	plan.TwoLayer = plan.OwnerApproval
+	switch {
+	case plan.ObjectClass >= plan.MinClass:
 		plan.Reason = "classification"
-	} else {
+	case plan.OwnerApproval:
+		plan.Reason = "owner_policy"
+	default:
 		plan.Reason = "none"
 	}
 

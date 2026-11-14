@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Members from './Members'
 import ActivityTable from './ActivityTable'
 import DirectorySettings from './DirectorySettings'
+import MailSettings from './MailSettings'
 import { adminPath, navigate } from '../router'
 import { api, postJSON, fetchMe, applyTheme, cycleTheme, HttpError, type Me } from '../api'
 import { Shell } from '../components/Shell'
@@ -24,7 +25,7 @@ type AuditEvent = {
   createdAt: string
   detail?: Record<string, unknown>
 }
-type ClassLabel = { level: number; name: string; description: string }
+type ClassLabel = { level: number; name: string; description: string; ownerApproval: boolean }
 type ClassRequest = {
   id: string
   nodeId: string
@@ -50,7 +51,7 @@ function resultBadge(r: string) {
   return <span className={`badge ${cls}`}>{text}</span>
 }
 
-type TabKey = 'overview' | 'members' | 'spaces' | 'directory' | 'audit' | 'logs' | 'settings' | 'class' | 'policy' | 'approval' | 'share-approvals'
+type TabKey = 'overview' | 'members' | 'spaces' | 'directory' | 'mail' | 'audit' | 'logs' | 'settings' | 'class' | 'policy' | 'approval' | 'share-approvals'
 
 // 待审批的外发链接。
 //
@@ -173,7 +174,7 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
     // 外发审批对 sysadmin 与 secadmin 都开放：实际能不能批由服务端按
     // 对象级 manage_acl 判定，角色只决定"能不能进到这个页面"。
     if (isSys || isSec) list.push({ key: 'share-approvals', label: '外发审批' })
-    if (isSys) list.push({ key: 'settings', label: '系统设置' }, { key: 'directory', label: '目录认证' })
+    if (isSys) list.push({ key: 'settings', label: '系统设置' }, { key: 'directory', label: '目录认证' }, { key: 'mail', label: '邮件服务' })
     if (isAud) list.push({ key: 'audit', label: '审计日志' })
     if (isSec) list.push({ key: 'class', label: '密级定义' }, { key: 'policy', label: '标签策略' }, { key: 'approval', label: '降密审批' })
     return list
@@ -277,14 +278,16 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
     }
   }
 
-  async function saveClassLabel(level: number, name: string, description: string) {
+  async function saveClassLabel(level: number, name: string, description: string, ownerApproval: boolean) {
     try {
       await api(`/v1/admin/classifications/${level}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, description }),
+        body: JSON.stringify({ name, description, ownerApproval }),
       })
-      flash('已保存（等级语义固定，仅名称可改）')
+      flash(ownerApproval
+        ? `已保存：${level} 级外发需空间所有者确认`
+        : '已保存（等级语义固定，仅名称/说明/审批要求可改）')
       void load()
     } catch (e) {
       flash(e instanceof HttpError ? e.message : '保存失败')
@@ -516,7 +519,7 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
           {tab === 'class' && (
             <div style={{ padding: 14 }}>
               <table>
-                <thead><tr><th style={{ width: 80 }}>等级</th><th style={{ width: 180 }}>名称</th><th>说明</th><th style={{ width: 90 }} /></tr></thead>
+                <thead><tr><th style={{ width: 80 }}>等级</th><th style={{ width: 180 }}>名称</th><th>说明</th><th style={{ width: 170 }}>外发需所有者确认</th><th style={{ width: 90 }} /></tr></thead>
                 <tbody>
                   {classes.map((c) => (
                     <tr key={c.level}>
@@ -525,7 +528,7 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
                         <input
                           defaultValue={c.name}
                           key={`n-${c.level}-${c.name}`}
-                          onBlur={(e) => e.target.value !== c.name && void saveClassLabel(c.level, e.target.value, c.description)}
+                          onBlur={(e) => e.target.value !== c.name && void saveClassLabel(c.level, e.target.value, c.description, c.ownerApproval)}
                           style={{ width: 150 }}
                         />
                       </td>
@@ -533,9 +536,19 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
                         <input
                           defaultValue={c.description}
                           key={`d-${c.level}-${c.description}`}
-                          onBlur={(e) => e.target.value !== c.description && void saveClassLabel(c.level, c.name, e.target.value)}
+                          onBlur={(e) => e.target.value !== c.description && void saveClassLabel(c.level, c.name, e.target.value, c.ownerApproval)}
                           style={{ width: '100%' }}
                         />
+                      </td>
+                      <td>
+                        <label className="check" style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+                          <input
+                            type="checkbox"
+                            checked={c.ownerApproval}
+                            onChange={(e) => void saveClassLabel(c.level, c.name, c.description, e.target.checked)}
+                          />
+                          {c.ownerApproval ? '需要' : '不需要'}
+                        </label>
                       </td>
                       <td><span className="hint">语义固定</span></td>
                     </tr>
@@ -543,7 +556,12 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
                 </tbody>
               </table>
               <div className="hint" style={{ marginTop: 8 }}>
-                等级顺序不可调整（避免"把机密改名为公开"的欺骗），只能修改展示名称与说明。
+                等级顺序不可调整（避免"把机密改名为公开"的欺骗），只能修改展示名称、说明与审批要求。
+                「外发需所有者确认」勾选后：该密级文件对外分享时，若第一层审批人不是文件所在空间的所有者，
+                还要再加一次所有者确认（多个所有者时由发起人选择）。
+              </div>
+              <div className="hint" style={{ marginTop: 6 }}>
+                修改只影响之后创建的分享；已发起或已审批的分享按创建时的指派关系执行，不会因规则变更而改变。
               </div>
             </div>
           )}
@@ -581,6 +599,8 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
           {tab === 'logs' && <ActivityTable scope="admin" />}
 
           {tab === 'directory' && <DirectorySettings onFlash={flash} />}
+
+          {tab === 'mail' && <MailSettings onFlash={flash} />}
 
           {tab === 'settings' && (
             <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>

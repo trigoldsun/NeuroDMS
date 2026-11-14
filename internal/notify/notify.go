@@ -21,6 +21,9 @@ type Message struct {
 	Subject string
 	Text    string
 	HTML    string
+	// ReplyTo 是回复地址。留空表示不写该头（回复即回到发件人）。
+	// 典型用法：发件人用 noreply@ 地址，但希望收件人的回信进客服邮箱。
+	ReplyTo string
 }
 
 // Sender 是一个可用的外发通道。
@@ -62,11 +65,25 @@ func (d *Dispatcher) Channels() []string {
 
 // Send 依次尝试通道。
 func (d *Dispatcher) Send(ctx context.Context, m Message) error {
+	_, err := d.send(ctx, m)
+	return err
+}
+
+// SendFor 实现 Mailer：单个 Dispatcher 不认识租户，直接按自己的通道发。
+//
+// 返回空通道名表示"不知道实际用了哪条"——调用方保留记录里的原值即可。
+func (d *Dispatcher) SendFor(ctx context.Context, _ string, m Message) (string, error) {
+	_, err := d.send(ctx, m)
+	return "", err
+}
+
+// send 是唯一的发送实现，额外返回成功的通道名（写进 notification 便于排查）。
+func (d *Dispatcher) send(ctx context.Context, m Message) (string, error) {
 	if err := validate(m); err != nil {
-		return err
+		return "", err
 	}
 	if d.primary == nil && d.fallback == nil {
-		return Permanent(errors.New("未配置任何通知通道"))
+		return "", Permanent(errors.New("未配置任何通知通道"))
 	}
 
 	var errs []string
@@ -76,15 +93,15 @@ func (d *Dispatcher) Send(ctx context.Context, m Message) error {
 		}
 		err := s.Send(ctx, m)
 		if err == nil {
-			return nil
+			return s.Name(), nil
 		}
 		errs = append(errs, s.Name()+": "+err.Error())
 		// 永久性失败不需要换通道重试（地址本身就是错的）
 		if errors.Is(err, ErrPermanent) {
-			return err
+			return "", err
 		}
 	}
-	return errors.New(strings.Join(errs, " | "))
+	return "", errors.New(strings.Join(errs, " | "))
 }
 
 func validate(m Message) error {

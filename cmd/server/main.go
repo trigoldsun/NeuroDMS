@@ -203,18 +203,24 @@ func main() {
 			}
 			go dirRunner.RunScheduler(rootCtx, 5*time.Minute)
 
+			// 邮件通道：环境变量是平台默认，租户可在管理台配置自己的发件邮箱。
+			// 配置里有密文口令，与证书私钥共用同一个加密实例。
+			mailStore := notify.NewStore(pool, box)
+
 			// 通知通道：配了就接上二次验证；没配则 mfa_required 账号拒登（fail-closed）
-			notifier, nerr := bootstrap.BuildNotifier(&cfg, pool, log)
+			notifier, nerr := bootstrap.BuildNotifier(&cfg, pool, mailStore, log)
 			if nerr != nil {
 				log.Error("通知通道装配失败，拒绝启动", "err", nerr.Error())
 				os.Exit(2)
 			}
 			// 分享链接的邮件外发复用它：Outbox 为空时"邮件分享"会明确返回不可用
 			var notifierOutbox *notify.Outbox
+			var mailRouter *notify.Router
 			if notifier == nil {
 				log.Warn("未配置 SMTP/Graph，外部账号（mfa_required）将无法登录；邮件分享不可用")
 			} else {
 				notifierOutbox = notifier.Outbox
+				mailRouter = notifier.Router
 				bootstrap.SetupMFA(authSvc, pool, []byte(cfg.JWTSecret), notifier)
 				// 后台重试队列：进程退出时随根 ctx 一起停
 				go notifier.Outbox.Run(rootCtx, 5*time.Second)
@@ -427,6 +433,8 @@ func main() {
 				Features:     featureSvc,
 				PlatformAuth: platformAuth,
 				Outbox:       notifierOutbox,
+				Mail:         mailStore,
+				MailRouter:   mailRouter,
 				SecretBox:    box,
 				Directory:    dirStore,
 				DirResolver:  dirResolver,

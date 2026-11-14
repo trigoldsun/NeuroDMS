@@ -21,6 +21,9 @@ type Notifier struct {
 	Outbox  *notify.Outbox
 	Mailer  *CodeMailer
 	Channel string
+	// Router 是按租户发信的路由器（可能有 nil 的 fallback）。
+	// 暴露出来是为了让"保存邮件配置"能立即失效缓存。
+	Router *notify.Router
 }
 
 // CodeMailer 把验证码交给同步发送器。
@@ -46,9 +49,12 @@ func (m *CodeMailer) SendCode(ctx context.Context, tenantID, to, purpose, code s
 
 // BuildNotifier 按配置装配通道。
 //
-// 返回 (nil, nil) 表示"完全没配通知"——这是允许的（纯内网预览环境），
-// 但调用方必须知道：此时 mfa_required 的账号将无法登录（fail-closed）。
-func BuildNotifier(cfg *config.Config, pool *pgxpool.Pool, log *slog.Logger) (*Notifier, error) {
+// 环境变量里的 SMTP/Graph 是**平台默认**通道；租户可以在管理台
+// 「系统设置 · 邮件服务」里配置自己的发件邮箱，此时按租户走（见 notify.Router）。
+//
+// 返回 (nil, nil) 表示"既没有平台通道、也没有配置仓库"——这是允许的
+// （纯内网预览环境），但调用方必须知道：此时 mfa_required 的账号无法登录（fail-closed）。
+func BuildNotifier(cfg *config.Config, pool *pgxpool.Pool, store *notify.Store, log *slog.Logger) (*Notifier, error) {
 	if pool == nil {
 		return nil, nil
 	}
@@ -85,17 +91,43 @@ func BuildNotifier(cfg *config.Config, pool *pgxpool.Pool, log *slog.Logger) (*N
 		}
 	}
 
-	if primary == nil {
+	var disp *notify.Dispatcher
+	if primary != nil {
+		disp = notify.NewDispatcher(primary, fallback)
+	}
+
+	// 选择 Mailer：
+	//   - 有配置仓库 → Router：租户配置优先，否则用 disp（可能为 nil）
+	//   - 没有仓库（测试或旧装配）→ 直接用 disp
+	// 两者都没有才返回 nil，保持"完全没配通知"的语义。
+	var mail notify.Mailer
+	var router *notify.Router
+	switch {
+	case store != nil:
+		router = notify.NewRouter(disp, store.Load, log)
+		mail = router
+	case disp != nil:
+		mail = disp
+	default:
 		return nil, nil
 	}
 
-	disp := notify.NewDispatcher(primary, fallback)
-	log.Info("通知通道已配置", "channels", disp.Channels(), "primary", primaryName)
+	if disp != nil {
+		log.Info("平台默认通知通道已配置", "channels", disp.Channels(), "primary", primaryName)
+	} else {
+		log.Info("未配置平台默认邮件通道：仅租户自有配置可用（管理台「系统设置 · 邮件服务」）")
+	}
+	if primaryName == "" {
+		// notification.channel 只允许 smtp/graph；实际通道在发送成功后会被改写，
+		// 这里给一个占位值，避免 CHECK 约束把消息挡在队列外。
+		primaryName = "smtp"
+	}
 
 	return &Notifier{
-		Outbox:  notify.NewOutbox(pool, disp, log, primaryName),
-		Mailer:  &CodeMailer{Direct: notify.NewDirectSender(pool, disp, log, primaryName)},
+		Outbox:  notify.NewOutbox(pool, mail, log, primaryName),
+		Mailer:  &CodeMailer{Direct: notify.NewDirectSender(pool, mail, log, primaryName)},
 		Channel: primaryName,
+		Router:  router,
 	}, nil
 }
 

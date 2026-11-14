@@ -82,6 +82,12 @@ type API struct {
 	SSO *SSOSettings
 	// Outbox 是通知外发队列；nil 表示未配置邮件通道（"邮件分享"会明确告知不可用）
 	Outbox *notify.Outbox
+	// Mail 是租户级邮件配置仓库（管理台「系统设置 · 邮件服务」）；
+	// nil 表示该部署不支持前端配置，相关接口返回 501。
+	Mail *notify.Store
+	// MailRouter 指向按租户发信的路由器：保存配置后要立即失效缓存，
+	// 测试「跟随平台默认」时也要拿到平台默认通道。可为 nil（测试/旧装配）。
+	MailRouter *notify.Router
 	// PublicBaseURL 是外发链接使用的对外地址（如 https://ndms.neurongene.cn）。
 	// 为空时按请求头推导——但反向代理场景下推导容易出错，生产应显式配置。
 	PublicBaseURL string
@@ -154,6 +160,7 @@ func (a *API) Register(mux *http.ServeMux) {
 	a.registerActivity(mux)
 	a.registerLDAPAdmin(mux)
 	a.registerDirectory(mux)
+	a.registerMail(mux)
 	a.registerPreview(mux)
 	a.registerMedia(mux)
 	a.registerOps(mux)

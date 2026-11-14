@@ -114,8 +114,10 @@ export default function ShareDrawer({
   const chosen = plan?.approvers.find((a) => a.id === approverId)
   const ownerChoices = (plan?.owners ?? []).filter((o) => o.eligible)
 
-  // 第二层是否需要：只有 5/6 级、且第一层审批人不是所有者时才需要。
-  // 发起人本人是所有者时跳过——要求他审批自己会变成死循环。
+  // 第二层是否需要：由服务端按「密级定义」里该密级的配置算出（plan.twoLayer），
+  // 前端不再判断具体等级——阈值是管理员可配的，写死数字会与实际规则脱节。
+  // 第一层审批人本身就是所有者时无需第二次确认；发起人本人是所有者时跳过，
+  // 否则会变成"要求他审批自己"的死循环。
   const needOwner = !!plan?.requireApproval
     && !!plan?.twoLayer
     && !!chosen
@@ -297,8 +299,8 @@ export default function ShareDrawer({
                       <div className="banner warn" style={{ margin: '8px 0' }}>
                         <span className="ico">!</span>
                         <span>
-                          这是 <strong>{plan.objectClass} 级（最高两级之一）</strong>文件外发。
-                          若第一层审批人不是文件所在空间的拥有者，还需要该空间拥有者再确认一次。
+                          按当前密级设置，<strong>{plan.objectClass} 级</strong>文件外发还需要文件所在空间的所有者确认。
+                          若第一层审批人本身不是该空间的所有者，通过后会再流转给所有者审批一次。
                         </span>
                       </div>
                     )}

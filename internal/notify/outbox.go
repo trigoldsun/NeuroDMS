@@ -13,7 +13,7 @@ import (
 // Outbox 是通知外发队列。
 type Outbox struct {
 	pool    *pgxpool.Pool
-	disp    *Dispatcher
+	mail    Mailer
 	log     *slog.Logger
 	channel string
 	// MaxAttempts 超过后进入 dead（不再重试），避免坏地址无限占用队列。
@@ -23,11 +23,11 @@ type Outbox struct {
 }
 
 // NewOutbox 构造队列。channel 记录在行上，便于统计"哪个通道用得更多"。
-func NewOutbox(pool *pgxpool.Pool, disp *Dispatcher, log *slog.Logger, channel string) *Outbox {
+func NewOutbox(pool *pgxpool.Pool, mail Mailer, log *slog.Logger, channel string) *Outbox {
 	if channel == "" {
 		channel = "smtp"
 	}
-	return &Outbox{pool: pool, disp: disp, log: log, channel: channel, MaxAttempts: 5, BatchSize: 20}
+	return &Outbox{pool: pool, mail: mail, log: log, channel: channel, MaxAttempts: 5, BatchSize: 20}
 }
 
 // Enqueue 在业务事务内写入待发消息。
@@ -52,10 +52,11 @@ func (o *Outbox) ProcessBatch(ctx context.Context) (sent, failed, dead int, err 
 		return 0, 0, 0, err
 	}
 	for _, r := range rows {
-		sendErr := o.disp.Send(ctx, Message{To: r.To, Subject: r.Subject, Text: r.Text, HTML: r.HTML})
+		ch, sendErr := o.mail.SendFor(ctx, r.TenantID,
+			Message{To: r.To, Subject: r.Subject, Text: r.Text, HTML: r.HTML})
 		switch {
 		case sendErr == nil:
-			o.markSent(ctx, r.ID)
+			o.markSent(ctx, r.ID, ch)
 			sent++
 		case errors.Is(sendErr, ErrPermanent) || r.Attempts >= o.MaxAttempts:
 			o.markDead(ctx, r.ID, sendErr)
@@ -72,6 +73,7 @@ func (o *Outbox) ProcessBatch(ctx context.Context) (sent, failed, dead int, err 
 
 type claimed struct {
 	ID       string
+	TenantID string
 	To       string
 	Subject  string
 	Text     string
@@ -100,7 +102,7 @@ func (o *Outbox) claim(ctx context.Context) ([]claimed, error) {
 		   SET status = 'sending', attempts = n.attempts + 1
 		  FROM due
 		 WHERE n.id = due.id
-		RETURNING n.id::text, n.to_addr, n.subject, n.body_text,
+		RETURNING n.id::text, n.tenant_id::text, n.to_addr, n.subject, n.body_text,
 		          COALESCE(n.body_html, ''), n.attempts`, size)
 	if err != nil {
 		return nil, err
@@ -110,7 +112,7 @@ func (o *Outbox) claim(ctx context.Context) ([]claimed, error) {
 	var out []claimed
 	for rows.Next() {
 		var c claimed
-		if err := rows.Scan(&c.ID, &c.To, &c.Subject, &c.Text, &c.HTML, &c.Attempts); err != nil {
+		if err := rows.Scan(&c.ID, &c.TenantID, &c.To, &c.Subject, &c.Text, &c.HTML, &c.Attempts); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
@@ -118,9 +120,13 @@ func (o *Outbox) claim(ctx context.Context) ([]claimed, error) {
 	return out, rows.Err()
 }
 
-func (o *Outbox) markSent(ctx context.Context, id string) {
-	_, err := o.pool.Exec(ctx,
-		`UPDATE notification SET status='sent', sent_at=now(), last_error=NULL WHERE id=$1`, id)
+func (o *Outbox) markSent(ctx context.Context, id, channel string) {
+	// 通道名只在"确实知道"时改写：按租户路由后，实际通道可能与入队时记录的不同
+	_, err := o.pool.Exec(ctx, `
+		UPDATE notification
+		   SET status='sent', sent_at=now(), last_error=NULL,
+		       channel = COALESCE(NULLIF($2, ''), channel)
+		 WHERE id=$1`, id, channel)
 	if err != nil {
 		o.log.Error("更新通知状态失败", "id", id, "err", err.Error())
 	}
@@ -207,17 +213,17 @@ func nullIfEmpty(s string) any {
 // 两者都写同一张表，因此"发了什么、发没发出去"只有一处真相。
 type DirectSender struct {
 	pool    *pgxpool.Pool
-	disp    *Dispatcher
+	mail    Mailer
 	log     *slog.Logger
 	channel string
 }
 
 // NewDirectSender 构造同步发送器。
-func NewDirectSender(pool *pgxpool.Pool, disp *Dispatcher, log *slog.Logger, channel string) *DirectSender {
+func NewDirectSender(pool *pgxpool.Pool, mail Mailer, log *slog.Logger, channel string) *DirectSender {
 	if channel == "" {
 		channel = "smtp"
 	}
-	return &DirectSender{pool: pool, disp: disp, log: log, channel: channel}
+	return &DirectSender{pool: pool, mail: mail, log: log, channel: channel}
 }
 
 // SendSync 发送一条消息并记录结果。返回错误表示"没有发出去"。
@@ -235,10 +241,13 @@ func (d *DirectSender) SendSync(ctx context.Context, tenantID string, m Message,
 		return err
 	}
 
-	err := d.disp.Send(ctx, m)
+	ch, err := d.mail.SendFor(ctx, tenantID, m)
 	if err == nil {
-		_, _ = d.pool.Exec(ctx,
-			`UPDATE notification SET status='sent', sent_at=now() WHERE id=$1`, id)
+		_, _ = d.pool.Exec(ctx, `
+			UPDATE notification
+			   SET status='sent', sent_at=now(),
+			       channel = COALESCE(NULLIF($2, ''), channel)
+			 WHERE id=$1`, id, ch)
 		return nil
 	}
 	status := "failed"

@@ -236,6 +236,9 @@ func (a *API) handleCreateShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if plan.RequireApproval {
+		// 这次外发按创建时的密级策略是否需要所有者确认，一并快照到 share 行上。
+		// 之后管理员改「密级定义」不会影响这一条（老分享老政策）。
+		opt.OwnerLayer = plan.TwoLayer
 		if len(plan.Approvers) == 0 {
 			_ = a.emit(r, c.TenantID, AuditEntry{
 				ActorID: c.Subject, Action: "share.create", ObjectID: req.ObjectID, Result: "denied",
@@ -262,7 +265,8 @@ func (a *API) handleCreateShare(w http.ResponseWriter, r *http.Request) {
 		}
 		opt.ApproverID = chosen.ID
 
-		// 5/6 级：审批人不是空间所有者时，再加一层所有者确认。
+		// 该密级被配置为"需所有者确认"、且审批人不是空间所有者时，再加一层。
+		// 错误文案不写死密级数字：阈值已经可配置，写死会与实际规则脱节。
 		if plan.TwoLayer && !chosen.IsOwner {
 			switch plan.OwnerLayerSkipped {
 			case "requester_is_owner":
@@ -271,11 +275,12 @@ func (a *API) handleCreateShare(w http.ResponseWriter, r *http.Request) {
 				opt.OwnerApproverID = ""
 			case "no_owner":
 				writeErr(w, r, http.StatusConflict, "OWNER_APPROVER_UNAVAILABLE",
-					"这份文件属于 5 级及以上，需要空间所有者确认；但当前没有密级足够的其他所有者。请先提高所有者密级，或改由空间所有者作为审批人")
+					"当前密级要求空间所有者确认这次外发，但没有密级足够的其他所有者。请先提高所有者密级，或改由空间所有者作为审批人")
 				return
 			default:
 				if req.OwnerApproverID == "" {
-					writeErr(w, r, http.StatusBadRequest, "OWNER_APPROVER_REQUIRED", "这份文件属于 5 级及以上，请选择空间所有者作为第二层审批人")
+					writeErr(w, r, http.StatusBadRequest, "OWNER_APPROVER_REQUIRED",
+						"按当前密级设置，这次外发还需要空间所有者确认，请选择所有者作为第二层审批人")
 					return
 				}
 				var owner *shareApprover
@@ -344,9 +349,10 @@ func (a *API) handleCreateShare(w http.ResponseWriter, r *http.Request) {
 	link := a.publicBaseURL(r) + "/s/" + created.Token
 	resp["shareUrl"] = link
 	if len(recipients) > 0 {
-		if a.Outbox == nil {
-			// 没配 SMTP/Graph：链接照建，但要明确告诉调用方邮件**没有**从服务器发出
-			resp["mailSkipped"] = "服务器未配置邮件通道"
+		if !a.mailAvailable(r.Context(), c.TenantID) {
+			// 没配任何邮件通道：链接照建，但要明确告诉调用方邮件**没有**从服务器发出。
+			// 判定不只看 Outbox 是否存在：租户级配置下"有队列但没通道"同样发不出去。
+			resp["mailSkipped"] = "服务器未配置邮件通道（管理员可在「系统设置 · 邮件服务」中配置）"
 			resp["mailTo"] = recipients
 		} else {
 			name := a.shareObjectName(r.Context(), c.TenantID, req.ObjectType, req.ObjectID)

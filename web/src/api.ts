@@ -696,6 +696,68 @@ export function directoryRuns(limit = 20): Promise<{ items: DirectoryRun[] }> {
   return api<{ items: DirectoryRun[] }>(`/v1/admin/directory/runs?limit=${limit}`)
 }
 
+// ---------------- 邮件服务配置 ----------------
+//
+// 口令与客户端密钥只写不读：读接口返回 hasSmtpPassword / hasGraphSecret，
+// 输入框留空表示"沿用已保存的值"。
+export type MailConfig = {
+  mode: 'inherit' | 'smtp' | 'graph'
+  fromAddr: string
+  fromName: string
+  replyTo: string
+  smtpHost: string
+  smtpPort: number
+  smtpTls: 'none' | 'starttls' | 'tls'
+  smtpUser: string
+  smtpPassword?: string
+  smtpInsecure: boolean
+  smtpAllowPlaintext: boolean
+  graphTenantId: string
+  graphClientId: string
+  graphClientSecret?: string
+  graphSender: string
+  graphLoginBase: string
+  graphBase: string
+  source?: 'database' | 'none'
+  hasSmtpPassword?: boolean
+  hasGraphSecret?: boolean
+  updatedAt?: string
+  lastTestAt?: string
+  lastTestTo?: string
+  lastTestOk?: boolean
+  lastTestError?: string
+}
+
+export type MailOutbox = {
+  pending: number
+  failed: number
+  dead: number
+  sent24h: number
+  recent: { to: string; purpose: string; error: string; at: string }[]
+}
+
+export type MailStatus = {
+  config: MailConfig
+  environment: { defaultConfigured: boolean; defaultChannels: string[]; secretKeyAvailable: boolean }
+  outbox: MailOutbox
+}
+
+export function getMail(): Promise<MailStatus> {
+  return api<MailStatus>('/v1/admin/mail')
+}
+
+export function saveMail(cfg: MailConfig): Promise<{ config: MailConfig }> {
+  return api<{ config: MailConfig }>('/v1/admin/mail', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cfg),
+  })
+}
+
+export function testMail(cfg: MailConfig, to: string): Promise<{ ok: boolean; channel: string; message: string }> {
+  return postJSON<{ ok: boolean; channel: string; message: string }>('/v1/admin/mail/test', { ...cfg, to })
+}
+
 // ---------------- 空间移交 ----------------
 
 export type TransferRequest = {

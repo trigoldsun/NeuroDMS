@@ -21,6 +21,13 @@ import (
 // MaxLevel 是密级上限（0..6，与 schema 的 CHECK 一致）。
 const MaxLevel = 6
 
+// DefaultOwnerApprovalFrom 是"外发需要空间所有者二次确认"的缺省起算密级。
+//
+// 只在租户没有为该密级保存过配置时生效（classification_label 是读时补齐的）。
+// 取值 5 是为了与旧硬编码规则一致：升级后线上行为不变，
+// 管理员之后在「密级定义」页逐级调整，调整后以库里的值为准。
+const DefaultOwnerApprovalFrom = 5
+
 // ErrBadLevel 表示密级超出 0..6。
 var ErrBadLevel = errors.New("密级必须在 0..6 之间")
 
@@ -55,6 +62,9 @@ type Label struct {
 	Level       int    `json:"level"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	// OwnerApproval 表示该密级的对象对外分享时，是否需要文件所在空间的所有者
+	// 再做一次确认（在第一层审批之后）。由安全管理员在「密级定义」页逐级配置。
+	OwnerApproval bool `json:"ownerApproval"`
 }
 
 // Levels 返回租户的密级定义（缺省行用内置名称补齐）。
@@ -63,7 +73,7 @@ type Label struct {
 // 也不会因为一次迁移遗漏就出现"密级列表为空"的界面。
 func Levels(ctx context.Context, tx pgx.Tx, tenantID string) ([]Label, error) {
 	rows, err := tx.Query(ctx,
-		`SELECT level, name, description FROM classification_label WHERE tenant_id = $1`, tenantID)
+		`SELECT level, name, description, owner_approval FROM classification_label WHERE tenant_id = $1`, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +82,7 @@ func Levels(ctx context.Context, tx pgx.Tx, tenantID string) ([]Label, error) {
 	custom := map[int]Label{}
 	for rows.Next() {
 		var l Label
-		if err := rows.Scan(&l.Level, &l.Name, &l.Description); err != nil {
+		if err := rows.Scan(&l.Level, &l.Name, &l.Description, &l.OwnerApproval); err != nil {
 			return nil, err
 		}
 		custom[l.Level] = l
@@ -88,16 +98,48 @@ func Levels(ctx context.Context, tx pgx.Tx, tenantID string) ([]Label, error) {
 			continue
 		}
 		d := defaultLabels[lv]
-		out = append(out, Label{Level: lv, Name: d.Name, Description: d.Desc})
+		out = append(out, Label{
+			Level: lv, Name: d.Name, Description: d.Desc,
+			OwnerApproval: lv >= DefaultOwnerApprovalFrom,
+		})
 	}
 	return out, nil
 }
 
-// SetLabelName 修改密级的显示名与说明。
+// RequiresOwnerApproval 返回某密级的外发是否需要空间所有者二次确认。
 //
-// 只允许改展示信息：等级与其排序是系统语义，一旦可改，
+// 这是**唯一**的判定入口：分享计划、创建落库都调它，避免两处各自实现
+// 一套阈值（"上层保证"在项目里已经出过两次事故）。
+// 没有配置行时按 DefaultOwnerApprovalFrom 兜底，因此存量租户行为不变。
+func RequiresOwnerApproval(ctx context.Context, tx pgx.Tx, tenantID string, level int) (bool, error) {
+	if level < 0 {
+		level = 0
+	}
+	if level > MaxLevel {
+		level = MaxLevel
+	}
+	var v bool
+	err := tx.QueryRow(ctx,
+		`SELECT owner_approval FROM classification_label WHERE tenant_id = $1 AND level = $2`,
+		tenantID, level).Scan(&v)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return level >= DefaultOwnerApprovalFrom, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return v, nil
+}
+
+// SaveLabel 修改密级的展示信息与"外发是否需要所有者确认"。
+//
+// 只允许改展示信息与审批策略：等级与其排序是系统语义，一旦可改，
 // 攻击者就能把"绝密"改名成"公开"来骗审批人，或把低等级的描述改成"禁止访问"来制造混乱。
-func SetLabelName(ctx context.Context, tx pgx.Tx, tenantID string, level int, name, desc string) error {
+//
+// ownerApproval 为 nil 表示"没提交这一项，保持原值"——老版本前端、脚本调用都可能不带；
+// 新建行时按 DefaultOwnerApprovalFrom 给缺省值。
+func SaveLabel(ctx context.Context, tx pgx.Tx, tenantID string, level int, name, desc string,
+	ownerApproval *bool) error {
 	if level < 0 || level > MaxLevel {
 		return ErrBadLevel
 	}
@@ -108,12 +150,16 @@ func SetLabelName(ctx context.Context, tx pgx.Tx, tenantID string, level int, na
 	if len([]rune(desc)) > 200 {
 		return errors.New("密级说明不能超过 200 字")
 	}
+	fallback := level >= DefaultOwnerApprovalFrom
 	_, err := tx.Exec(ctx, `
-		INSERT INTO classification_label (tenant_id, level, name, description)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO classification_label (tenant_id, level, name, description, owner_approval)
+		VALUES ($1, $2, $3, $4, COALESCE($5::boolean, $6))
 		ON CONFLICT (tenant_id, level)
-		DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, updated_at = now()`,
-		tenantID, level, name, desc)
+		DO UPDATE SET name = EXCLUDED.name,
+		              description = EXCLUDED.description,
+		              owner_approval = COALESCE($5::boolean, classification_label.owner_approval),
+		              updated_at = now()`,
+		tenantID, level, name, desc, ownerApproval, fallback)
 	return err
 }
 

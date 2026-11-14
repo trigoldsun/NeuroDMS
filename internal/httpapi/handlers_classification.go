@@ -278,10 +278,13 @@ func (a *API) handleRequestDown(w http.ResponseWriter, r *http.Request) {
 	writeOK(w, r, map[string]any{"requestId": id, "status": "pending"})
 }
 
-// handleSetClassLabel 修改密级显示名（AC-40）。
+// handleSetClassLabel 修改密级显示名与外发审批策略（AC-40）。
 //
 // 注意这里**没有** level 的 rank/顺序参数：等级语义固定，
 // 因此"在线把系统密级调低"在接口层就不存在。
+//
+// ownerApproval 是"该密级外发是否需要空间所有者二次确认"，可逐级配置。
+// 不传（null）表示保持原值——老版本前端与脚本不会带这个字段。
 func (a *API) handleSetClassLabel(w http.ResponseWriter, r *http.Request) {
 	c, _ := claimsFrom(r.Context())
 	level, err := strconv.Atoi(r.PathValue("level"))
@@ -290,15 +293,24 @@ func (a *API) handleSetClassLabel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
+		Name          string `json:"name"`
+		Description   string `json:"description"`
+		OwnerApproval *bool  `json:"ownerApproval"`
 	}
 	if !decode(w, r, &req) {
 		return
 	}
 
+	var ownerApproval bool
 	err = db.WithTenant(r.Context(), a.Pool, c.TenantID, func(tx pgx.Tx) error {
-		return classification.SetLabelName(r.Context(), tx, c.TenantID, level, req.Name, req.Description)
+		if e := classification.SaveLabel(r.Context(), tx, c.TenantID, level,
+			req.Name, req.Description, req.OwnerApproval); e != nil {
+			return e
+		}
+		// 回读一次：审计要记"改完之后到底是什么值"，而不是"前端提交了什么"。
+		v, e := classification.RequiresOwnerApproval(r.Context(), tx, c.TenantID, level)
+		ownerApproval = v
+		return e
 	})
 	if err != nil {
 		writeErr(w, r, http.StatusBadRequest, "INVALID_ARGUMENT", err.Error())
@@ -306,12 +318,14 @@ func (a *API) handleSetClassLabel(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := a.emit(r, c.TenantID, AuditEntry{
 		ActorID: c.Subject, Action: "classification.label.set", Result: "ok",
-		Detail: map[string]any{"level": level, "name": req.Name},
+		Detail: map[string]any{"level": level, "name": req.Name, "ownerApproval": ownerApproval},
 	}); err != nil {
 		writeErr(w, r, http.StatusInternalServerError, "AUDIT_FAILED", "审计写入失败，操作已拒绝")
 		return
 	}
-	writeOK(w, r, map[string]any{"level": level, "name": req.Name})
+	writeOK(w, r, map[string]any{
+		"level": level, "name": req.Name, "ownerApproval": ownerApproval,
+	})
 }
 
 // handleListClassRequests 列出降密申请。

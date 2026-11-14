@@ -86,9 +86,16 @@ type Options struct {
 	// 这是为了不破坏已经发出的 pending 记录与直接调用本包的测试；
 	// HTTP 入口会强制要求选择，不允许新链接再走"无人负责"的路径。
 	ApproverID string
-	// OwnerApproverID 是 5/6 级外发的第二层审批人（空间所有者）。
-	// 仅当第一层审批人不是所有者时才需要。
+	// OwnerApproverID 是第二层审批人（空间所有者）。
+	// 仅当该密级被配置为"外发需所有者确认"、且第一层审批人不是所有者时才需要。
 	OwnerApproverID string
+	// OwnerLayer 表示"按创建时的密级策略，这次外发还需要所有者确认"。
+	//
+	// 由调用方用 classification.RequiresOwnerApproval 算好后传入，
+	// 而不是在这里再读一次库：Create 已经在一个事务里读了阈值，
+	// 再读一次会出现"两次读取之间策略被改"的不一致。
+	// 它只影响本行是否进入 pending；是否需要第二层由 OwnerApproverID 是否为空决定。
+	OwnerLayer bool
 }
 
 // Created 是创建结果。Token 明文只在此处返回一次。
@@ -200,7 +207,9 @@ func Create(ctx context.Context, pool *pgxpool.Pool, tenantID, creatorID, object
 
 		objClassOut = objClass
 		approval = "not_required"
-		requireApproval := opt.RequireApproval || objClass >= minClass
+		// 三个来源取并集（与 resolveShareApprovalPlan 保持一致）：
+		// 调用方显式要求、达到租户阈值、该密级被配置为需所有者确认。
+		requireApproval := opt.RequireApproval || objClass >= minClass || opt.OwnerLayer
 		stage := "none"
 		if requireApproval {
 			approval = "pending"

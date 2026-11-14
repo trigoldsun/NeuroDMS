@@ -90,6 +90,12 @@ func (s *GraphSender) Send(ctx context.Context, m Message) error {
 		},
 		"saveToSentItems": true,
 	}
+	if strings.TrimSpace(m.ReplyTo) != "" {
+		// 与 SMTP 的 Reply-To 头等价：回信进指定邮箱，而不是发件邮箱
+		payload["message"].(map[string]any)["replyTo"] = []map[string]any{
+			{"emailAddress": map[string]any{"address": m.ReplyTo}},
+		}
+	}
 	body, _ := json.Marshal(payload)
 
 	endpoint := fmt.Sprintf("%s/v1.0/users/%s/sendMail",

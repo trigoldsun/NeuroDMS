@@ -120,7 +120,7 @@ window.FLOWS = {
       { id: 'f', t: 'act', c: 1, r: 5, label: '第一层审批人复核', n: 3 },
       { id: 'f1', t: 'bad', c: 2, r: 5, label: '驳回：链接作废，需重建' },
       { id: 'g', t: 'sys', c: 0, r: 7, label: '链接立即可用' },
-      { id: 'f2', t: 'dec', c: 1, r: 6, label: '5/6 级且审批人非所有者？' },
+      { id: 'f2', t: 'dec', c: 1, r: 6, label: '该密级需所有者确认？' },
       { id: 'f3', t: 'act', c: 1, r: 7, label: '空间所有者确认', sub: '多个所有者时先选一位', n: 4 },
       { id: 'h', t: 'pill', k: 'ok', c: 0, r: 8, label: '等待访客打开' }
     ],
@@ -213,7 +213,7 @@ window.FLOWS = {
 
   'approve': {
     id: 'approve', fig: '图 6-1',
-    title: '谁在审批：指定到人，5/6 级分两层',
+    title: '谁在审批：指定到人，高密级分两层',
     hint: '只有当前环节被指定的人能看到和处理',
     nodes: [
       { id: 'a', t: 'pill', c: 0, r: 0, label: '一条外链进入待审批' },
@@ -224,7 +224,7 @@ window.FLOWS = {
       { id: 'd1', t: 'bad', c: 1, r: 3, label: 'SELF_APPROVAL_DENIED，禁止自批' },
       { id: 'e', t: 'act', c: 0, r: 4, label: '通过或驳回', n: 1 },
       { id: 'e1', t: 'bad', c: 2, r: 4, label: '驳回：链接作废，需重建' },
-      { id: 'f', t: 'dec', c: 0, r: 5, label: '5/6 级且还有第二层？' },
+      { id: 'f', t: 'dec', c: 0, r: 5, label: '该密级还有第二层？' },
       { id: 'f1', t: 'sys', c: 1, r: 5, label: '转 owner 待办', sub: '链接仍不可用' },
       { id: 'g', t: 'act', c: 1, r: 6, label: '空间所有者确认', n: 2 },
       { id: 'h', t: 'sys', c: 0, r: 8, label: '写审计 share.approve（decision + stage）' },
