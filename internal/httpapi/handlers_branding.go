@@ -183,7 +183,8 @@ func brandingView(b tenant.Branding, slug string) map[string]any {
 		"slug": b.Slug, "tenantName": b.TenantName, "status": b.Status,
 		"productName": b.ProductName, "primaryColor": b.PrimaryColor,
 		"accentColor": b.AccentColor, "footerText": b.FooterText,
-		"updatedAt": b.UpdatedAt.UTC().Format(time.RFC3339),
+		"privacyUrl": b.PrivacyURL,
+		"updatedAt":  b.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 	if slug == "" {
 		slug = b.Slug

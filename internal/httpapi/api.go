@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"docvault/internal/auth"
@@ -21,6 +22,7 @@ import (
 	"docvault/internal/iam"
 	"docvault/internal/media"
 	"docvault/internal/metering"
+	"docvault/internal/netinfo"
 	"docvault/internal/notify"
 	"docvault/internal/onlyoffice"
 	"docvault/internal/platform/httpmw"
@@ -88,6 +90,10 @@ type API struct {
 	// MailRouter 指向按租户发信的路由器：保存配置后要立即失效缓存，
 	// 测试「跟随平台默认」时也要拿到平台默认通道。可为 nil（测试/旧装配）。
 	MailRouter *notify.Router
+	// Geo 是 IP 归属地查询器；nil 表示未配置 IP 库（界面显示"未启用"）。
+	Geo *netinfo.Geo
+	// printSeen 是打印上报的节流表（票据 -> 上次记录时间）。
+	printSeen sync.Map
 	// PublicBaseURL 是外发链接使用的对外地址（如 https://ndms.neurongene.cn）。
 	// 为空时按请求头推导——但反向代理场景下推导容易出错，生产应显式配置。
 	PublicBaseURL string
@@ -133,6 +139,7 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/me", a.requireAuth(a.handleMe))
 
 	a.registerShare(mux)
+	a.registerShareAccess(mux)
 	a.registerShareVerify(mux)
 
 	a.registerContent(mux)

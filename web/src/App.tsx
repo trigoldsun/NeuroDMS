@@ -8,6 +8,7 @@ import EditPage from './pages/EditPage'
 import PreviewPage from './pages/PreviewPage'
 import Admin from './pages/Admin'
 import ActivityPage from './pages/ActivityPage'
+import MyShares from './pages/MyShares'
 import { getAccess } from './api'
 import { currentPath, subscribe } from './router'
 import ErrorBoundary from './ErrorBoundary'
@@ -62,6 +63,9 @@ function Routes() {
   }
   if (path === '/activity') {
     return <ActivityPage />
+  }
+  if (path === '/shares') {
+    return <MyShares />
   }
   // 登录后先到工作台：文件页只回答"这个目录里有什么"，
   // 回答不了"我今天该做什么、最近在弄什么"。

@@ -245,6 +245,15 @@ export default function ShareView({ token }: { token: string }) {
     }
   }
 
+  // reportPrint 上报"访客点了打印"。
+  //
+  // 打印本身发生在浏览器里，服务端拿不到完成信号；这次上报只能证明"点了按钮"。
+  // 失败也不提示——上报不该影响他正在做的事。
+  function reportPrint() {
+    if (!info) return
+    void fetch(`/v1/public/tickets/${encodeURIComponent(info.ticket)}/print`, { method: 'POST' }).catch(() => undefined)
+  }
+
   // saveCopy 保存"正在看的这份呈现件"（PDF/图片），不是原始文件。
   //
   // 与「下载原件」的区别：Office 文件在这里得到的是转换后的 PDF，
@@ -355,7 +364,7 @@ export default function ShareView({ token }: { token: string }) {
 
         <div className="share-actions share-chrome" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={() => loadContent(false)}>在线查看</button>
-          {ticket.allowPrint && <button onClick={() => window.print()}>打印</button>}
+          {ticket.allowPrint && <button onClick={() => { reportPrint(); window.print() }}>打印</button>}
           {ticket.allowSave && <button onClick={() => void saveCopy()} disabled={busy === 'save'}>
             {busy === 'save' ? '正在准备…' : '保存副本'}
           </button>}
@@ -389,9 +398,12 @@ export default function ShareView({ token }: { token: string }) {
         e.stopPropagation()
       }
     }
+    const onBeforePrint = () => { if (allowPrint) reportPrint() }
+    window.addEventListener('beforeprint', onBeforePrint)
     window.addEventListener('keydown', onKey, true)
     return () => {
       window.removeEventListener('keydown', onKey, true)
+      window.removeEventListener('beforeprint', onBeforePrint)
       document.body.classList.remove('share-print-blocked')
     }
   }, [ticket?.allowSave, ticket?.allowPrint, info, contentUrl, textBody])

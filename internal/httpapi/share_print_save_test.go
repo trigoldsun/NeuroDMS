@@ -94,7 +94,7 @@ func TestShareSavePrintFlags(t *testing.T) {
 // 邮件主题必须带租户自己的系统名称，而不是固定写 NeuroDMS。
 func TestShareMailSubjectUsesBrand(t *testing.T) {
 	uses := 1
-	subject, text, html := shareMailBody("森莘", "张三", "合同.docx", "https://x/s/tok",
+	subject, text, html := shareMailBody("森莘", "张三", "合同.docx", "https://x/s/tok", "",
 		shareOptionsForTest("", uses))
 	if !contains(subject, "【森莘】") {
 		t.Fatalf("主题应使用系统名称，实际 %q", subject)
@@ -107,7 +107,7 @@ func TestShareMailSubjectUsesBrand(t *testing.T) {
 	}
 
 	// 品牌读不到时退回产品名，不能出现【】这种空括号
-	subject, _, _ = shareMailBody("", "张三", "合同.docx", "https://x/s/tok", shareOptionsForTest("", uses))
+	subject, _, _ = shareMailBody("", "张三", "合同.docx", "https://x/s/tok", "", shareOptionsForTest("", uses))
 	if !contains(subject, "【NeuroDMS】") {
 		t.Fatalf("无品牌时应退回产品名，实际 %q", subject)
 	}

@@ -155,6 +155,10 @@ export function Shell({
                   <span className="ico"><Icon name="clock" size={16} /></span>
                   <span className="txt">最近活动</span>
                 </button>
+                <button className={`nav-item ${curPath === '/shares' ? 'on' : ''}`} onClick={() => navigate('/shares')}>
+                  <span className="ico"><Icon name="share" size={16} /></span>
+                  <span className="txt">我的分享</span>
+                </button>
                 {me && (me.roles ?? []).length > 0 && (
                   <button className="nav-item" onClick={() => navigate(adminPath(''))}>
                     <span className="ico"><Icon name="shield" size={16} /></span>

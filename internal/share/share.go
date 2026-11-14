@@ -272,6 +272,21 @@ func Create(ctx context.Context, pool *pgxpool.Pool, tenantID, creatorID, object
 	}, nil
 }
 
+// RecordEvent 记录一条访问事件（目前用于 print）。
+//
+// 为什么要单独开一个入口：打开/预览/下载都在"取字节"的路径上，服务端天然知道；
+// 打印发生在浏览器里，只能由前端打点上报。它**不是可信事实**，只能证明"对方点了打印"，
+// 因此审计里记的是 share.print 而不是"已打印"。
+func RecordEvent(ctx context.Context, pool *pgxpool.Pool, tenantID, shareID, action, ip, ua string) error {
+	return db.WithTenant(ctx, pool, tenantID, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `
+			INSERT INTO share_visit (id, tenant_id, share_id, action, result, ip, user_agent)
+			VALUES (gen_random_uuid(), $1, $2, $3, 'ok', nullif($4,'')::inet, nullif($5,''))`,
+			tenantID, shareID, action, ip, ua)
+		return err
+	})
+}
+
 // Redeem 校验策略并消费一次链接，返回换取票据所需的上下文。
 //
 // 关键：整个"检查 + 计数"由一条 UPDATE 完成。

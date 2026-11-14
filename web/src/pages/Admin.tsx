@@ -315,6 +315,7 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
         primaryColor: brand.primaryColor,
         accentColor: brand.accentColor,
         footerText: brand.footerText,
+        privacyUrl: brand.privacyUrl,
       })
       setBrand(saved)
       flash('名称已保存：之后发出的邮件主题为【' + saved.productName + '】，发件人显示名同步更新')
@@ -668,6 +669,16 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
                         style={{ width: 64, padding: 2, height: 32 }}
                       />
                       <span className="hint">强调色，用于次级按钮与标记</span>
+
+                      <label htmlFor="brand-privacy">隐私政策链接</label>
+                      <input
+                        id="brand-privacy" placeholder="https://example.com/privacy（可留空）"
+                        value={brand.privacyUrl}
+                        onChange={(e) => setBrand({ ...brand, privacyUrl: e.target.value })}
+                      />
+                      <span className="hint">
+                        会写进外发邮件正文底部：说明收集 IP/浏览器/时间用于安全审计，并给出完整条款地址
+                      </span>
 
                       <label htmlFor="brand-footer">页脚文案</label>
                       <input

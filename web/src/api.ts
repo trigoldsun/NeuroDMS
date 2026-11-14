@@ -696,6 +696,60 @@ export function directoryRuns(limit = 20): Promise<{ items: DirectoryRun[] }> {
   return api<{ items: DirectoryRun[] }>(`/v1/admin/directory/runs?limit=${limit}`)
 }
 
+// ---------------- 我的分享与访问记录 ----------------
+
+export type MyShare = {
+  id: string
+  objectType: 'node' | 'space'
+  objectId: string
+  name: string
+  createdAt: string
+  expiresAt: string | null
+  revokedAt: string | null
+  maxUses: number | null
+  usedCount: number
+  approvalStatus: string
+  allowDownload: boolean
+  allowSave: boolean
+  allowPrint: boolean
+  views: number
+  downloads: number
+  prints: number
+  distinctIps: number
+  lastSeenAt: string | null
+}
+
+export type ShareVisit = {
+  action: string
+  result: string
+  ip: string
+  scope: string
+  geo?: string
+  browser: string
+  os: string
+  at: string
+}
+
+export type ShareVisits = {
+  shareId: string
+  objectType: string
+  objectId: string
+  createdAt: string
+  expiresAt: string | null
+  revokedAt: string | null
+  summary: { opens: number; views: number; downloads: number; prints: number; distinctIps: number; lastSeenAt: string | null }
+  suspicious: boolean
+  items: ShareVisit[]
+}
+
+export function getMyShares(): Promise<{ items: MyShare[] }> {
+  return api<{ items: MyShare[] }>('/v1/shares/mine')
+}
+
+export function getShareVisits(id: string): Promise<ShareVisits> {
+  return api<ShareVisits>(`/v1/shares/${encodeURIComponent(id)}/visits`)
+}
+
 // ---------------- 品牌与名称 ----------------
 //
 // 系统名称用在：外发邮件的主题【xxxx】、发件人显示名【xxxx文档管理系统】、
@@ -707,6 +761,7 @@ export type BrandingInfo = {
   primaryColor: string
   accentColor: string
   footerText: string
+  privacyUrl: string
   logoUrl?: string
   updatedAt?: string
 }
@@ -715,7 +770,7 @@ export function getBranding(): Promise<BrandingInfo> {
   return api<BrandingInfo>('/v1/admin/branding')
 }
 
-export function saveBranding(b: Pick<BrandingInfo, 'productName' | 'primaryColor' | 'accentColor' | 'footerText'>): Promise<BrandingInfo> {
+export function saveBranding(b: Pick<BrandingInfo, 'productName' | 'primaryColor' | 'accentColor' | 'footerText' | 'privacyUrl'>): Promise<BrandingInfo> {
   return api<BrandingInfo>('/v1/admin/branding', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },

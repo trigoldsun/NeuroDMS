@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"docvault/internal/ace"
@@ -1026,6 +1027,14 @@ func (a *API) writeShareWatermarkedPDF(w http.ResponseWriter, r *http.Request, t
 }
 
 func (a *API) emitQuietPublic(r *http.Request, t share.Ticket, action, objectID string) {
+	// 访问流水与审计链是两份数据，各自解决不同问题：
+	//   - share_visit：给分享人看"被看了几次、从哪来的"（本函数补写）；
+	//   - audit_event：哈希链证据，给审计员校验完整性。
+	// 只写审计会让"我的分享"里永远是 0 次预览——这是实现与承诺不一致的典型。
+	if visitAction := strings.TrimPrefix(action, "share."); visitAction == "preview" || visitAction == "download" {
+		_ = share.RecordEvent(r.Context(), a.Pool, t.TenantID, t.ShareID, visitAction,
+			clientIP(r), r.UserAgent())
+	}
 	_ = a.emit(r, t.TenantID, AuditEntry{
 		ActorType: "anonymous", Action: action, ObjectID: objectID, Result: "ok",
 		Detail: map[string]any{"shareId": t.ShareID},

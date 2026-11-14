@@ -30,6 +30,7 @@ import (
 	"docvault/internal/iam"
 	"docvault/internal/media"
 	"docvault/internal/metering"
+	"docvault/internal/netinfo"
 	"docvault/internal/notify"
 	"docvault/internal/onlyoffice"
 	"docvault/internal/platform/config"
@@ -202,6 +203,16 @@ func main() {
 				log.Info("目录认证未配置（可在管理台「系统设置 · 目录认证」启用）")
 			}
 			go dirRunner.RunScheduler(rootCtx, 5*time.Minute)
+
+			// IP 归属地：配了 mmdb 才启用；没配只显示"内网/公网"。
+			// 缺库不能让启动失败——它是访问记录里的附加信息，不是功能前提。
+			geo, gerr := netinfo.Open(cfg.GeoIPDB)
+			if gerr != nil {
+				log.Warn("IP 归属地未启用（数据库无法打开）", "path", cfg.GeoIPDB, "err", gerr.Error())
+			} else if geo != nil {
+				defer func() { _ = geo.Close() }()
+				log.Info("IP 归属地已启用", "db", cfg.GeoIPDB)
+			}
 
 			// 租户服务：这里就需要它——邮件主题与发件人显示名要用租户自己的系统名称。
 			// 之前是在 M3 区块才创建，导致通知装配拿不到品牌。
@@ -449,6 +460,7 @@ func main() {
 				Outbox:       notifierOutbox,
 				Mail:         mailStore,
 				MailRouter:   mailRouter,
+				Geo:          geo,
 				SecretBox:    box,
 				Directory:    dirStore,
 				DirResolver:  dirResolver,

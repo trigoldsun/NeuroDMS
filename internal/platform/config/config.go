@@ -137,6 +137,8 @@ type Config struct {
 	SMTPFrom     string
 	SMTPTLS      string // none | starttls | tls
 	SMTPInsecure bool
+	// GeoIPDB 是 GeoLite2/GeoIP2 mmdb 路径；为空表示不启用 IP 归属地。
+	GeoIPDB string
 
 	GraphTenantID     string
 	GraphClientID     string
@@ -257,6 +259,7 @@ func Load(getenv Getenv) (Config, error) {
 		SMTPFrom:     strings.TrimSpace(getenv("DOCVAULT_SMTP_FROM")),
 		SMTPTLS:      orDefault(strings.TrimSpace(getenv("DOCVAULT_SMTP_TLS")), "starttls"),
 		SMTPInsecure: strings.TrimSpace(getenv("DOCVAULT_SMTP_INSECURE")) == "1",
+		GeoIPDB:      strings.TrimSpace(getenv("DOCVAULT_GEOIP_DB")),
 
 		GraphTenantID:     strings.TrimSpace(getenv("DOCVAULT_GRAPH_TENANT_ID")),
 		GraphClientID:     strings.TrimSpace(getenv("DOCVAULT_GRAPH_CLIENT_ID")),

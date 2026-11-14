@@ -74,7 +74,7 @@ func (a *API) publicBaseURL(r *http.Request) string {
 //
 // 刻意不包含访问口令：邮件与口令必须走两条独立通道，
 // 否则"邮箱被看到"就等于"链接可以直接打开"。
-func shareMailBody(brand, senderName, objectName, link string, opt share.Options) (subject, text, htmlBody string) {
+func shareMailBody(brand, senderName, objectName, link, privacyURL string, opt share.Options) (subject, text, htmlBody string) {
 	if strings.TrimSpace(brand) == "" {
 		// 品牌读不到时不写一个空括号，退回产品名——比【】更像正常邮件
 		brand = "NeuroDMS"
@@ -118,6 +118,12 @@ func shareMailBody(brand, senderName, objectName, link string, opt share.Options
 		"提示：链接不要转发给其他人；如需延长或撤回，请联系分享人。",
 		"本邮件由系统自动发送，请勿直接回复。",
 	)
+	// 隐私告知：打开链接时会记录 IP、浏览器与访问时间（用于安全审计与泄露追溯）。
+	// 这不是"补充条款"，而是《个人信息保护法》要求的"告知"——必须和邮件一起到达。
+	lines = append(lines, "", "隐私说明：为保障文件安全，打开链接时系统会记录访问者的 IP 地址、浏览器类型与访问时间，仅用于安全审计与泄露追溯。")
+	if privacyURL != "" {
+		lines = append(lines, "完整隐私政策："+privacyURL)
+	}
 	text = strings.Join(lines, "\n")
 
 	htmlBody = fmt.Sprintf(`<div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:14px;line-height:1.7;color:#1f2328">
@@ -125,6 +131,9 @@ func shareMailBody(brand, senderName, objectName, link string, opt share.Options
 <p><a href="%s" style="display:inline-block;padding:8px 16px;background:#12724a;color:#fff;border-radius:6px;text-decoration:none">打开文件</a></p>
 <p style="color:#57606a">有效期：%s<br>访问次数：%s<br>访问条件：%s%s</p>
 <p style="color:#8b949e;font-size:12px">链接请勿转发。本邮件由系统自动发送，请勿直接回复。</p>
+<p style="color:#8b949e;font-size:12px;margin-top:12px;padding-top:10px;border-top:1px solid #e5e7eb">
+隐私说明：打开链接时系统会记录访问者的 IP 地址、浏览器类型与访问时间，仅用于安全审计与泄露追溯。%s
+</p>
 </div>`,
 		html.EscapeString(senderName), html.EscapeString(brand), html.EscapeString(objectName), html.EscapeString(link),
 		html.EscapeString(expiry), html.EscapeString(uses), html.EscapeString(pwd),
@@ -133,6 +142,12 @@ func shareMailBody(brand, senderName, objectName, link string, opt share.Options
 				return ""
 			}
 			return "<br>身份验证：" + html.EscapeString(verify)
+		}(),
+		func() string {
+			if privacyURL == "" {
+				return ""
+			}
+			return `<br><a href="` + html.EscapeString(privacyURL) + `" style="color:#57606a">查看完整隐私政策</a>（继续使用即表示你已知悉上述说明）`
 		}())
 	return subject, text, htmlBody
 }
@@ -142,7 +157,7 @@ func (a *API) enqueueShareMail(ctx context.Context, tenantID, shareID, senderNam
 	link string, opt share.Options, recipients []string) (int, error) {
 
 	brand := a.brandName(ctx, tenantID)
-	subject, text, htmlBody := shareMailBody(brand, senderName, objectName, link, opt)
+	subject, text, htmlBody := shareMailBody(brand, senderName, objectName, link, a.privacyURL(ctx, tenantID), opt)
 	queued := 0
 	err := db.WithTenant(ctx, a.Pool, tenantID, func(tx pgx.Tx) error {
 		for _, to := range recipients {
@@ -178,6 +193,25 @@ func (a *API) brandName(ctx context.Context, tenantID string) string {
 		return ""
 	}
 	return strings.TrimSpace(b.ProductName)
+}
+
+// privacyURL 返回租户配置的隐私政策地址；没配就返回空（邮件里只留说明，不放死链）。
+//
+// 刻意不硬编码一个平台地址：私有化部署的客户不会访问我们的站点，
+// 给他们一个"打不开的隐私政策"比没有更糟。
+func (a *API) privacyURL(ctx context.Context, tenantID string) string {
+	if a.Tenants == nil {
+		return ""
+	}
+	slug, err := a.Tenants.SlugOf(ctx, tenantID)
+	if err != nil {
+		return ""
+	}
+	b, err := a.Tenants.BrandingBySlug(ctx, slug)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(b.PrivacyURL)
 }
 
 // mailFromName 计算发件人显示名：显式配置优先，否则用「【系统名文档管理系统】」。

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -20,16 +21,19 @@ import (
 // Logo 以字节返回但**不**进 JSON（json:"-"）：base64 塞进每次品牌请求会把
 // 响应从 1KB 撑到 300KB，而前端只需要一个可缓存的 URL。
 type Branding struct {
-	Slug         string    `json:"slug"`
-	TenantName   string    `json:"tenantName"`
-	Status       string    `json:"status"`
-	ProductName  string    `json:"productName"`
-	PrimaryColor string    `json:"primaryColor"`
-	AccentColor  string    `json:"accentColor"`
-	FooterText   string    `json:"footerText"`
-	Logo         []byte    `json:"-"`
-	LogoMime     string    `json:"logoMime"`
-	UpdatedAt    time.Time `json:"updatedAt"`
+	Slug         string `json:"slug"`
+	TenantName   string `json:"tenantName"`
+	Status       string `json:"status"`
+	ProductName  string `json:"productName"`
+	PrimaryColor string `json:"primaryColor"`
+	AccentColor  string `json:"accentColor"`
+	FooterText   string `json:"footerText"`
+	// PrivacyURL 是对外公布的隐私政策地址（可为空 = 用平台默认页）。
+	// 外发邮件正文底部、分享页页脚都会引用它——采集 IP 与访问记录必须告知。
+	PrivacyURL string    `json:"privacyUrl"`
+	Logo       []byte    `json:"-"`
+	LogoMime   string    `json:"logoMime"`
+	UpdatedAt  time.Time `json:"updatedAt"`
 }
 
 // LogoSHA 给前端做缓存指纹（Logo 变了 URL 才变）。
@@ -52,6 +56,7 @@ type BrandingInput struct {
 	PrimaryColor string `json:"primaryColor"`
 	AccentColor  string `json:"accentColor"`
 	FooterText   string `json:"footerText"`
+	PrivacyURL   string `json:"privacyUrl"`
 	Logo         []byte `json:"logoBase64"` // 允许一次提交，避免两段式上传的中间态
 	LogoMime     string `json:"logoMime"`
 	RemoveLogo   bool   `json:"removeLogo"`
@@ -67,7 +72,7 @@ const (
 func (s *Service) BrandingBySlug(ctx context.Context, slug string) (Branding, error) {
 	return s.brandingQuery(ctx,
 		`SELECT slug, name, status, product_name, primary_color, accent_color,
-		        logo, logo_mime, footer_text, updated_at
+		        logo, logo_mime, footer_text, updated_at, privacy_url
 		   FROM public_branding($1)`, strings.ToLower(strings.TrimSpace(slug)))
 }
 
@@ -96,7 +101,7 @@ func (s *Service) brandingQuery(ctx context.Context, q string, args ...any) (Bra
 	var b Branding
 	err := s.pool.QueryRow(ctx, q, args...).Scan(&b.Slug, &b.TenantName, &b.Status,
 		&b.ProductName, &b.PrimaryColor, &b.AccentColor,
-		&b.Logo, &b.LogoMime, &b.FooterText, &b.UpdatedAt)
+		&b.Logo, &b.LogoMime, &b.FooterText, &b.UpdatedAt, &b.PrivacyURL)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Branding{}, ErrNotFound
@@ -112,6 +117,7 @@ func (s *Service) UpdateBranding(ctx context.Context, tenantID string, in Brandi
 	in.PrimaryColor = strings.ToLower(strings.TrimSpace(in.PrimaryColor))
 	in.AccentColor = strings.ToLower(strings.TrimSpace(in.AccentColor))
 	in.FooterText = strings.TrimSpace(in.FooterText)
+	in.PrivacyURL = strings.TrimSpace(in.PrivacyURL)
 	in.LogoMime = strings.ToLower(strings.TrimSpace(in.LogoMime))
 
 	if in.ProductName == "" {
@@ -125,6 +131,17 @@ func (s *Service) UpdateBranding(ctx context.Context, tenantID string, in Brandi
 	}
 	if len([]rune(in.FooterText)) > maxFooterLen {
 		return fmt.Errorf("%w: 页脚最多 %d 字", ErrInvalidInput, maxFooterLen)
+	}
+	// 隐私政策链接只允许 http(s)：它会被渲染成 <a href>，
+	// javascript:/data: 之类在这里必须挡掉（分享页是未登录状态）。
+	if in.PrivacyURL != "" {
+		if len(in.PrivacyURL) > 500 {
+			return fmt.Errorf("%w: 隐私政策链接过长", ErrInvalidInput)
+		}
+		u, err := url.Parse(in.PrivacyURL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return fmt.Errorf("%w: 隐私政策链接必须是 http(s) 地址", ErrInvalidInput)
+		}
 	}
 	if in.RemoveLogo {
 		in.Logo, in.LogoMime = nil, ""
@@ -148,8 +165,8 @@ func (s *Service) UpdateBranding(ctx context.Context, tenantID string, in Brandi
 	return db.WithTenant(ctx, s.pool, tenantID, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
 			INSERT INTO tenant_config (tenant_id, product_name, primary_color, accent_color,
-			                           logo, logo_mime, footer_text, updated_at)
-			VALUES ($1, $2, $3, $4, $5, nullif($6,''), $7, now())
+			                           logo, logo_mime, footer_text, privacy_url, updated_at)
+			VALUES ($1, $2, $3, $4, $5, nullif($6,''), $7, $8, now())
 			ON CONFLICT (tenant_id) DO UPDATE SET
 				product_name  = EXCLUDED.product_name,
 				primary_color = EXCLUDED.primary_color,
@@ -157,9 +174,10 @@ func (s *Service) UpdateBranding(ctx context.Context, tenantID string, in Brandi
 				logo          = EXCLUDED.logo,
 				logo_mime     = EXCLUDED.logo_mime,
 				footer_text   = EXCLUDED.footer_text,
+				privacy_url   = EXCLUDED.privacy_url,
 				updated_at    = now()`,
 			tenantID, in.ProductName, in.PrimaryColor, in.AccentColor,
-			in.Logo, in.LogoMime, in.FooterText)
+			in.Logo, in.LogoMime, in.FooterText, in.PrivacyURL)
 		return err
 	})
 }
