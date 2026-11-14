@@ -48,7 +48,30 @@ func main() {
 	// -send 走真实下发：这是唯一能验证"签名与模板在该账号下可用"的方式。
 	// 单列一个开关而不是默认行为，因为它真的会发短信、真的计费。
 	sendTo := flag.String("send", "", "向该号码真实发送一条验证码（会计费）")
+	verifyTo := flag.String("verify", "", "核验某个号码收到的验证码（配合 -code）")
+	verifyCode := flag.String("code", "", "要核验的验证码")
 	flag.Parse()
+
+	// -verify 用真实号码 + 真实验证码走一次核验，证明"校验侧"也通。
+	// 核验成功会消耗该验证码（一次性），所以只用于排障，不用于业务。
+	if *verifyTo != "" {
+		norm, perr := phone.Normalize(*verifyTo)
+		if perr != nil || *verifyCode == "" {
+			fmt.Println("✗ 需要 -verify <号码> -code <验证码>")
+			os.Exit(2)
+		}
+		ok, err := p.Check(ctx, norm, *verifyCode)
+		if err != nil {
+			fmt.Println("✗ 核验失败：", err)
+			os.Exit(1)
+		}
+		if ok {
+			fmt.Printf("✓ 核验通过（PASS）：%s 的验证码有效，发送与校验两侧都正常\n", phone.Mask(norm))
+			return
+		}
+		fmt.Printf("✗ 核验未通过（非 PASS）：%s —— 验证码错误、已过期，或已被使用\n", phone.Mask(norm))
+		os.Exit(1)
+	}
 	if *sendTo != "" {
 		norm, perr := phone.Normalize(*sendTo)
 		if perr != nil {
