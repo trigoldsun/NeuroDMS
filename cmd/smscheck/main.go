@@ -8,7 +8,8 @@ package main
 //
 // 用法：
 //   set -a; . docker/.env; set +a
-//   go run ./cmd/smscheck
+//   go run ./cmd/smscheck              # 只核验凭据，不发短信
+//   go run ./cmd/smscheck -send 138... # 真发一条（会计费、会打扰机主）
 //
 // 常见返回：
 //   InvalidAccessKeyId.NotFound → AccessKeyId 不存在（换过账号/已删除/抄错）
@@ -18,11 +19,13 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
+	"docvault/internal/phone"
 	"docvault/internal/sms"
 )
 
@@ -41,6 +44,26 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
+
+	// -send 走真实下发：这是唯一能验证"签名与模板在该账号下可用"的方式。
+	// 单列一个开关而不是默认行为，因为它真的会发短信、真的计费。
+	sendTo := flag.String("send", "", "向该号码真实发送一条验证码（会计费）")
+	flag.Parse()
+	if *sendTo != "" {
+		norm, perr := phone.Normalize(*sendTo)
+		if perr != nil {
+			fmt.Println("✗ 号码格式不正确（仅支持中国大陆 11 位）")
+			os.Exit(2)
+		}
+		if err := p.Send(ctx, norm); err != nil {
+			fmt.Println("✗ 发送失败：", err)
+			os.Exit(1)
+		}
+		fmt.Printf("✓ 已提交下发：%s（若 1 分钟内未收到，多为签名/模板未在该账号生效，见服务端日志）\n",
+			phone.Mask(norm))
+		return
+	}
+
 	ok, err := p.Check(ctx, "+8613000000000", "000000")
 	switch {
 	case err == nil:
