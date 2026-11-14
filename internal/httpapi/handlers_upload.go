@@ -8,6 +8,7 @@ package httpapi
 //   2. 秒传只能由服务端核对内容哈希，客户端声明的 size/sha256 只用于"找候选"。
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -21,6 +22,8 @@ import (
 
 func (a *API) registerUpload(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/uploads", a.requireAuth(a.handleCreateUpload))
+	// 整目录上传前的批量预检：一次把"哪些文件会被拒、为什么"说清楚
+	mux.HandleFunc("POST /v1/uploads/preflight", a.requireAuth(a.handleUploadPreflight))
 	// 查询会话：刷新页面后恢复续传要读"已收到哪些分片"。
 	// 只返回本人会话——会话里有目标目录与文件名，跨用户可见等于泄露目录结构。
 	mux.HandleFunc("GET /v1/uploads/{id}", a.requireAuth(a.handleGetUpload))
@@ -75,6 +78,145 @@ func extOfHint(name string) string {
 	return "无扩展名"
 }
 
+// folderUploadEnabled 判断本租户此刻能不能用"整目录上传"。
+//
+// 两把锁，缺一不可：
+//  1. 档位必须含该能力（基础版没有）——它是批量写入口，不是协议能力；
+//  2. 租户管理员必须在系统设置里显式打开（默认关）。
+//
+// 读不到配置一律返回 false（fail-closed）。这里与"扩展名白名单读不到就放行"
+// 的取舍不同：白名单是体验约束，而批量上传会一次创建大量目录与文件，
+// 把配额、预览转码队列、审计量同时打满——宁可拒，也不能在数据库抖动时放开。
+func (a *API) folderUploadEnabled(ctx context.Context, tenantID string) bool {
+	st, err := a.editionState(ctx, tenantID)
+	if err != nil || !st.Spec.FolderUpload {
+		return false
+	}
+	pol, err := a.tenantPolicy(ctx, tenantID)
+	if err != nil {
+		return false
+	}
+	return pol.FolderUpload
+}
+
+// preflightItem 是一个待检文件。
+type preflightItem struct {
+	Name string `json:"name"`
+	Size int64  `json:"size"`
+	// Path 是相对路径（如 "项目A/设计/图.png"）。服务端只把它原样带回：
+	// 目录结构由客户端解释，服务端不该猜路径分隔符的含义。
+	Path string `json:"path"`
+}
+
+// maxPreflightEntries 是单次预检的文件数上限。
+//
+// 5000 的理由：一个真实项目目录很少超过这个量级；再大时应当分批预检，
+// 否则一次请求就要把整棵树的文件名送到服务端，请求体与内存都不受控。
+const maxPreflightEntries = 5000
+
+// handleUploadPreflight 批量预检：整目录上传前，先回答"哪些会被拒、为什么"。
+//
+// 为什么不在前端按 allowedExts 自己判：
+// 这里有三套规则（租户扩展名白名单、双扩展名/危险扩展、单文件大小），
+// 前端复制一份就必然有一天与后端不一致——用户看到"通过"，传到一半才被拒，
+// 比一开始就说清楚更糟。而且目录里往往几百个文件，逐个试错的代价太高。
+func (a *API) handleUploadPreflight(w http.ResponseWriter, r *http.Request) {
+	c, _ := claimsFrom(r.Context())
+	var req struct {
+		SpaceID  string          `json:"spaceId"`
+		ParentID string          `json:"parentId"`
+		Files    []preflightItem `json:"files"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	if req.SpaceID == "" {
+		writeErr(w, r, http.StatusBadRequest, "INVALID_ARGUMENT", "spaceId 必填")
+		return
+	}
+	if len(req.Files) == 0 {
+		writeErr(w, r, http.StatusBadRequest, "INVALID_ARGUMENT", "没有待检查的文件")
+		return
+	}
+	if len(req.Files) > maxPreflightEntries {
+		writeErr(w, r, http.StatusBadRequest, "TOO_MANY_FILES",
+			"一次最多检查 "+strconv.Itoa(maxPreflightEntries)+" 个文件，请分多次上传")
+		return
+	}
+	if !a.folderUploadEnabled(r.Context(), c.TenantID) {
+		writeErr(w, r, http.StatusForbidden, "FEATURE_NOT_ENABLED",
+			"当前未启用文件夹上传，请在「系统设置」中开启（需专业版及以上）")
+		return
+	}
+
+	// 至少要能在目标目录里创建：只看单文件权限不够，
+	// 否则会出现"预检全通过、上传全 403"。目录级判定包括对祖先的遍历权限。
+	target := req.ParentID
+	if target == "" {
+		target = req.SpaceID
+	}
+	d, err := a.check(r.Context(), c, req.SpaceID, target, authz.Create)
+	if err != nil {
+		writeErr(w, r, http.StatusInternalServerError, "INTERNAL", "权限判定失败")
+		return
+	}
+	if a.denyUnless(w, r, d) {
+		return
+	}
+
+	st, err := a.editionState(r.Context(), c.TenantID)
+	if err != nil {
+		writeErr(w, r, http.StatusServiceUnavailable, "ENTITLEMENT_UNAVAILABLE",
+			"无法读取租户档位，请稍后重试")
+		return
+	}
+	pol, _ := a.tenantPolicy(r.Context(), c.TenantID)
+	// 与单文件上传同一个上限：档位值与租户值取较小者
+	limitMB := st.EffectiveMaxUploadMB(pol.MaxUploadMB)
+	limitBytes := int64(limitMB) << 20
+
+	type rejected struct {
+		Index  int    `json:"index"`
+		Path   string `json:"path"`
+		Name   string `json:"name"`
+		Code   string `json:"code"`   // ext | dangerous | size | name
+		Reason string `json:"reason"` // 面向用户的一句话
+	}
+	unsupported := make([]rejected, 0, 8)
+	for i, f := range req.Files {
+		path := f.Path
+		if path == "" {
+			path = f.Name
+		}
+		switch {
+		case strings.TrimSpace(f.Name) == "":
+			unsupported = append(unsupported, rejected{Index: i, Path: path, Name: f.Name,
+				Code: "name", Reason: "文件名为空"})
+		case guardUploadName(f.Name) != nil:
+			// 双扩展名里夹危险类型：shell.php.jpg 这类，某些错误配置会按第一段执行
+			unsupported = append(unsupported, rejected{Index: i, Path: path, Name: f.Name,
+				Code: "dangerous", Reason: "文件名包含不允许的扩展名组合"})
+		case !pol.AllowsExt(f.Name):
+			unsupported = append(unsupported, rejected{Index: i, Path: path, Name: f.Name,
+				Code: "ext", Reason: "类型不在本组织允许的范围内（" + extOfHint(f.Name) + "）"})
+		case f.Size < 0 || (limitBytes > 0 && f.Size > limitBytes):
+			unsupported = append(unsupported, rejected{Index: i, Path: path, Name: f.Name,
+				Code: "size", Reason: "超过单文件上限 " + strconv.Itoa(limitMB) + " MB"})
+		}
+	}
+
+	writeOK(w, r, map[string]any{
+		"total":       len(req.Files),
+		"allowed":     len(req.Files) - len(unsupported),
+		"unsupported": unsupported,
+		"limits": map[string]any{
+			"maxUploadMB": limitMB,
+			// null 表示不限制；空数组会被前端误解为"一个都不许传"
+			"allowedExts": pol.AllowedExts,
+		},
+	})
+}
+
 func (a *API) handleCreateUpload(w http.ResponseWriter, r *http.Request) {
 	c, _ := claimsFrom(r.Context())
 	var req struct {
@@ -84,6 +226,13 @@ func (a *API) handleCreateUpload(w http.ResponseWriter, r *http.Request) {
 		SizeBytes int64  `json:"sizeBytes"`
 		SHA256    string `json:"sha256"`
 		PartSize  int64  `json:"partSize"`
+		// FolderUpload 表示这次上传属于"整目录上传"批次。
+		//
+		// 单独打标记而不是"只看目录深度"：文件本身与普通上传完全一样，
+		// 服务端无法从请求形状区分。打标记是为了让**关掉功能的租户**
+		// 即使用脚本直接调接口也传不了整目录——功能开关在写入口生效，
+		// 而不只是把界面按钮藏起来。
+		FolderUpload bool `json:"folderUpload"`
 	}
 	if !decode(w, r, &req) {
 		return
@@ -101,6 +250,11 @@ func (a *API) handleCreateUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	// 分片一开始就校验扩展名：此时还没传任何字节，拒绝的代价最小
 	if a.rejectByExtWhitelist(w, r, c.TenantID, req.Name) {
+		return
+	}
+	if req.FolderUpload && !a.folderUploadEnabled(r.Context(), c.TenantID) {
+		writeErr(w, r, http.StatusForbidden, "FEATURE_NOT_ENABLED",
+			"当前未启用文件夹上传，请在「系统设置」中开启（需专业版及以上）")
 		return
 	}
 

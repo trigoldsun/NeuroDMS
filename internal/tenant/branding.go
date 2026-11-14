@@ -218,6 +218,13 @@ type Policy struct {
 	// 要么让快的一方等一个毫无意义的长超时。
 	UploadTimeoutSeconds int `json:"uploadTimeoutSeconds"`
 
+	// FolderUpload 是否在本租户启用"整目录上传"。
+	//
+	// 这是**档位能力之上的租户开关**，默认关闭：
+	// 批量上传会一次产生大量目录与文件，是否开放应该由客户自己决定，
+	// 而不是升级后被动生效。档位不支持时这个值不起作用（见 capabilities）。
+	FolderUpload bool `json:"folderUpload"`
+
 	// AllowedExts：允许上传的扩展名白名单（小写、带点，如 ".pdf"）。空表示不限制。
 	//
 	// 这是**入口约束**，不是安全边界——真正的安全检查靠危险扩展名与可执行魔数。

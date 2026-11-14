@@ -4,7 +4,7 @@ import ActivityTable from './ActivityTable'
 import DirectorySettings from './DirectorySettings'
 import MailSettings from './MailSettings'
 import { adminPath, navigate } from '../router'
-import { api, postJSON, fetchMe, applyTheme, cycleTheme, getBranding, saveBranding, HttpError, type BrandingInfo, type Me } from '../api'
+import { api, postJSON, fetchMe, applyTheme, cycleTheme, getBranding, saveBranding, getCapabilities, HttpError, type BrandingInfo, type Capabilities, type Me } from '../api'
 import { Shell } from '../components/Shell'
 import { AdminSpaces } from './AdminSpaces'
 import { Icon, InfoDot } from '../components/ui'
@@ -78,6 +78,8 @@ type TenantPolicy = {
   uploadTimeoutSeconds: number
   // 允许上传的扩展名（小写带点）。null/空表示不限制。
   allowedExts: string[] | null
+  // 是否启用"整目录上传"（增值功能，默认关）
+  folderUpload: boolean
 }
 
 // 格式目录来自服务端 /v1/meta/formats。
@@ -139,9 +141,11 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
   const [shareApprovals, setShareApprovals] = useState<ShareApproval[]>([])
   // 品牌：系统名称（邮件主题与发件人显示名都用它）+ 颜色 + 页脚
   const [brand, setBrand] = useState<BrandingInfo | null>(null)
+  // 档位能力：设置页要据此决定"文件夹上传"开关是否可点
+  const [caps, setCaps] = useState<Capabilities | null>(null)
   const [tpolicy, setTpolicy] = useState<TenantPolicy>({
     shareDefaultExpireDays: 0, maxUploadMB: 0, auditRetentionDays: 730,
-    uploadTimeoutSeconds: 300, allowedExts: null,
+    uploadTimeoutSeconds: 300, allowedExts: null, folderUpload: false,
   })
   // 服务端下发的格式目录（含预览能力）；拉不到时设置页仍可手填，只是没有勾选列表
   const [catalog, setCatalog] = useState<FormatCatalog | null>(null)
@@ -241,6 +245,12 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
         } catch {
           setBrand(null)
         }
+        // 档位可能因到期变化，每次进设置页都重新读，不缓存
+        try {
+          setCaps(await getCapabilities())
+        } catch {
+          setCaps(null)
+        }
         const d = await api<TenantPolicy>('/v1/admin/policy')
         setTpolicy({
           shareDefaultExpireDays: d.shareDefaultExpireDays ?? 0,
@@ -248,6 +258,7 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
           auditRetentionDays: d.auditRetentionDays || 730,
           uploadTimeoutSeconds: d.uploadTimeoutSeconds || 300,
           allowedExts: d.allowedExts ?? null,
+          folderUpload: d.folderUpload ?? false,
         })
         // 清单单独拉：拉失败不该连带让整页报错，用户仍能改超时等其它项
         try {
@@ -735,6 +746,32 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
                     </div>
                   </>
                 )}
+              </div>
+
+              <div className="card pad">
+                <h3 style={{ marginTop: 0, marginBottom: 10 }}>上传与协作</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '180px 240px 1fr', gap: 10, alignItems: 'center' }}>
+                  <label htmlFor="pol-folder">文件夹上传</label>
+                  <label htmlFor="pol-folder" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: caps?.folderUploadAllowed ? 'pointer' : 'not-allowed' }}>
+                    <input
+                      id="pol-folder"
+                      type="checkbox"
+                      checked={tpolicy.folderUpload}
+                      disabled={!caps?.folderUploadAllowed}
+                      onChange={(e) => setTpolicy((p) => ({ ...p, folderUpload: e.target.checked }))}
+                    />
+                    <span style={{ fontSize: 12.5, color: tpolicy.folderUpload ? 'var(--forest-d)' : 'var(--slate)' }}>
+                      {tpolicy.folderUpload ? '已启用' : '未启用'}
+                    </span>
+                    <span className="badge brand" style={{ height: 17 }}>增值功能</span>
+                  </label>
+                  <span className="hint">
+                    {caps && !caps.folderUploadAllowed
+                      ? <>当前档位（{caps.editionName}）不含此能力，需升级到<strong>专业版及以上</strong>。</>
+                      : <>允许一次上传整个文件夹并<strong>保留目录层级</strong>，上传前会先列出不受支持的文件，由你确认后跳过。<br />
+                        默认关闭：批量上传会在短时间内创建大量目录与文件，是否开放由你决定。</>}
+                  </span>
+                </div>
               </div>
 
               <div className="card pad">

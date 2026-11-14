@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import {
-  api, downloadNode, downloadBatch, del, patchJSON, postJSON, uploadFile,
+  api, downloadNode, downloadBatch, del, patchJSON, postJSON, uploadFile, preflightUpload,
   fetchMe, cycleTheme, applyTheme, HttpError, getCapabilities,
   type Me, type Capabilities, type SearchHit,
 } from '../api'
@@ -65,7 +65,65 @@ type UploadItem = {
   part?: number
   parts?: number
 }
-type Job = { id: string; file: File; spaceId: string; parentId: string; ac: AbortController }
+type Job = {
+  id: string; file: File; spaceId: string; parentId: string; ac: AbortController
+  // 属于"整目录上传"批次：服务端据此校验功能是否开启（关掉后脚本也传不了）
+  folder?: boolean
+}
+
+/* ---------------- 整目录上传 ---------------- */
+
+// 一次最多收多少文件、多深的目录。
+//
+// 上限不是为了性能，而是为了**不让一次误操作把空间塞满**：
+// 有人把整个「我的文档」拖进来时，5000 个文件的上传会跑很久，
+// 期间想取消也难。超过就走"分批"，让用户看见自己在做什么。
+const MAX_FOLDER_FILES = 5000
+const MAX_FOLDER_DEPTH = 20
+
+// PickedFile 里的 rel 是相对"投放位置"的路径（含所选文件夹名本身）：
+// 拖入「合同」文件夹时，rel 形如 合同/2026/协议.pdf，层级原样保留。
+type PickedFile = { file: File; rel: string }
+type SkipEntry = { path: string; reason: string }
+
+// readAllEntries 读完一个目录。
+//
+// 必须循环：Chrome 的 readEntries 一次最多返回 100 条，只调用一次
+// 会静默丢掉其余文件——这类"上传少了一半"的问题在客户现场极难查。
+function readAllEntries(dir: FileSystemDirectoryEntry): Promise<FileSystemEntry[]> {
+  const reader = dir.createReader()
+  const out: FileSystemEntry[] = []
+  return new Promise((resolve, reject) => {
+    const step = () => {
+      reader.readEntries((batch) => {
+        if (batch.length === 0) { resolve(out); return }
+        out.push(...batch)
+        step()
+      }, reject)
+    }
+    step()
+  })
+}
+
+// walkEntry 递归收集文件；parentPath 是当前目录的相对路径（根为空串）。
+async function walkEntry(entry: FileSystemEntry, parentPath: string, out: PickedFile[], depth: number): Promise<void> {
+  if (out.length >= MAX_FOLDER_FILES || depth > MAX_FOLDER_DEPTH) return
+  if (entry.isFile) {
+    const file = await new Promise<File>((res, rej) => (entry as FileSystemFileEntry).file(res, rej))
+    out.push({ file, rel: parentPath ? `${parentPath}/${file.name}` : file.name })
+    return
+  }
+  if (!entry.isDirectory) return
+  const here = parentPath ? `${parentPath}/${entry.name}` : entry.name
+  for (const child of await readAllEntries(entry as FileSystemDirectoryEntry)) {
+    await walkEntry(child, here, out, depth + 1)
+  }
+}
+
+function dirOf(rel: string): string {
+  const i = rel.lastIndexOf('/')
+  return i > 0 ? rel.slice(0, i) : ''
+}
 
 function fileExt(name: string): string {
   const i = name.lastIndexOf('.')
@@ -146,6 +204,12 @@ export default function Files({ spaceId, folderId }: { spaceId: string; folderId
   const runningJobs = useRef<Map<string, Job>>(new Map())
   const currentDirRef = useRef({ space: '', parent: '' })
   const fileInput = useRef<HTMLInputElement>(null)
+  const folderInput = useRef<HTMLInputElement>(null)
+  // folderPlan 非空时弹出"有文件不受支持"的确认框。
+  // 先确认再上传，而不是边传边报错：目录里常混着 .exe/.tmp/.DS_Store，
+  // 让用户一次性看到"哪些会被跳过"，比传到一半冒出十几个失败条要清楚得多。
+  const [folderPlan, setFolderPlan] = useState<{ files: PickedFile[]; skipped: SkipEntry[] } | null>(null)
+  const [folderBusy, setFolderBusy] = useState('')
 
   const [dlg, setDlg] = useState<DlgState>(null)
   const [dlgText, setDlgText] = useState('')
@@ -302,6 +366,7 @@ export default function Files({ spaceId, folderId }: { spaceId: string; folderId
           totalBytes: p.totalBytes, part: p.part, parts: p.parts,
         }),
         job.ac.signal,
+        { folderUpload: job.folder },
       )
       patchUpload(job.id, {
         phase: res.deduped ? 'dedupe' : 'done',
@@ -377,6 +442,137 @@ export default function Files({ spaceId, folderId }: { spaceId: string; folderId
       })
     })
     pumpUploads()
+  }
+
+  // ---------------- 整目录上传 ----------------
+
+  // pickFolderFiles 从 <input webkitdirectory> 的结果里取出相对路径。
+  // webkitRelativePath 自带根目录名（"合同/2026/协议.pdf"），正好是我们要的层级。
+  function pickFolderFiles(list: FileList): PickedFile[] {
+    return Array.from(list).map((f) => ({
+      file: f,
+      rel: (f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name,
+    }))
+  }
+
+  // preflightAll 分批问服务端"哪些会被拒"。
+  // 分批是因为一次最多 5000 条（服务端也有同样上限），大目录要拆开问。
+  async function preflightAll(space: string, parent: string, files: PickedFile[]): Promise<SkipEntry[]> {
+    const BATCH = 1000
+    const skipped: SkipEntry[] = []
+    for (let i = 0; i < files.length; i += BATCH) {
+      const slice = files.slice(i, i + BATCH)
+      const r = await preflightUpload(space, parent, slice.map((f) => ({
+        name: f.file.name, size: f.file.size, path: f.rel,
+      })))
+      for (const u of r.unsupported) skipped.push({ path: u.path, reason: u.reason })
+    }
+    return skipped
+  }
+
+  // ensureFolder 按名字拿目录 id；同名已存在时复用。
+  //
+  // 为什么必须处理"已存在"：把同一个文件夹再传一次是最常见的操作
+  // （上次传到一半断了）。这时报 ALREADY_EXISTS 会让用户以为功能坏了。
+  async function ensureFolder(space: string, parentId: string, name: string): Promise<string> {
+    try {
+      const r = await postJSON<{ folderId: string }>(`/v1/spaces/${space}/folders`, { parentId, name })
+      return r.folderId
+    } catch (e) {
+      if (!(e instanceof HttpError) || e.code !== 'ALREADY_EXISTS') throw e
+      const list = await api<{ items: { id: string; kind: string; name: string }[] }>(
+        `/v1/spaces/${space}/nodes?parentId=${encodeURIComponent(parentId)}`)
+      const hit = (list.items ?? []).find((n) => n.kind === 'folder' && n.name === name)
+      if (!hit) throw e
+      return hit.id
+    }
+  }
+
+  function enqueueFolderUpload(keep: PickedFile[], ids: Map<string, string>, space: string) {
+    setUpOpen(true)
+    const items: UploadItem[] = keep.map((f) => ({
+      id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      // 列表里显示相对路径：同名文件散在不同子目录时，只看文件名根本分不清
+      name: f.rel, size: f.file.size, pct: 0, phase: 'wait' as const,
+    }))
+    setUploads((prev) => [...prev, ...items])
+    keep.forEach((f, i) => {
+      queueRef.current.push({
+        id: items[i].id, file: f.file, spaceId: space,
+        parentId: ids.get(dirOf(f.rel)) ?? parentId,
+        ac: new AbortController(), folder: true,
+      })
+    })
+    pumpUploads()
+  }
+
+  // commitFolderPlan 建目录 → 入队上传。skip 里是被用户确认跳过的文件。
+  async function commitFolderPlan(files: PickedFile[], skip: Map<string, string>) {
+    const space = activeSpace
+    if (!space) return
+    const keep = files.filter((f) => !skip.has(f.rel))
+    if (keep.length === 0) {
+      setFolderPlan(null)
+      flash('全部文件都不受支持，未上传任何内容')
+      return
+    }
+    // 目录去重后按层级排序：父目录必须先建好才能拿到 id 给子目录用
+    const dirs = new Set<string>()
+    for (const f of keep) {
+      const d = dirOf(f.rel)
+      if (d) dirs.add(d)
+    }
+    const ordered = [...dirs].sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b))
+    const ids = new Map<string, string>([['', parentId]])
+    try {
+      let done = 0
+      for (const d of ordered) {
+        if (done === 0 || done % 3 === 0) setFolderBusy(`正在创建目录 ${done}/${ordered.length}`)
+        const p = dirOf(d)
+        ids.set(d, await ensureFolder(space, ids.get(p) ?? parentId, d.slice(p ? p.length + 1 : 0)))
+        done++
+      }
+      setFolderBusy(`正在创建目录 ${ordered.length}/${ordered.length}`)
+    } catch (e) {
+      setFolderBusy('')
+      setFolderPlan(null)
+      flash(e instanceof HttpError ? `创建目录失败：${e.message}` : '创建目录失败')
+      return
+    }
+    setFolderBusy('')
+    setFolderPlan(null)
+    enqueueFolderUpload(keep, ids, space)
+  }
+
+  // startFolderUpload 是入口：先预检，有不受支持的就弹确认框，否则直接传。
+  async function startFolderUpload(files: PickedFile[]) {
+    if (!activeSpace) { flash('请先进入一个空间'); return }
+    if (!caps?.capabilities.folderUpload) {
+      flash('文件夹上传未启用，请联系管理员在「系统设置」中开启')
+      return
+    }
+    if (files.length === 0) { flash('这个文件夹里没有文件'); return }
+    if (files.length >= MAX_FOLDER_FILES) {
+      flash(`一次最多 ${MAX_FOLDER_FILES} 个文件，请分成多个文件夹上传`)
+      return
+    }
+    setBusy('preflight')
+    try {
+      const skipped = await preflightAll(activeSpace, parentId, files)
+      if (skipped.length > 0) {
+        setFolderPlan({ files, skipped })
+        return
+      }
+      await commitFolderPlan(files, new Map())
+    } catch (e) {
+      if (e instanceof HttpError && e.code === 'FEATURE_NOT_ENABLED') {
+        flash(e.message)
+      } else {
+        flash(e instanceof HttpError ? `预检失败：${e.message}` : '预检失败')
+      }
+    } finally {
+      setBusy('')
+    }
   }
 
   /* ---------------- 动作 ---------------- */
@@ -815,6 +1011,36 @@ export default function Files({ spaceId, folderId }: { spaceId: string; folderId
                   <Icon name="folderPlus" size={15} /> 新建
                 </button>
               </Tooltip>
+              {caps?.capabilities.folderUpload && (
+                <>
+                  <input
+                    ref={folderInput} type="file" hidden multiple
+                    // webkitdirectory 让选择器只接受目录；React 没有对应属性，只能透传
+                    {...({ webkitdirectory: '', directory: '' } as Record<string, string>)}
+                    onChange={(e) => {
+                      const list = e.target.files
+                      if (list && list.length) void startFolderUpload(pickFolderFiles(list))
+                      e.currentTarget.value = ''
+                    }}
+                  />
+                  <Tooltip
+                    wide
+                    content={
+                      <>
+                        <b>上传整个文件夹</b>
+                        <div className="tip-note">
+                          保留原有的目录层级。会先检查一遍：不受支持的文件（类型不允许、文件名危险、超过单文件上限）
+                          会先列出来，你确认后跳过它们继续传。
+                        </div>
+                      </>
+                    }
+                  >
+                    <button onClick={() => folderInput.current?.click()} disabled={!activeSpace || busy === 'preflight'}>
+                      <Icon name="folderPlus" size={15} /> 文件夹
+                    </button>
+                  </Tooltip>
+                </>
+              )}
               <button className="primary" onClick={() => fileInput.current?.click()} disabled={!activeSpace}>
                 <Icon name="upload" size={15} /> 上传
               </button>
@@ -840,6 +1066,24 @@ export default function Files({ spaceId, folderId }: { spaceId: string; folderId
         onDrop={(e) => {
           e.preventDefault(); setDragOver(false)
           if (!activeSpace) return
+          // 拖入目录时 dataTransfer.files 是空的，唯一能拿到层级的是 webkitGetAsEntry。
+          // 必须在 drop 处理器里**同步**取，异步之后 items 就失效了。
+          const entries = Array.from(e.dataTransfer.items ?? [])
+            .map((it) => (it.kind === 'file' ? it.webkitGetAsEntry() : null))
+            .filter((x): x is FileSystemEntry => !!x)
+          if (entries.some((en) => en.isDirectory)) {
+            if (!caps?.capabilities.folderUpload) {
+              flash('文件夹上传未启用。可先打开文件夹，把里面的文件拖进来；或请管理员在「系统设置」中开启')
+              return
+            }
+            void (async () => {
+              const out: PickedFile[] = []
+              for (const en of entries) await walkEntry(en, '', out, 0)
+              if (out.length === 0) { flash('这个文件夹里没有文件'); return }
+              await startFolderUpload(out)
+            })()
+            return
+          }
           const files = Array.from(e.dataTransfer.files)
           if (files.length) enqueueUploads(files)
         }}
@@ -1226,6 +1470,69 @@ export default function Files({ spaceId, folderId }: { spaceId: string; folderId
         </>
       )}
 
+      {folderPlan && (() => {
+        // 按目录分组：只说"有 12 个文件不支持"，用户还得自己去找是哪些；
+        // 分组后能直接看出"是 2024 归档那个子目录里的扫描件有问题"。
+        const skipMap = new Map(folderPlan.skipped.map((x) => [x.path, x.reason]))
+        const allowed = folderPlan.files.length - folderPlan.skipped.length
+        const groups = new Map<string, SkipEntry[]>()
+        for (const s of folderPlan.skipped) {
+          const d = dirOf(s.path)
+          const list = groups.get(d) ?? []
+          list.push(s)
+          groups.set(d, list)
+        }
+        const ordered = [...groups.entries()].sort((a, b) => (a[0] || '').localeCompare(b[0] || ''))
+        return (
+          <Dialog
+            title={`有 ${folderPlan.skipped.length} 个文件不受支持`}
+            icon="alert"
+            width={640}
+            note={
+              <>
+                共 {folderPlan.files.length} 个文件，其中 <b>{allowed}</b> 个可以上传。
+                确认后<b>跳过</b>下面这些文件，其余照常上传；被跳过的文件不会留下空目录。
+              </>
+            }
+            onClose={() => setFolderPlan(null)}
+            footer={
+              <>
+                <button onClick={() => setFolderPlan(null)}>取消</button>
+                <button
+                  className="primary"
+                  disabled={allowed === 0}
+                  onClick={() => void commitFolderPlan(folderPlan.files, skipMap)}
+                >
+                  {allowed === 0 ? '没有可上传的文件' : `跳过 ${folderPlan.skipped.length} 个，上传 ${allowed} 个`}
+                </button>
+              </>
+            }
+          >
+            <div className="skip-list">
+              {ordered.map(([dir, items]) => (
+                <div className="skip-group" key={dir || '#'}>
+                  <div className="skip-dir">
+                    <Icon name="folder" size={13} />
+                    <span className="p">{dir || '（当前目录）'}</span>
+                    <span className="n">{items.length} 个</span>
+                  </div>
+                  {items.map((it) => (
+                    <div className="skip-row" key={it.path}>
+                      <span className="nm" title={it.path}>{it.path.slice(dir ? dir.length + 1 : 0)}</span>
+                      <span className="why">{it.reason}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+            <div className="hint" style={{ marginTop: 10 }}>
+              提示：类型限制来自「系统设置 · 允许上传的格式」，单文件上限来自档位与租户策略。
+              需要收这类文件时，请管理员调整后再传；文件名里混入 .exe/.php 之类属于安全拦截，不会放开。
+            </div>
+          </Dialog>
+        )
+      })()}
+
       {shareTarget && (
         <ShareDrawer
           target={{ id: shareTarget.id, name: shareTarget.name }}
@@ -1243,7 +1550,8 @@ export default function Files({ spaceId, folderId }: { spaceId: string; folderId
       )}
       {accountOpen && <AccountDrawer me={me} onClose={() => setAccountOpen(false)} />}
 
-      {busy && <div className="toast">{busy}</div>}
+      {/* 建目录阶段没有上传进度可看，必须给一句话，否则点完确认像卡住了 */}
+      {(folderBusy || busy) && <div className="toast">{folderBusy || busy}</div>}
       {toast && <div className="toast"><Icon name="check" size={14} /> {toast}</div>}
     </Shell>
   )

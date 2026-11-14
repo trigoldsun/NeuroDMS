@@ -42,6 +42,12 @@ type Spec struct {
 	AD           bool
 	ShareMail    bool
 	CustomDomain bool
+	// FolderUpload 表示是否允许"整目录上传"（保留层级、批量建目录）。
+	//
+	// 归到档位而不是所有人可用，理由与目录认证不同：它不是协议能力，
+	// 而是**一次会创建大量目录与文件的批量写入口**，出问题时影响面大
+	// （配额、审计量、预览转码队列同时被打满）。
+	FolderUpload bool
 
 	// VersionKeep 是每个文件保留的历史版本数上限。
 	VersionKeep int
@@ -61,6 +67,7 @@ var matrix = map[Edition]Spec{
 		AD:               false,
 		ShareMail:        false,
 		CustomDomain:     false,
+		FolderUpload:     false,
 		VersionKeep:      3,
 		MaxUploadMB:      1024,
 		StorageGBPerSeat: 10,
@@ -73,6 +80,7 @@ var matrix = map[Edition]Spec{
 		AD:               true,
 		ShareMail:        true,
 		CustomDomain:     false,
+		FolderUpload:     true,
 		VersionKeep:      10,
 		MaxUploadMB:      5120,
 		StorageGBPerSeat: 20,
@@ -85,6 +93,7 @@ var matrix = map[Edition]Spec{
 		AD:               true,
 		ShareMail:        true,
 		CustomDomain:     true,
+		FolderUpload:     true,
 		VersionKeep:      50,
 		MaxUploadMB:      10240,
 		StorageGBPerSeat: 50,

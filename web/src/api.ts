@@ -125,7 +125,11 @@ export type Capabilities = {
     ad: boolean
     shareMail: boolean
     customDomain: boolean
+    // 整目录上传此刻是否可用（档位允许 + 租户已开启）
+    folderUpload: boolean
   }
+  // 档位层面是否允许（租户关掉时仍为 true，用于设置页提示"可开启"）
+  folderUploadAllowed: boolean
   classificationLevels: number[] | null
   limits: {
     versionKeep: number
@@ -369,6 +373,26 @@ function partLen(i: number, partSize: number, total: number): number {
   return Math.max(0, Math.min(i * partSize, total) - start)
 }
 
+// ---------------- 整目录上传 ----------------
+
+export type PreflightFile = { name: string; size: number; path: string }
+
+export type PreflightResult = {
+  total: number
+  allowed: number
+  // 被拒的文件；path 是相对路径，前端据此把它归到正确的目录
+  unsupported: { index: number; path: string; name: string; code: string; reason: string }[]
+  limits: { maxUploadMB: number; allowedExts: string[] | null }
+}
+
+// preflightUpload 在上传前一次性问清"哪些文件会被拒、为什么"。
+//
+// 放在服务端判而不是前端按 allowedExts 自己算：规则有三套（白名单、
+// 双扩展名/危险扩展、单文件上限），前端复制一份必然有一天走偏。
+export function preflightUpload(spaceId: string, parentId: string, files: PreflightFile[]): Promise<PreflightResult> {
+  return postJSON<PreflightResult>('/v1/uploads/preflight', { spaceId, parentId, files })
+}
+
 // uploadFile 按大小自动选择通道：
 //   ≤ 8MB 走一次性 multipart（一次请求，简单可靠）；
 //   > 8MB 走分片 + 秒传 + 断点续传。
@@ -382,11 +406,16 @@ export async function uploadFile(
   parentId: string,
   onProgress?: (p: UploadProgress) => void,
   signal?: AbortSignal,
+  opts?: { folderUpload?: boolean },
 ): Promise<UploadResult> {
+  // 批次标记由服务端把关：关掉功能的租户即使有脚本也传不了整目录，
+  // 所以两条通道（一次性 / 分片）都要带上。
+  const folderFlag = opts?.folderUpload === true
   if (file.size <= CHUNK) {
     const form = new FormData()
     form.append('file', file)
     if (parentId) form.append('parentId', parentId)
+    if (folderFlag) form.append('folderUpload', '1')
     const text = await xhrSend('POST', `/v1/spaces/${spaceId}/files`, form, (f) =>
       onProgress?.({ phase: 'upload', pct: Math.round(f * 100) }),
       signal,
@@ -412,6 +441,7 @@ export async function uploadFile(
     resumed?: boolean
   }>('/v1/uploads', {
     spaceId, parentId, name: file.name, sizeBytes: file.size, sha256: hash, partSize: CHUNK,
+    folderUpload: folderFlag || undefined,
   })
 
   if (created.deduped && created.nodeId) {

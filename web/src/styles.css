@@ -1514,3 +1514,36 @@ a.nav-item { text-decoration: none; }
   text-decoration: none; white-space: nowrap;
 }
 .guide-band a.gb-all:hover { text-decoration: underline; }
+
+/* ---------- 文件夹上传：不支持文件清单 ---------- */
+/* 目的是让用户"一眼看到是哪个子目录里的哪些文件有问题"，而不是只给一个总数。 */
+.skip-list {
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  padding: 8px 10px;
+}
+.skip-group + .skip-group { margin-top: 10px; }
+.skip-group .skip-dir {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-2);
+  font-weight: 600;
+  padding: 3px 0;
+  border-bottom: 1px dashed var(--line-soft);
+}
+.skip-group .skip-dir .p { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.skip-group .skip-dir .n { flex: none; color: var(--slate); font-weight: 400; font-size: 11px; }
+.skip-group .skip-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 3px 0 3px 19px;
+  font-size: 12px;
+}
+.skip-group .skip-row .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
+.skip-group .skip-row .why { flex: none; color: var(--danger); font-size: 11.5px; }

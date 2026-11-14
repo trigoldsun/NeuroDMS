@@ -248,6 +248,49 @@ UPDATE tenant SET share_approval_min_class = 3 WHERE slug = 'demo';
     </div>
     <div class="note"><p>改完<b>立即生效、无需重启</b>；已经发出的邮件不会追改。名称是<b>租户级</b>的：同一实例里 A 租户的收件人看到【甲公司】，B 租户看到【乙公司】。名称里不要带方括号——主题与显示名会自动加【】。</p></div>
 
+    <h3 id="p-folder" data-nav="3.9 文件夹上传（增值功能）">3.9 文件夹上传（增值功能）</h3>
+    <p>入口：管理台 → 系统设置 → <b>上传与协作</b> → 「文件夹上传」。</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>项</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td class="nowrap">能力要求</td><td><b>专业版及以上</b>（基础版勾不上，也保存不了生效）</td></tr>
+          <tr><td class="nowrap">默认</td><td><b>关闭</b>。升级后不会"悄悄多出一个批量入口"</td></tr>
+          <tr><td class="nowrap">打开后</td><td>文件页右上角出现「文件夹」，也可以直接把目录拖进来</td></tr>
+          <tr><td class="nowrap">实际效果</td><td>保留目录层级、自动建目录、同名目录复用、逐文件上传</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p><b>为什么默认关闭</b>：它是一次能在几分钟内创建上千个目录与文件的批量写入口——配额、预览转码队列、审计量会同时被拉起来。是否开放应由客户自己决定，而不是升级后被动生效。</p>
+
+    <p><b>两把锁，缺一不可</b>：① 档位 <code>edition.Spec.FolderUpload</code>（基础版 false，专业版/商业版 true）；② 租户开关 <code>tenant_config.policy.folderUpload</code>。</p>
+    <div class="warn">
+      <p>判定在<b>写入口</b>生效，不只是把按钮藏起来：预检接口与两个上传接口（小文件一次性、大文件分片）都校验；脚本直接调接口带 <code>folderUpload: true</code> 也会被拒（403 <code>FEATURE_NOT_ENABLED</code>）。关掉功能时，正在传的批次不受影响，新批次进不来。</p>
+    </div>
+
+    <p><b>预检：上传前的那份清单</b>　选了目录后，前端把文件名、大小、相对路径一次性交给 <code>POST /v1/uploads/preflight</code>，服务端按三套规则算出"哪些会被拒"：</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>原因码</th><th>触发条件</th><th>能否靠改配置放开</th></tr></thead>
+        <tbody>
+          <tr><td><code>ext</code></td><td>扩展名不在「允许上传的格式」白名单内</td><td>✅ 改白名单即可</td></tr>
+          <tr><td><code>size</code></td><td>超过单文件上限（档位与租户策略取小）</td><td>✅ 调大上限</td></tr>
+          <tr><td><code>dangerous</code></td><td>文件名中段含 <code>.php/.exe/.js/.sh</code> 等（<code>shell.php.jpg</code>）</td><td>❌ 硬拦截</td></tr>
+          <tr><td><code>name</code></td><td>文件名为空 / 超长</td><td>❌</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><b>为什么不放在前端算</b>：三套规则在前端复制一份，早晚与后端不一致——用户看到"通过"，传到一半才被拒，比一开始就说清楚更糟。</p>
+
+    <p><b>跳过语义（必须对客户讲清）</b></p>
+    <ul>
+      <li>确认「跳过 N 个，上传 M 个」后只上传 M 个；</li>
+      <li><b>被跳过文件所在目录，如果没有任何可上传文件，就不会被创建</b>（不留空目录）；</li>
+      <li>同名目录<b>复用</b>（<code>ALREADY_EXISTS</code> 时按名字找回来），"重传一次"不会报错也不产生重复目录；</li>
+      <li>一次最多 5000 个文件（<code>TOO_MANY_FILES</code>）；目录逐个创建，几百个时会显示「正在创建目录 x/y」——正常，不是卡死。</li>
+    </ul>
+
     <h2 id="class" data-nav="4 · 密级与标签策略"><span class="num">4</span>密级与标签策略</h2>
     <p>入口：管理台 → 密级定义 / 标签策略（仅安全管理员）。</p>
 
@@ -814,7 +857,7 @@ docker exec -i docvault-postgres pg_restore -U docvault -d docvault --clean &lt;
 
 <footer class="foot">
   <span>NeuroDMS · 管理员手册 · 租户与系统配置 V1.2.0</span>
-  <span>网页版 v1.4.0 · 源文件 docs/31-管理员手册-租户与系统配置-v1.7.0.md</span>
+  <span>网页版 v1.5.0 · 源文件 docs/31-管理员手册-租户与系统配置-v1.8.0.md</span>
 </footer>
 
 <button class="totop" type="button" aria-label="回到顶部">

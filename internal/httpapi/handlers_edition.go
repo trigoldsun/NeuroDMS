@@ -35,12 +35,16 @@ func (a *API) handleMyCapabilities(w http.ResponseWriter, r *http.Request) {
 	policyKeep, policyMB := 0, 0
 	timeoutSec := tenant.DefaultUploadTimeoutSeconds
 	var allowedExts []string
+	// folderUpload 是"档位允许 **且** 租户已开启"的结果；
+	// folderUploadAllowed 只表示档位允许，用来决定设置页的开关是否可点。
+	folderUpload := false
 	if pol, perr := a.tenantPolicy(r.Context(), c.TenantID); perr == nil {
 		policyKeep, policyMB = pol.VersionKeep, pol.MaxUploadMB
 		if pol.UploadTimeoutSeconds > 0 {
 			timeoutSec = pol.UploadTimeoutSeconds
 		}
 		allowedExts = pol.AllowedExts
+		folderUpload = st.Spec.FolderUpload && pol.FolderUpload
 	}
 
 	var expires any
@@ -61,7 +65,11 @@ func (a *API) handleMyCapabilities(w http.ResponseWriter, r *http.Request) {
 			"ad":             st.Spec.AD,
 			"shareMail":      st.Spec.ShareMail,
 			"customDomain":   st.Spec.CustomDomain,
+			// folderUpload：整目录上传此刻是否可用（档位允许 + 租户已开启）
+			"folderUpload": folderUpload,
 		},
+		// 档位层面是否允许（租户关掉时它仍为 true，便于设置页提示"可开启"）
+		"folderUploadAllowed":  st.Spec.FolderUpload,
 		"classificationLevels": st.SelectableClasses(),
 		"limits": map[string]any{
 			"versionKeep": st.EffectiveVersionKeep(policyKeep),

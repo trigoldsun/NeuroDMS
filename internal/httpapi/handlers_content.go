@@ -357,6 +357,12 @@ func (a *API) handleUpload(w http.ResponseWriter, r *http.Request) {
 	if a.rejectByExtWhitelist(w, r, c.TenantID, hdr.Filename) {
 		return
 	}
+	// 整目录上传批次标记：与分片接口同一把锁，避免"小文件走另一条通道绕过开关"。
+	if r.FormValue("folderUpload") == "1" && !a.folderUploadEnabled(r.Context(), c.TenantID) {
+		writeErr(w, r, http.StatusForbidden, "FEATURE_NOT_ENABLED",
+			"当前未启用文件夹上传，请在「系统设置」中开启（需专业版及以上）")
+		return
+	}
 	if err := guardUploadName(hdr.Filename); err != nil {
 		writeErr(w, r, http.StatusBadRequest, "UNSAFE_FILENAME", "文件名包含不允许的扩展名组合")
 		return
