@@ -56,7 +56,7 @@ func TestNormalizeRecipients(t *testing.T) {
 // 邮件正文绝不能包含口令：邮件与口令必须是两条独立通道。
 func TestShareMailBodyNeverContainsPassword(t *testing.T) {
 	uses := 1
-	subject, text, html := shareMailBody("张三", "合同.docx", "https://x/s/tok", shareOptionsForTest("S3cretPass!", uses))
+	subject, text, html := shareMailBody("森莘", "张三", "合同.docx", "https://x/s/tok", shareOptionsForTest("S3cretPass!", uses))
 	for _, s := range []string{subject, text, html} {
 		if contains(s, "S3cretPass!") {
 			t.Fatalf("邮件内容泄漏了口令: %s", s)

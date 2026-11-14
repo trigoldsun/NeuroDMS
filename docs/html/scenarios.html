@@ -283,7 +283,7 @@
         <thead><tr><th>#</th><th>谁</th><th>做什么</th><th>注意</th></tr></thead>
         <tbody>
           <tr><td class="n"><b>1</b></td><td><span class="who user">所有者</span></td><td>优先设<b>有效期</b></td><td>不带有效期的链接等于永久开放。默认建议 7 天</td></tr>
-          <tr><td class="n"><b>2</b></td><td><span class="who user">所有者</span></td><td>只读交付就关掉「允许下载」</td><td>关闭后访客能在浏览器里看，但下不了原文件；Office 类会转成 PDF 展示</td></tr>
+          <tr><td class="n"><b>2</b></td><td><span class="who user">所有者</span></td><td>只读交付就关掉「允许下载 / 保存 / 打印」</td><td>三个开关默认全关：访客能在浏览器里看，但拿不到原件、不能另存、不能打印。Office 类会转成 PDF 用画布渲染</td></tr>
           <tr><td class="n"><b>3</b></td><td><span class="who user">所有者</span></td><td>涉密内容打开「水印」</td><td>水印上带"链接 + 来源网段 + 时间"，截图外流时可定位到具体那条链接</td></tr>
           <tr><td class="n"><b>4</b></td><td><span class="who user">所有者</span></td><td>需要知道"是谁在看"就开「邮箱验证」</td><td>访客必须收验证码才能进。可配邮箱白名单，限定只发给某些域名</td></tr>
           <tr><td class="n"><b>5</b></td><td><span class="who user">所有者</span></td><td>口令要<b>另行走一条通道</b>告诉对方</td><td>系统不会把口令写进邮件。链接和口令同在一封邮件里，等于没有口令</td></tr>
@@ -305,6 +305,24 @@
     </ul>
     <div class="warn">
       <p>这不是刁难：空间级外链等于把整棵子树开放给匿名访客，一旦里面有例外，就会绕过那条例外。正确做法是改为分享具体文件 / 目录，而不是让管理员去删例外配置。</p>
+    </div>
+
+    <h3 id="s5-save">下载 / 保存 / 打印：决定访客能做什么</h3>
+    <p>分享面板里有三个独立开关，<b>默认全关</b>（最严：只能在线看）：</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>开关</th><th>打开后</th><th>关闭时</th></tr></thead>
+        <tbody>
+          <tr><td>允许下载原件</td><td>访客可拿到原始文件（docx/xlsx 等原格式）</td><td>不显示下载按钮，下载接口返回 403</td></tr>
+          <tr><td>允许保存在线副本</td><td>访客可保存正在查看的 PDF / 图片副本</td><td>不提供另存按钮；屏蔽右键另存与 Ctrl+S；图片改为画布呈现</td></tr>
+          <tr><td>允许打印</td><td>访客可打印（含"打印成 PDF"）</td><td>不提供打印按钮；拦截 Ctrl+P；打印输出空白</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">
+      <p><b>两条规则</b>：勾了「允许下载原件」，保存与打印会自动打开（下载本身就是保存）；关掉「允许保存在线副本」时，下载也会自动关掉。</p>
+      <p><b>本次修复</b>：此前"只读分享"仍能下载。原因不是下载接口没拦，而是 PDF 被交给浏览器自带阅读器显示，那个阅读器的工具栏里就有「下载 / 打印」。现在改用画布逐页渲染，页面内不再有那个工具栏。</p>
+      <p><b>边界</b>：前端能挡的是"顺手保存"（工具栏、右键、快捷键、拖拽）；<b>截图、拍屏、开发者工具无法阻止</b>。强管控靠：不外发、开水印（可追到链接与访问者）、查访问记录。</p>
     </div>
 
     <h3 id="s5-approve">审批：你选谁批，高密级还要所有者确认</h3>
@@ -499,7 +517,7 @@
 
 <footer class="foot">
   <span>NeuroDMS · 用户手册 · 场景操作 V1.1.0</span>
-  <span>网页版 v1.3.0 · 源文件 docs/29-用户手册-场景操作-v1.3.1.md</span>
+  <span>网页版 v1.3.1 · 源文件 docs/29-用户手册-场景操作-v1.3.2.md</span>
 </footer>
 
 <button class="totop" type="button" aria-label="回到顶部">

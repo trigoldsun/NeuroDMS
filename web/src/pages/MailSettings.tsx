@@ -223,9 +223,10 @@ export default function MailSettings({ onFlash }: { onFlash: (m: string) => void
               id="mail-from" placeholder="noreply@example.com"
               value={cfg.fromAddr} onChange={(e) => patch({ fromAddr: e.target.value })}
             />
-            <label htmlFor="mail-from-name">发件人名称</label>
+            <label htmlFor="mail-from-name">发件人显示名</label>
             <input
-              id="mail-from-name" placeholder="NeuroDMS 文档平台"
+              id="mail-from-name"
+              placeholder={status?.effectiveFromName || '留空 = 【系统名文档管理系统】'}
               value={cfg.fromName} onChange={(e) => patch({ fromName: e.target.value })}
             />
             <label htmlFor="mail-reply-to">回复地址</label>
@@ -363,6 +364,11 @@ export default function MailSettings({ onFlash }: { onFlash: (m: string) => void
               ? `（失败：${status.config.lastTestError || '未知原因'}）` : ''}
           </div>
         )}
+      </div>
+
+      <div className="hint" style={{ marginTop: -6 }}>
+        收件人在邮箱里看到的发件人是：<b>{status?.effectiveFromName || '—'}</b>
+        {cfg.fromName ? '（本页已自定义）' : '（留空时自动使用「系统名称 + 文档管理系统」，系统名称在「系统设置 · 品牌与名称」里改）'}
       </div>
 
       {outbox && (

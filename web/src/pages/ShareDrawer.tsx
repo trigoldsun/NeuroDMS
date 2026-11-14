@@ -86,6 +86,10 @@ export default function ShareDrawer({
   const [oneTime, setOneTime] = useState(true)
   const [hours, setHours] = useState(24)
   const [allowDownload, setAllowDownload] = useState(false)
+  // 默认最严：只读在线查看。勾「允许下载原件」时会自动打开「允许保存副本」
+  // （下载本身就是保存）；反过来关掉保存时也会强制关掉下载。
+  const [allowSave, setAllowSave] = useState(false)
+  const [allowPrint, setAllowPrint] = useState(false)
   const [watermark, setWatermark] = useState(true)
   const [requireVerify, setRequireVerify] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -149,6 +153,8 @@ export default function ShareDrawer({
         maxUses: oneTime ? 1 : undefined,
         expiresInHours: hours > 0 ? hours : undefined,
         allowDownload,
+        allowSave,
+        allowPrint,
         watermark,
         password: password || undefined,
         requireVerify,
@@ -389,9 +395,36 @@ export default function ShareDrawer({
             </div>
 
             <label style={{ display: 'flex', gap: 6, alignItems: 'center', margin: '6px 0' }}>
-              <input type="checkbox" checked={allowDownload} onChange={(e) => setAllowDownload(e.target.checked)} />
+              <input
+                type="checkbox" checked={allowDownload}
+                onChange={(e) => {
+                  setAllowDownload(e.target.checked)
+                  // 下载原件 = 保存一份，必然同时具备"保存"能力
+                  if (e.target.checked) { setAllowSave(true); setAllowPrint(true) }
+                }}
+              />
               <span>允许下载原件</span>
             </label>
+            <label style={{ display: 'flex', gap: 6, alignItems: 'center', margin: '6px 0' }}>
+              <input
+                type="checkbox" checked={allowSave}
+                onChange={(e) => {
+                  setAllowSave(e.target.checked)
+                  // 不允许保存时，允许下载就是自相矛盾的开关
+                  if (!e.target.checked) setAllowDownload(false)
+                }}
+              />
+              <span>允许保存在线副本（PDF/图片）</span>
+            </label>
+            <label style={{ display: 'flex', gap: 6, alignItems: 'center', margin: '6px 0' }}>
+              <input type="checkbox" checked={allowPrint} onChange={(e) => setAllowPrint(e.target.checked)} />
+              <span>允许打印</span>
+            </label>
+            <div className="hint" style={{ marginTop: -2 }}>
+              {allowDownload ? '对方可拿到原始文件，也可打印'
+                : allowSave ? '对方只能在浏览器里查看并另存副本，拿不到原始文件'
+                  : '仅在线查看：不提供下载、另存与打印'}
+            </div>
             <label style={{ display: 'flex', gap: 6, alignItems: 'center', margin: '6px 0' }}>
               <input type="checkbox" checked={watermark} onChange={(e) => setWatermark(e.target.checked)} />
               <span>预览叠加溯源水印</span>

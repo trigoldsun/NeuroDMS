@@ -401,6 +401,9 @@ func (s Settings) Dispatcher() (*Dispatcher, error) {
 		sender, err := NewGraphSender(GraphConfig{
 			TenantID: s.GraphTenantID, ClientID: s.GraphClientID,
 			ClientSecret: s.GraphClientSecret, Sender: s.GraphSender,
+			// 发件人显示名：M365 里邮箱的显示名由租户管理员维护，
+			// 我们只能通过 message.from.name 覆盖这一次投递的显示名
+			FromName:  s.FromName,
 			LoginBase: s.GraphLoginBase, GraphBase: s.GraphBase,
 		})
 		if err != nil {
@@ -412,6 +415,21 @@ func (s Settings) Dispatcher() (*Dispatcher, error) {
 	default:
 		return nil, fmt.Errorf("未知的邮件通道 %q", s.Mode)
 	}
+}
+
+// DefaultFromName 是"没填发件人显示名"时的默认值。
+//
+// 为什么要这个默认值：此前 From 头只有邮箱地址，收件人在 Outlook/QQ 邮箱里
+// 看到的是 "noreply@..."，既不像系统通知，也容易被判垃圾邮件；
+// 租户也没法在界面上把它改成自己的品牌。
+//
+// brand 来自租户品牌（管理台「系统设置 · 品牌与名称」），为空时退回产品名。
+func DefaultFromName(brand string) string {
+	brand = strings.TrimSpace(brand)
+	if brand == "" {
+		brand = "NeuroDMS"
+	}
+	return "【" + brand + "文档管理系统】"
 }
 
 // formatFrom 组装 From 头。非 ASCII 显示名必须 RFC 2047 编码，

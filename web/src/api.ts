@@ -696,6 +696,33 @@ export function directoryRuns(limit = 20): Promise<{ items: DirectoryRun[] }> {
   return api<{ items: DirectoryRun[] }>(`/v1/admin/directory/runs?limit=${limit}`)
 }
 
+// ---------------- 品牌与名称 ----------------
+//
+// 系统名称用在：外发邮件的主题【xxxx】、发件人显示名【xxxx文档管理系统】、
+// 分享页页眉。颜色与页脚供网页版品牌使用。
+export type BrandingInfo = {
+  slug: string
+  tenantName: string
+  productName: string
+  primaryColor: string
+  accentColor: string
+  footerText: string
+  logoUrl?: string
+  updatedAt?: string
+}
+
+export function getBranding(): Promise<BrandingInfo> {
+  return api<BrandingInfo>('/v1/admin/branding')
+}
+
+export function saveBranding(b: Pick<BrandingInfo, 'productName' | 'primaryColor' | 'accentColor' | 'footerText'>): Promise<BrandingInfo> {
+  return api<BrandingInfo>('/v1/admin/branding', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(b),
+  })
+}
+
 // ---------------- 邮件服务配置 ----------------
 //
 // 口令与客户端密钥只写不读：读接口返回 hasSmtpPassword / hasGraphSecret，
@@ -738,6 +765,8 @@ export type MailOutbox = {
 
 export type MailStatus = {
   config: MailConfig
+  // 实际会写进 From 头的显示名（配置留空时由系统名称生成）
+  effectiveFromName: string
   environment: { defaultConfigured: boolean; defaultChannels: string[]; secretKeyAvailable: boolean }
   outbox: MailOutbox
 }

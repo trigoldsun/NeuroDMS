@@ -1392,3 +1392,26 @@ html[data-theme='dark'] *::-webkit-scrollbar-thumb { background: #2C3A32; backgr
 .empty-block.compact { padding: 14px 16px; }
 .empty-block.compact .empty-art { display: none; }
 .empty-block.compact .hint { max-width: 60ch; }
+
+/* ---------- 外链访客的 PDF 画布查看器 ---------- */
+/* 不用浏览器内置阅读器：它的工具栏里有「下载/打印」，会绕过分享策略 */
+.pdf-viewer { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.pdf-pages {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 12px; border-radius: 10px;
+  background: var(--surface-2);
+  /* 画布本身不可选中/拖拽：减少"全选复制""拖到桌面"这类顺手保存 */
+  user-select: none; -webkit-user-select: none;
+  overflow: auto; max-height: 78vh;
+}
+.pdf-page { box-shadow: 0 1px 3px rgba(0,0,0,.12); background: #fff; max-width: 100%; }
+.pdf-hint { font-size: 12.5px; color: var(--muted); text-align: center; }
+.share-content { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+
+/* 不允许打印时：整页打印为空白（配合 Ctrl+P 拦截，挡住"打印成 PDF"这条路） */
+@media print {
+  body.share-print-blocked { display: none !important; }
+  .share-chrome { display: none !important; }
+  .pdf-pages { max-height: none; overflow: visible; background: none; padding: 0; }
+  .pdf-page { box-shadow: none; page-break-after: always; }
+}

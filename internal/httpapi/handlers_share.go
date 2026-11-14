@@ -49,11 +49,17 @@ type createShareReq struct {
 	SubjectIDs  []string `json:"subjectIds"`
 	Preset      string   `json:"preset"`
 
-	ObjectType      string   `json:"objectType"`
-	ObjectID        string   `json:"objectId"`
-	MaxUses         *int     `json:"maxUses"`
-	ExpiresInHour   *int     `json:"expiresInHours"`
-	AllowDownload   bool     `json:"allowDownload"`
+	ObjectType    string `json:"objectType"`
+	ObjectID      string `json:"objectId"`
+	MaxUses       *int   `json:"maxUses"`
+	ExpiresInHour *int   `json:"expiresInHours"`
+	AllowDownload bool   `json:"allowDownload"`
+	// AllowSave / AllowPrint 是"能不能留副本"的两个独立开关。
+	//
+	// 用指针是为了区分"没传"与"传了 false"：老客户端不传时应跟随 allowDownload
+	// （与迁移 0048 的存量回填规则一致），否则老前端创建的链接会突然变成不可打印。
+	AllowSave       *bool    `json:"allowSave"`
+	AllowPrint      *bool    `json:"allowPrint"`
 	Watermark       bool     `json:"watermark"`
 	Password        string   `json:"password"`
 	IPAllowlist     []string `json:"ipAllowlist"`
@@ -144,9 +150,26 @@ func (a *API) handleCreateShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	allowSave := req.AllowDownload
+	if req.AllowSave != nil {
+		allowSave = *req.AllowSave
+	}
+	allowPrint := req.AllowDownload
+	if req.AllowPrint != nil {
+		allowPrint = *req.AllowPrint
+	}
+	if req.AllowDownload && !allowSave {
+		// 下载原件本身就是保存，这个组合是假限制：宁可拒绝，也不给一个看似更严的错觉
+		writeErr(w, r, http.StatusBadRequest, "INVALID_ARGUMENT",
+			"勾选了「允许下载原件」就不能同时关闭「允许保存副本」（下载本身就是保存）")
+		return
+	}
+
 	opt := share.Options{
 		MaxUses:         req.MaxUses,
 		AllowDownload:   req.AllowDownload,
+		AllowSave:       allowSave,
+		AllowPrint:      allowPrint,
 		Watermark:       req.Watermark,
 		IPAllowlist:     req.IPAllowlist,
 		RequireApproval: req.RequireApproval,
@@ -348,6 +371,10 @@ func (a *API) handleCreateShare(w http.ResponseWriter, r *http.Request) {
 	// 但必须如实告诉调用方"链接发出去了、邮件没发出去"。
 	link := a.publicBaseURL(r) + "/s/" + created.Token
 	resp["shareUrl"] = link
+	// 回显落库后的策略：前端据此提示"这条链接是只读/可下载/可打印"
+	resp["allowDownload"] = opt.AllowDownload
+	resp["allowSave"] = opt.AllowSave
+	resp["allowPrint"] = opt.AllowPrint
 	if len(recipients) > 0 {
 		if !a.mailAvailable(r.Context(), c.TenantID) {
 			// 没配任何邮件通道：链接照建，但要明确告诉调用方邮件**没有**从服务器发出。
@@ -698,10 +725,15 @@ func (a *API) handleRedeem(w http.ResponseWriter, r *http.Request) {
 		"objectType":    res.ObjectType,
 		"objectId":      res.ObjectID,
 		"allowDownload": res.AllowDownload,
-		"watermark":     res.Watermark,
-		"oneTime":       res.IsOneTime,
-		"ticket":        ticket,
-		"expiresIn":     int(time.Until(expires).Seconds()),
+		"allowSave":     res.AllowSave,
+		"allowPrint":    res.AllowPrint,
+		// 分享页页眉要显示租户自己的系统名称（与邮件主题保持一致），
+		// 否则访客收到【森莘】的邮件、点开却是 NeuroDMS，可信度立刻打折。
+		"productName": a.brandName(r.Context(), res.TenantID),
+		"watermark":   res.Watermark,
+		"oneTime":     res.IsOneTime,
+		"ticket":      ticket,
+		"expiresIn":   int(time.Until(expires).Seconds()),
 	})
 }
 
@@ -746,6 +778,8 @@ func (a *API) handleTicketInfo(w http.ResponseWriter, r *http.Request) {
 	out := map[string]any{
 		"objectType":    t.ObjectType,
 		"allowDownload": t.AllowDownload,
+		"allowSave":     t.AllowSave,
+		"allowPrint":    t.AllowPrint,
 		"watermark":     t.Watermark,
 		"expiresAt":     t.ExpiresAt.UTC().Format(time.RFC3339),
 	}

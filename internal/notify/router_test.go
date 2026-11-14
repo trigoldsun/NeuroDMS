@@ -68,6 +68,9 @@ func TestRouterUsesTenantSMTP(t *testing.T) {
 		}, nil
 	}, nil)
 
+	// 没配发件人显示名时，用品牌生成【系统名文档管理系统】
+	router.SetBrandName(func(context.Context, string) string { return "森莘" })
+
 	ch, err := router.SendFor(context.Background(), "t1",
 		Message{To: "user@example.com", Subject: "验证码", Text: "123456"})
 	if err != nil {
@@ -88,6 +91,10 @@ func TestRouterUsesTenantSMTP(t *testing.T) {
 		// 租户配置的 Reply-To 应写进邮件头：发件人是 noreply 时回信要能进客服邮箱
 		if !strings.Contains(data, "Reply-To: support@tenant.example") {
 			t.Fatalf("缺少 Reply-To: %s", data)
+		}
+		// From 里必须有显示名（RFC 2047 编码），而不是光秃秃一个邮箱地址
+		if !strings.Contains(data, "From: =?UTF-8?b?") {
+			t.Fatalf("From 头缺少显示名: %s", data)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("邮件未送达测试 SMTP")

@@ -30,6 +30,8 @@ type Ticket struct {
 	ObjectType    string
 	ObjectID      string
 	AllowDownload bool
+	AllowSave     bool
+	AllowPrint    bool
 	Watermark     bool
 	ExpiresAt     time.Time
 	// MaxClass 是分享创建时的密级上界（见 Redeemed.MaxClass）。
@@ -91,7 +93,7 @@ func ResolveTicket(ctx context.Context, pool *pgxpool.Pool, ticket, ip string) (
 
 	var out Ticket
 	err := db.WithTenant(ctx, pool, tenantID, func(tx pgx.Tx) error {
-		var allowDownload, watermark bool
+		var allowDownload, allowSave, allowPrint, watermark bool
 		var objType, objID string
 		var shareID string
 		var maxClass int
@@ -101,12 +103,13 @@ func ResolveTicket(ctx context.Context, pool *pgxpool.Pool, ticket, ip string) (
 
 		err := tx.QueryRow(ctx, `
 			SELECT t.id::text, t.share_id::text, t.expires_at, t.revoked_at,
-			       s.object_type, s.object_id::text, s.allow_download, s.watermark,
+			       s.object_type, s.object_id::text, s.allow_download, s.allow_save,
+			       s.allow_print, s.watermark,
 			       s.revoked_at, s.expires_at, s.approval_status, s.max_class
 			  FROM share_ticket t JOIN share s ON s.id = t.share_id
 			 WHERE t.ticket_hash = $1`, sum[:]).
 			Scan(&out.ID, &shareID, &ticketExpires, &ticketRevoked,
-				&objType, &objID, &allowDownload, &watermark,
+				&objType, &objID, &allowDownload, &allowSave, &allowPrint, &watermark,
 				&shareRevoked, &shareExpires, &approval, &maxClass)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -134,6 +137,8 @@ func ResolveTicket(ctx context.Context, pool *pgxpool.Pool, ticket, ip string) (
 		out.ObjectType = objType
 		out.ObjectID = objID
 		out.AllowDownload = allowDownload
+		out.AllowSave = allowSave
+		out.AllowPrint = allowPrint
 		out.Watermark = watermark
 		out.MaxClass = maxClass
 		out.ExpiresAt = ticketExpires

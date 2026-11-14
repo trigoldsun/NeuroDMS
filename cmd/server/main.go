@@ -203,12 +203,27 @@ func main() {
 			}
 			go dirRunner.RunScheduler(rootCtx, 5*time.Minute)
 
+			// 租户服务：这里就需要它——邮件主题与发件人显示名要用租户自己的系统名称。
+			// 之前是在 M3 区块才创建，导致通知装配拿不到品牌。
+			tenantSvc := tenant.New(pool)
+
 			// 邮件通道：环境变量是平台默认，租户可在管理台配置自己的发件邮箱。
 			// 配置里有密文口令，与证书私钥共用同一个加密实例。
 			mailStore := notify.NewStore(pool, box)
 
 			// 通知通道：配了就接上二次验证；没配则 mfa_required 账号拒登（fail-closed）
-			notifier, nerr := bootstrap.BuildNotifier(&cfg, pool, mailStore, log)
+			notifier, nerr := bootstrap.BuildNotifier(&cfg, pool, mailStore,
+				func(ctx context.Context, tenantID string) string {
+					slug, err := tenantSvc.SlugOf(ctx, tenantID)
+					if err != nil {
+						return ""
+					}
+					b, err := tenantSvc.BrandingBySlug(ctx, slug)
+					if err != nil {
+						return ""
+					}
+					return b.ProductName
+				}, log)
 			if nerr != nil {
 				log.Error("通知通道装配失败，拒绝启动", "err", nerr.Error())
 				os.Exit(2)
@@ -325,7 +340,6 @@ func main() {
 			}
 
 			// ---- M3：多租户 SaaS 能力 ----
-			tenantSvc := tenant.New(pool)
 			meterSvc := metering.New(pool)
 			featureSvc := feature.New(pool)
 			platformAuth := platformauth.New(pool)

@@ -224,6 +224,8 @@ UPDATE tenant SET share_approval_min_class = 3 WHERE slug = 'demo';
 
     <p><b>口令与密钥</b>：只写不读（输入框留空提交 = 不修改），落库为密文且 AAD 绑定租户与用途；服务端未配置 <code>DOCVAULT_SECRET_KEY</code> 时<b>拒绝保存口令</b>（<code>NO_SECRET_KEY</code>），不会降级成明文，但地址端口等非敏感项仍可保存。</p>
 
+    <p><b>发件人显示名</b>：不填时默认 <code>【系统名称文档管理系统】</code>（系统名称在 3.8 改）。页面上会实时显示"收件人实际看到的名字"。此前 From 头只有邮箱地址，收件人看到的是 <code>noreply@...</code>，既不像系统通知也容易进垃圾箱。</p>
+
     <p><b>发送测试</b>：用表单<b>当前参数</b>真发一封，不必先保存。结果写在按钮下方并记入「上次测试」。收不到时按顺序查：垃圾箱与 SPF/DKIM → 端口与加密方式是否匹配（587/STARTTLS、465/隐式 TLS）→ Graph 是否完成管理员同意（未同意返回 403 <code>Authorization_RequestDenied</code>）→ 服务器能否出网。</p>
 
     <p><b>队列</b>：页面底部汇总最近 7 天（24h 已发 / 待发 / 失败待重试 / 已终止）与最近 5 条失败原因。失败按 30 秒 → 1 分 → 2 分 → 4 分 → 8 分重试，<b>5 次后进入「已终止」</b>；修好配置后待重试的会自己发出，已终止的需要重新触发业务动作（例如再点一次"发送邮件"）。</p>
@@ -231,6 +233,20 @@ UPDATE tenant SET share_approval_min_class = 3 WHERE slug = 'demo';
     <div class="note">
       <p><b>边界</b>：本页配的是本租户的通道，平台默认仍由运维用环境变量维护；开启独立通道后<b>不做回退</b>——租户通道失败就是失败，不会偷用平台邮箱代发（否则邮件从意料之外的域名发出，既难排查也像钓鱼）。「允许明文连接」只在带口令时强制勾选确认。</p>
     </div>
+
+    <h3 id="brand-name" data-nav="3.8 品牌与名称">3.8 品牌与名称</h3>
+    <p>入口：管理台 → 系统设置 → 品牌与名称（仅系统管理员）。</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>字段</th><th>作用</th><th>限制</th></tr></thead>
+        <tbody>
+          <tr><td>系统名称</td><td>外发邮件<b>主题</b>【xxxx】、发件人显示名【xxxx文档管理系统】、分享页页眉</td><td>20 字以内，不能为空</td></tr>
+          <tr><td>主色 / 辅色</td><td>登录页与分享页的主色调</td><td><code>#rrggbb</code></td></tr>
+          <tr><td>页脚文案</td><td>登录页与分享页底部</td><td>200 字以内</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note"><p>改完<b>立即生效、无需重启</b>；已经发出的邮件不会追改。名称是<b>租户级</b>的：同一实例里 A 租户的收件人看到【甲公司】，B 租户看到【乙公司】。名称里不要带方括号——主题与显示名会自动加【】。</p></div>
 
     <h2 id="class" data-nav="4 · 密级与标签策略"><span class="num">4</span>密级与标签策略</h2>
     <p>入口：管理台 → 密级定义 / 标签策略（仅安全管理员）。</p>
@@ -505,6 +521,25 @@ UPDATE tenant SET share_approval_min_class = 3 WHERE slug = 'demo';
       <p>这道闸门是刻意的：空间级外链面向匿名访客，子树的任何例外都会被绕过。遇到这个提示，正确做法是改为分享具体文件 / 目录，而不是让管理员去删例外配置。</p>
     </div>
 
+    <h3 id="share-flags" data-nav="7.7 下载 / 保存 / 打印">7.7 下载 / 保存 / 打印</h3>
+    <p>创建外链时有三个独立开关，决定访客能对文件做什么：</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>开关</th><th>落库字段</th><th>关闭时的行为</th></tr></thead>
+        <tbody>
+          <tr><td>允许下载原件</td><td><code>share.allow_download</code></td><td>下载接口 403；不显示「下载原件」</td></tr>
+          <tr><td>允许保存在线副本</td><td><code>share.allow_save</code></td><td>不显示「保存副本」；屏蔽右键另存、Ctrl+S；图片改为画布呈现</td></tr>
+          <tr><td>允许打印</td><td><code>share.allow_print</code></td><td>不显示打印按钮；拦截 Ctrl+P；打印输出空白</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><b>约束</b>：<code>allow_save=false</code> 时 <code>allow_download</code> 必须为 false——库里用 CHECK 约束（<code>share_save_implies_no_download</code>）挡住，接口也会先拒一次。理由：下载本身就是保存。</p>
+    <p><b>存量链接</b>：迁移 0048 把两个新字段回填成与 <code>allow_download</code> 相同，所以以前的"只读"链接升级后仍是只读，并且<b>不再能通过浏览器 PDF 工具栏下载</b>。</p>
+    <div class="warn">
+      <p><b>修复的真实缺陷</b>：只设 <code>allowDownload=false</code> 的分享，访客打开 PDF 后仍能下载。根因不在下载接口，而在呈现方式——PDF 放进 <code>&lt;iframe src=...&gt;</code>，浏览器自带阅读器的工具栏就带「下载 / 打印」。现在改用 pdf.js 把每页画到 canvas，页面内不再有原生保存入口。</p>
+      <p><b>边界</b>：前端能挡"顺手保存"；截图、拍屏、开发者工具无法阻止。强管控靠：不外发、水印、访问记录。</p>
+    </div>
+
     <h2 id="brand" data-nav="8 · 品牌与域名"><span class="num">8</span>品牌与域名</h2>
     <p>入口：管理台 → 系统设置（品牌部分）。</p>
     <div class="tablewrap">
@@ -727,7 +762,7 @@ docker exec -i docvault-postgres pg_restore -U docvault -d docvault --clean &lt;
 
 <footer class="foot">
   <span>NeuroDMS · 管理员手册 · 租户与系统配置 V1.2.0</span>
-  <span>网页版 v1.3.0 · 源文件 docs/31-管理员手册-租户与系统配置-v1.5.0.md</span>
+  <span>网页版 v1.3.1 · 源文件 docs/31-管理员手册-租户与系统配置-v1.5.1.md</span>
 </footer>
 
 <button class="totop" type="button" aria-label="回到顶部">

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Icon, Mark } from '../components/ui'
+import PdfCanvasViewer from '../components/PdfCanvasViewer'
 
 // 对外分享页：免登录。
 //
@@ -12,6 +13,9 @@ type ShareInfo = {
   objectType: string
   objectId: string
   allowDownload: boolean
+  allowSave: boolean
+  allowPrint: boolean
+  productName?: string
   watermark: boolean
   oneTime: boolean
   ticket: string
@@ -21,6 +25,8 @@ type ShareInfo = {
 type TicketInfo = {
   objectType: string
   allowDownload: boolean
+  allowSave: boolean
+  allowPrint: boolean
   watermark: boolean
   expiresAt: string
   name?: string
@@ -36,6 +42,31 @@ type Phase = 'loading' | 'password' | 'wrong-password' | 'locked' | 'verify' | '
 function isRenderable(type: string): boolean {
   return type === 'application/pdf' || type.startsWith('image/') ||
     type.startsWith('video/') || type.startsWith('audio/') || type.startsWith('text/')
+}
+
+// CanvasImage：不允许保存时用画布呈现图片。
+//
+// <img> 的右键菜单里有「图片另存为」，拖拽到桌面也会保存一份；
+// 画到 canvas 上这两个入口都不存在（截图仍然拦不住，见文件末尾的说明）。
+// 代价是动图只剩第一帧——在文档系统里可以接受。
+function CanvasImage({ src, alt }: { src: string; alt: string }) {
+  const ref = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    let alive = true
+    const img = new Image()
+    img.onload = () => {
+      const c = ref.current
+      if (!alive || !c) return
+      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      c.width = img.width * dpr
+      c.height = img.height * dpr
+      c.style.maxWidth = '100%'
+      c.getContext('2d')?.drawImage(img, 0, 0, c.width, c.height)
+    }
+    img.src = src
+    return () => { alive = false }
+  }, [src])
+  return <canvas ref={ref} aria-label={alt} style={{ borderRadius: 8 }} />
 }
 
 function fmtSize(n: number): string {
@@ -61,6 +92,7 @@ export default function ShareView({ token }: { token: string }) {
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [codeSent, setCodeSent] = useState(false)
+  const [busy, setBusy] = useState('')
 
   // 拿到票据后加载首屏：对象名、目录列表，最后进入 ready。
   // 兑换与"验证后兑换"返回的是同一种载荷，所以这段必须共用，
@@ -195,13 +227,51 @@ export default function ShareView({ token }: { token: string }) {
       setContentUrl('')
       return
     }
-    const blob = await resp.blob()
-    setContentUrl(URL.createObjectURL(blob))
+    // PDF 直接给 pdf.js 同一个 URL，而不是先转成 blob:。
+    // 原因：CSP 的 connect-src 只有 'self'，pdf.js 去 fetch blob: 会被拦
+    // （表现是 "Unexpected server response (0) while retrieving PDF"）。
+    // 图片/音视频仍然用 blob:（img-src / media-src 已放行 blob:）。
+    if (type === 'application/pdf') {
+      setContentUrl(path)
+    } else {
+      const blob = await resp.blob()
+      setContentUrl(URL.createObjectURL(blob))
+    }
     setContentType(type)
     if (!isRenderable(type)) {
       // 服务端已经尽力转换（Office→PDF）；到这里说明是浏览器确实渲染不了的类型。
       // 明确告知 + 给出下载出口，而不是留一个点了没反应的按钮。
       setMsg('该类型无法在浏览器内直接查看' + (ticket?.allowDownload ? '，请使用下方「下载」' : '，请联系分享人开启下载'))
+    }
+  }
+
+  // saveCopy 保存"正在看的这份呈现件"（PDF/图片），不是原始文件。
+  //
+  // 与「下载原件」的区别：Office 文件在这里得到的是转换后的 PDF，
+  // 原始 docx/xlsx 只有 allowDownload 才给。
+  async function saveCopy() {
+    if (!info) return
+    setBusy('save')
+    try {
+      const resp = await fetch(`/v1/public/tickets/${encodeURIComponent(info.ticket)}/content?inline=1`)
+      if (!resp.ok) {
+        setMsg('保存失败：' + (resp.status === 403 ? '该分享不允许保存' : '内容读取失败'))
+        return
+      }
+      const blob = await resp.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = ticket?.name ?? 'download'
+      if (contentType === 'application/pdf') {
+        a.download = (ticket?.name ?? 'download').replace(/\.[^.]+$/, '') + '.pdf'
+      }
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } finally {
+      setBusy('')
     }
   }
 
@@ -239,48 +309,92 @@ export default function ShareView({ token }: { token: string }) {
           </div>
         </div>
 
-        {contentUrl && contentType.startsWith('image/') && (
-          <img src={contentUrl} alt={ticket.name} style={{ maxWidth: '100%', borderRadius: 8 }} />
-        )}
-        {contentUrl && contentType === 'application/pdf' && (
-          <>
-            <div className="seg" role="group" aria-label="缩放" style={{ alignSelf: 'flex-start' }}>
-              {([50, 75, 100, 'fit'] as const).map((z) => (
-                <button key={String(z)} className={zoom === z ? 'on' : ''} onClick={() => setZoom(z)}>
-                  {z === 'fit' ? '适应宽度' : `${z}%`}
-                </button>
-              ))}
-            </div>
-            {/* key 用缩放值：片段变化不会让 PDF 重新按新比例打开 */}
-            <iframe
-              key={String(zoom)}
-              title="预览"
-              src={`${contentUrl}#${zoom === 'fit' ? 'view=FitH' : `zoom=${zoom}`}`}
-              style={{ width: '100%', height: '74vh', minHeight: 420, border: 0 }}
-            />
-          </>
-        )}
-        {contentUrl && (contentType.startsWith('video/') || contentType.startsWith('audio/')) && (
-          contentType.startsWith('video/')
-            ? <video src={contentUrl} controls style={{ width: '100%' }} />
-            : <audio src={contentUrl} controls style={{ width: '100%' }} />
-        )}
-        {textBody && (
-          <pre className="preview-text">{textBody}</pre>
-        )}
+        <div
+          className="share-content"
+          onContextMenu={(e) => { if (!ticket.allowSave) e.preventDefault() }}
+        >
+          {contentUrl && contentType.startsWith('image/') && (
+            ticket.allowSave
+              ? <img src={contentUrl} alt={ticket.name} draggable={false} style={{ maxWidth: '100%', borderRadius: 8 }} />
+              : <CanvasImage src={contentUrl} alt={ticket.name ?? '文件'} />
+          )}
+          {contentUrl && contentType === 'application/pdf' && (
+            <>
+              <div className="seg share-chrome" role="group" aria-label="缩放" style={{ alignSelf: 'flex-start' }}>
+                {([50, 75, 100, 'fit'] as const).map((z) => (
+                  <button key={String(z)} className={zoom === z ? 'on' : ''} onClick={() => setZoom(z)}>
+                    {z === 'fit' ? '适应宽度' : `${z}%`}
+                  </button>
+                ))}
+              </div>
+              {/* 用画布渲染，而不是 <iframe src=pdf>：
+                  浏览器自带阅读器的工具栏里就有「下载/打印」，那正是"不允许下载仍能下载"的入口。 */}
+              <PdfCanvasViewer
+                url={contentUrl}
+                scale={zoom === 'fit' ? 1 : zoom / 100}
+                fit={zoom === 'fit'}
+              />
+            </>
+          )}
+          {contentUrl && (contentType.startsWith('video/') || contentType.startsWith('audio/')) && (
+            contentType.startsWith('video/')
+              ? <video src={contentUrl} controls controlsList="nodownload noplaybackrate" style={{ width: '100%' }} />
+              : <audio src={contentUrl} controls controlsList="nodownload" style={{ width: '100%' }} />
+          )}
+          {textBody && (
+            <pre className="preview-text" style={{ userSelect: ticket.allowSave ? 'text' : 'none' }}>
+              {textBody}
+            </pre>
+          )}
+        </div>
         {!contentUrl && !textBody && !msg && (
           <p style={{ color: 'var(--muted)', fontSize: 13 }}>
             点击「在线查看」加载内容。Office 文档会先转换成 PDF 再显示，可能需要几秒。
           </p>
         )}
 
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="share-actions share-chrome" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={() => loadContent(false)}>在线查看</button>
-          {ticket.allowDownload && <button onClick={() => loadContent(true)}>下载</button>}
+          {ticket.allowPrint && <button onClick={() => window.print()}>打印</button>}
+          {ticket.allowSave && <button onClick={() => void saveCopy()} disabled={busy === 'save'}>
+            {busy === 'save' ? '正在准备…' : '保存副本'}
+          </button>}
+          {ticket.allowDownload && <button onClick={() => loadContent(true)}>下载原件</button>}
+        </div>
+        <div className="hint share-chrome" style={{ marginTop: -4 }}>
+          {ticket.allowDownload ? '可下载原始文件'
+            : ticket.allowSave ? '仅可保存在线副本，不提供原始文件'
+              : '仅可在线查看：不提供下载与另存'}
+          {ticket.allowPrint ? '；可打印' : '；不可打印'}
+          {ticket.watermark ? '；页面已叠加溯源水印' : ''}
         </div>
       </>
     )
   }
+
+  // 打印与另存的"最后一公里"控制。
+  //
+  // 服务端只能决定给不给字节；快捷键（Ctrl+S / Ctrl+P）和打印样式发生在浏览器里，
+  // 必须在这里拦。不是安全边界（开发者工具可以绕过），但能挡住 99% 的顺手操作。
+  useEffect(() => {
+    const allowSave = ticket?.allowSave ?? info?.allowSave ?? false
+    const allowPrint = ticket?.allowPrint ?? info?.allowPrint ?? false
+    const hasContent = !!(contentUrl || textBody)
+    document.body.classList.toggle('share-print-blocked', hasContent && !allowPrint)
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return
+      const k = e.key.toLowerCase()
+      if ((k === 's' && !allowSave) || (k === 'p' && !allowPrint) || (k === 'c' && !allowSave)) {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => {
+      window.removeEventListener('keydown', onKey, true)
+      document.body.classList.remove('share-print-blocked')
+    }
+  }, [ticket?.allowSave, ticket?.allowPrint, info, contentUrl, textBody])
 
   const wide = !!(contentUrl || textBody || (phase === 'ready' && info))
 
@@ -289,7 +403,7 @@ export default function ShareView({ token }: { token: string }) {
       <header className="share-head">
         <Mark size={26} />
         <div>
-          <b>NeuroDMS</b>
+          <b>{info?.productName || 'NeuroDMS'}</b>
           <span>安全分享</span>
         </div>
         <div className="grow" />

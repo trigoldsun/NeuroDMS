@@ -47,9 +47,12 @@ func (a *API) handleGetMail(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusInternalServerError, "INTERNAL", "读取邮件配置失败")
 		return
 	}
-	// Settings 的 MarshalJSON 保证口令/密钥不出现在响应里
+	// Settings 的 MarshalJSON 保证口令/密钥不出现在响应里。
+	// effectiveFromName 是"实际会写进 From 头"的显示名：
+	// 配置留空时由系统名称生成，界面要能回显，否则管理员不知道对方看到的是什么。
 	writeOK(w, r, map[string]any{
-		"config": s,
+		"config":            s,
+		"effectiveFromName": a.mailFromName(r.Context(), c.TenantID, s.FromName),
 		"environment": map[string]any{
 			"defaultConfigured":  a.MailRouter != nil && a.MailRouter.Fallback() != nil,
 			"defaultChannels":    a.mailDefaultChannels(),
@@ -198,6 +201,8 @@ func (a *API) handleTestMail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s := req.Settings
+	// 显示名留空 = 用品牌默认值（与真实发信一致，测试结果才有参考价值）
+	s.FromName = a.mailFromName(r.Context(), c.TenantID, s.FromName)
 	if s.SMTPPassword == "" {
 		s.SMTPPassword = saved.SMTPPassword
 	}

@@ -11,6 +11,7 @@
   "dependencies": {
     "hls.js": "^1.7.4",
     "libheif-js": "^1.23.5",
+    "pdfjs-dist": "^6.5.438",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },

@@ -7,7 +7,9 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"html"
 	"log/slog"
+	"strings"
 
 	"docvault/internal/auth"
 	"docvault/internal/notify"
@@ -29,6 +31,9 @@ type Notifier struct {
 // CodeMailer 把验证码交给同步发送器。
 type CodeMailer struct {
 	Direct *notify.DirectSender
+	// Brand 返回租户的系统名称，用于验证码邮件的标题与正文。
+	// 为 nil 时退回产品名（测试装配常见）。
+	Brand func(ctx context.Context, tenantID string) string
 }
 
 // SendCode 实现 auth.CodeSender。
@@ -36,13 +41,21 @@ func (m *CodeMailer) SendCode(ctx context.Context, tenantID, to, purpose, code s
 	if m == nil || m.Direct == nil {
 		return fmt.Errorf("未配置通知通道")
 	}
+	brand := "NeuroDMS"
+	if m.Brand != nil {
+		if b := strings.TrimSpace(m.Brand(ctx, tenantID)); b != "" {
+			brand = b
+		}
+	}
 	msg := notify.Message{
 		To:      to,
-		Subject: "NeuroDMS 验证码",
-		Text:    fmt.Sprintf("您的验证码是 %s，%d 分钟内有效。\n如非本人操作，请忽略本邮件。", code, 10),
+		Subject: "【" + brand + "】验证码",
+		Text: fmt.Sprintf("您在%s的验证码是 %s，%d 分钟内有效。\n如非本人操作，请忽略本邮件。",
+			brand, code, 10),
 		HTML: fmt.Sprintf(
-			`<p>您的验证码是 <strong style="font-size:20px;letter-spacing:2px">%s</strong></p>`+
-				`<p style="color:#666">10 分钟内有效。如非本人操作，请忽略本邮件。</p>`, code),
+			`<p>您在 <strong>%s</strong> 的验证码是 <strong style="font-size:20px;letter-spacing:2px">%s</strong></p>`+
+				`<p style="color:#666">10 分钟内有效。如非本人操作，请忽略本邮件。</p>`,
+			html.EscapeString(brand), code),
 	}
 	return m.Direct.SendSync(ctx, tenantID, msg, purpose, nil)
 }
@@ -54,7 +67,8 @@ func (m *CodeMailer) SendCode(ctx context.Context, tenantID, to, purpose, code s
 //
 // 返回 (nil, nil) 表示"既没有平台通道、也没有配置仓库"——这是允许的
 // （纯内网预览环境），但调用方必须知道：此时 mfa_required 的账号无法登录（fail-closed）。
-func BuildNotifier(cfg *config.Config, pool *pgxpool.Pool, store *notify.Store, log *slog.Logger) (*Notifier, error) {
+func BuildNotifier(cfg *config.Config, pool *pgxpool.Pool, store *notify.Store,
+	brandName func(ctx context.Context, tenantID string) string, log *slog.Logger) (*Notifier, error) {
 	if pool == nil {
 		return nil, nil
 	}
@@ -105,6 +119,9 @@ func BuildNotifier(cfg *config.Config, pool *pgxpool.Pool, store *notify.Store, 
 	switch {
 	case store != nil:
 		router = notify.NewRouter(disp, store.Load, log)
+		if brandName != nil {
+			router.SetBrandName(brandName)
+		}
 		mail = router
 	case disp != nil:
 		mail = disp
@@ -124,8 +141,11 @@ func BuildNotifier(cfg *config.Config, pool *pgxpool.Pool, store *notify.Store, 
 	}
 
 	return &Notifier{
-		Outbox:  notify.NewOutbox(pool, mail, log, primaryName),
-		Mailer:  &CodeMailer{Direct: notify.NewDirectSender(pool, mail, log, primaryName)},
+		Outbox: notify.NewOutbox(pool, mail, log, primaryName),
+		Mailer: &CodeMailer{
+			Direct: notify.NewDirectSender(pool, mail, log, primaryName),
+			Brand:  brandName,
+		},
 		Channel: primaryName,
 		Router:  router,
 	}, nil

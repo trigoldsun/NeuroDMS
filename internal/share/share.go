@@ -69,6 +69,11 @@ type Options struct {
 	MaxUses       *int       // nil = 不限；1 = 一次性
 	ExpiresAt     *time.Time // nil = 不过期
 	AllowDownload bool
+	// AllowSave 允许访客保存在线副本（PDF/图片等呈现件）。
+	// 关闭时查看器不提供另存入口、屏蔽右键与 Ctrl+S；且必须同时关闭 AllowDownload。
+	AllowSave bool
+	// AllowPrint 允许访客打印。关闭时查看器不提供打印入口、拦截 Ctrl+P、打印样式输出空白。
+	AllowPrint    bool
 	Watermark     bool
 	PasswordHash  string
 	RequireVerify bool
@@ -124,6 +129,8 @@ type Redeemed struct {
 	ObjectType    string
 	ObjectID      string
 	AllowDownload bool
+	AllowSave     bool
+	AllowPrint    bool
 	Watermark     bool
 	IsOneTime     bool
 	// MaxClass 是发起人创建分享时的密级快照。
@@ -141,6 +148,14 @@ func Create(ctx context.Context, pool *pgxpool.Pool, tenantID, creatorID, object
 	creatorClass int, opt Options) (Created, error) {
 	if opt.MaxUses != nil && *opt.MaxUses <= 0 {
 		return Created{}, errors.New("max_uses 必须大于 0")
+	}
+	// 允许下载 ⇒ 必然能保存。这里做一次归一化而不是报错：
+	// 包的直接调用方（脚本、测试）只设置 AllowDownload 是合理的写法，
+	// 而"下载却不允许保存"并不是矛盾，只是"保存"这个能力被下载蕴含了。
+	// 真正的矛盾输入（显式 allowSave=false + allowDownload=true）由 HTTP 层拦，
+	// 因为只有那里知道调用方是否**显式**写了 allowSave。
+	if opt.AllowDownload {
+		opt.AllowSave = true
 	}
 	if creatorClass < 0 {
 		creatorClass = 0
@@ -227,19 +242,22 @@ func Create(ctx context.Context, pool *pgxpool.Pool, tenantID, creatorID, object
 				 token_hash, token_hint, password_hash, max_uses, expires_at,
 				 allow_download, watermark, require_verify,
 				 ip_allowlist, require_approval, approval_status, email_whitelist,
-				 max_class, approver_id, owner_approver_id, approval_stage)
+				 max_class, approver_id, owner_approver_id, approval_stage,
+				 allow_save, allow_print)
 			VALUES
 				(gen_random_uuid(), $1, $2, $3, $4, 'link',
 				 $5, $6, nullif($7,''), $8, $9, $10, $11, $12,
 				 $13::cidr[], $14, $15, $16::text[],
-				 $17, nullif($18,'')::uuid, nullif($19,'')::uuid, $20)
+				 $17, nullif($18,'')::uuid, nullif($19,'')::uuid, $20,
+				 $21, $22)
 			RETURNING id`,
 			tenantID, objectType, objectID, creatorID,
 			hash, hint(token), opt.PasswordHash, opt.MaxUses, opt.ExpiresAt,
 			opt.AllowDownload, opt.Watermark, opt.RequireVerify,
 			normalizeCIDRs(opt.IPAllowlist), requireApproval, approval,
 			normalizeEmails(opt.EmailWhitelist), creatorClass,
-			approverID, ownerApproverID, stage).Scan(&id)
+			approverID, ownerApproverID, stage,
+			opt.AllowSave, opt.AllowPrint).Scan(&id)
 	})
 	if err != nil {
 		return Created{}, fmt.Errorf("创建分享失败: %w", err)
@@ -304,6 +322,8 @@ func redeem(ctx context.Context, pool *pgxpool.Pool, token, password, ip, ua str
 			objectType    string
 			objectID      string
 			allowDownload bool
+			allowSave     bool
+			allowPrint    bool
 			watermark     bool
 			revokedAt     *time.Time
 			expiresAt     *time.Time
@@ -318,12 +338,14 @@ func redeem(ctx context.Context, pool *pgxpool.Pool, token, password, ip, ua str
 
 		// 先读一次做策略判定（不加锁：真正的并发保护在下面的原子 UPDATE）
 		err := tx.QueryRow(ctx, `
-			SELECT id::text, object_type, object_id, allow_download, watermark, max_uses, used_count,
+			SELECT id::text, object_type, object_id, allow_download, allow_save, allow_print,
+			       watermark, max_uses, used_count,
 			       revoked_at, expires_at, password_hash, approval_status,
 			       COALESCE((SELECT array_agg(c::text) FROM unnest(ip_allowlist) AS c), '{}'),
 			       failed_attempts, locked_until, require_verify, max_class
 			  FROM share WHERE token_hash = $1`, hash).
-			Scan(&shareID, &objectType, &objectID, &allowDownload, &watermark, &maxUses, &used,
+			Scan(&shareID, &objectType, &objectID, &allowDownload, &allowSave, &allowPrint,
+				&watermark, &maxUses, &used,
 				&revokedAt, &expiresAt, &passwordHash, &approval, &ipAllowlist, &failed, &lockedUntil,
 				&requireVerify, &maxClass)
 		if err != nil {
@@ -514,6 +536,8 @@ func redeem(ctx context.Context, pool *pgxpool.Pool, token, password, ip, ua str
 		out.ObjectType = objectType
 		out.ObjectID = objectID
 		out.AllowDownload = allowDownload
+		out.AllowSave = allowSave
+		out.AllowPrint = allowPrint
 		out.Watermark = watermark
 		out.MaxClass = maxClass
 		out.IsOneTime = maxUses != nil && *maxUses == 1

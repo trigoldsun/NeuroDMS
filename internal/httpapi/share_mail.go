@@ -74,7 +74,11 @@ func (a *API) publicBaseURL(r *http.Request) string {
 //
 // 刻意不包含访问口令：邮件与口令必须走两条独立通道，
 // 否则"邮箱被看到"就等于"链接可以直接打开"。
-func shareMailBody(senderName, objectName, link string, opt share.Options) (subject, text, htmlBody string) {
+func shareMailBody(brand, senderName, objectName, link string, opt share.Options) (subject, text, htmlBody string) {
+	if strings.TrimSpace(brand) == "" {
+		// 品牌读不到时不写一个空括号，退回产品名——比【】更像正常邮件
+		brand = "NeuroDMS"
+	}
 	var expiry, uses, pwd, verify string
 	if opt.ExpiresAt != nil {
 		expiry = opt.ExpiresAt.UTC().Format("2006-01-02 15:04") + " (UTC)"
@@ -95,9 +99,11 @@ func shareMailBody(senderName, objectName, link string, opt share.Options) (subj
 		verify = "打开后需用本邮箱接收验证码完成验证"
 	}
 
-	subject = fmt.Sprintf("【NeuroDMS】%s 向你分享了一个文件", senderName)
+	// 主题里的方括号是租户自己的系统名称：收件人一眼能看出"是哪家单位的系统"，
+	// 而不是收到一封署名 NeuroDMS 的陌生邮件（那是钓鱼举报率最高的形态）。
+	subject = fmt.Sprintf("【%s】%s 向你分享了一个文件", brand, senderName)
 	lines := []string{
-		fmt.Sprintf("%s 通过 NeuroDMS 向你分享了文件：%s", senderName, objectName),
+		fmt.Sprintf("%s 通过 %s 向你分享了文件：%s", senderName, brand, objectName),
 		"",
 		"打开链接：" + link,
 		"有效期：" + expiry,
@@ -115,12 +121,12 @@ func shareMailBody(senderName, objectName, link string, opt share.Options) (subj
 	text = strings.Join(lines, "\n")
 
 	htmlBody = fmt.Sprintf(`<div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:14px;line-height:1.7;color:#1f2328">
-<p><b>%s</b> 通过 NeuroDMS 向你分享了文件：<b>%s</b></p>
+<p><b>%s</b> 通过 %s 向你分享了文件：<b>%s</b></p>
 <p><a href="%s" style="display:inline-block;padding:8px 16px;background:#12724a;color:#fff;border-radius:6px;text-decoration:none">打开文件</a></p>
 <p style="color:#57606a">有效期：%s<br>访问次数：%s<br>访问条件：%s%s</p>
 <p style="color:#8b949e;font-size:12px">链接请勿转发。本邮件由系统自动发送，请勿直接回复。</p>
 </div>`,
-		html.EscapeString(senderName), html.EscapeString(objectName), html.EscapeString(link),
+		html.EscapeString(senderName), html.EscapeString(brand), html.EscapeString(objectName), html.EscapeString(link),
 		html.EscapeString(expiry), html.EscapeString(uses), html.EscapeString(pwd),
 		func() string {
 			if verify == "" {
@@ -135,7 +141,8 @@ func shareMailBody(senderName, objectName, link string, opt share.Options) (subj
 func (a *API) enqueueShareMail(ctx context.Context, tenantID, shareID, senderName, objectName,
 	link string, opt share.Options, recipients []string) (int, error) {
 
-	subject, text, htmlBody := shareMailBody(senderName, objectName, link, opt)
+	brand := a.brandName(ctx, tenantID)
+	subject, text, htmlBody := shareMailBody(brand, senderName, objectName, link, opt)
 	queued := 0
 	err := db.WithTenant(ctx, a.Pool, tenantID, func(tx pgx.Tx) error {
 		for _, to := range recipients {
@@ -152,6 +159,33 @@ func (a *API) enqueueShareMail(ctx context.Context, tenantID, shareID, senderNam
 		return 0, err
 	}
 	return queued, nil
+}
+
+// brandName 返回租户的系统名称（品牌），用于邮件主题与发件人显示名。
+//
+// 读不到时返回空串，由调用方退回产品名：邮件是业务链路的一部分，
+// 不能因为品牌查询失败就让"分享"整体失败。
+func (a *API) brandName(ctx context.Context, tenantID string) string {
+	if a.Tenants == nil {
+		return ""
+	}
+	slug, err := a.Tenants.SlugOf(ctx, tenantID)
+	if err != nil {
+		return ""
+	}
+	b, err := a.Tenants.BrandingBySlug(ctx, slug)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(b.ProductName)
+}
+
+// mailFromName 计算发件人显示名：显式配置优先，否则用「【系统名文档管理系统】」。
+func (a *API) mailFromName(ctx context.Context, tenantID, configured string) string {
+	if strings.TrimSpace(configured) != "" {
+		return strings.TrimSpace(configured)
+	}
+	return notify.DefaultFromName(a.brandName(ctx, tenantID))
 }
 
 // senderDisplayName 取分享人的显示名（邮件里必须是人名，不是 UUID）。

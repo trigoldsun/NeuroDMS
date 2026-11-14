@@ -4,7 +4,7 @@ import ActivityTable from './ActivityTable'
 import DirectorySettings from './DirectorySettings'
 import MailSettings from './MailSettings'
 import { adminPath, navigate } from '../router'
-import { api, postJSON, fetchMe, applyTheme, cycleTheme, HttpError, type Me } from '../api'
+import { api, postJSON, fetchMe, applyTheme, cycleTheme, getBranding, saveBranding, HttpError, type BrandingInfo, type Me } from '../api'
 import { Shell } from '../components/Shell'
 import { AdminSpaces } from './AdminSpaces'
 import { Icon, InfoDot } from '../components/ui'
@@ -134,6 +134,8 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
   const [newPolicy, setNewPolicy] = useState({ label: '', minLevel: 1 })
   const [requests, setRequests] = useState<ClassRequest[]>([])
   const [shareApprovals, setShareApprovals] = useState<ShareApproval[]>([])
+  // 品牌：系统名称（邮件主题与发件人显示名都用它）+ 颜色 + 页脚
+  const [brand, setBrand] = useState<BrandingInfo | null>(null)
   const [tpolicy, setTpolicy] = useState<TenantPolicy>({
     shareDefaultExpireDays: 0, maxUploadMB: 0, auditRetentionDays: 730,
     uploadTimeoutSeconds: 300, allowedExts: null,
@@ -230,6 +232,12 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
         setPolicies(d.policies ?? {})
       }
       if (tab === 'settings') {
+        // 品牌与策略互不依赖：任一失败都不该让整页打不开
+        try {
+          setBrand(await getBranding())
+        } catch {
+          setBrand(null)
+        }
         const d = await api<TenantPolicy>('/v1/admin/policy')
         setTpolicy({
           shareDefaultExpireDays: d.shareDefaultExpireDays ?? 0,
@@ -291,6 +299,27 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
       void load()
     } catch (e) {
       flash(e instanceof HttpError ? e.message : '保存失败')
+    }
+  }
+
+  async function saveBrand() {
+    if (!brand) return
+    if (!brand.productName.trim()) {
+      setErr('系统名称不能为空（它会显示在邮件主题与分享页上）')
+      return
+    }
+    setErr('')
+    try {
+      const saved = await saveBranding({
+        productName: brand.productName.trim(),
+        primaryColor: brand.primaryColor,
+        accentColor: brand.accentColor,
+        footerText: brand.footerText,
+      })
+      setBrand(saved)
+      flash('名称已保存：之后发出的邮件主题为【' + saved.productName + '】，发件人显示名同步更新')
+    } catch (e) {
+      setErr(e instanceof HttpError ? `${e.code}：${e.message}` : '保存失败')
     }
   }
 
@@ -604,6 +633,60 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
 
           {tab === 'settings' && (
             <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div className="card pad">
+                <h3 style={{ marginTop: 0, marginBottom: 10 }}>品牌与名称</h3>
+                {!brand ? (
+                  <div className="hint">读取品牌配置失败，稍后重试。</div>
+                ) : (
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: '180px 260px 1fr', gap: 10, alignItems: 'center' }}>
+                      <label htmlFor="brand-name">系统名称</label>
+                      <input
+                        id="brand-name" maxLength={20}
+                        value={brand.productName}
+                        onChange={(e) => setBrand({ ...brand, productName: e.target.value })}
+                      />
+                      <span className="hint">
+                        用于外发邮件主题【{brand.productName || '…'}】与发件人显示名
+                        「【{brand.productName || '…'}文档管理系统】」；分享页页眉也显示它
+                      </span>
+
+                      <label htmlFor="brand-primary">主色</label>
+                      <input
+                        id="brand-primary" type="color"
+                        value={brand.primaryColor}
+                        onChange={(e) => setBrand({ ...brand, primaryColor: e.target.value })}
+                        style={{ width: 64, padding: 2, height: 32 }}
+                      />
+                      <span className="hint">登录页与分享页的主色调</span>
+
+                      <label htmlFor="brand-accent">辅色</label>
+                      <input
+                        id="brand-accent" type="color"
+                        value={brand.accentColor}
+                        onChange={(e) => setBrand({ ...brand, accentColor: e.target.value })}
+                        style={{ width: 64, padding: 2, height: 32 }}
+                      />
+                      <span className="hint">强调色，用于次级按钮与标记</span>
+
+                      <label htmlFor="brand-footer">页脚文案</label>
+                      <input
+                        id="brand-footer" maxLength={200} placeholder="可选，例如：某某公司 内部系统"
+                        value={brand.footerText}
+                        onChange={(e) => setBrand({ ...brand, footerText: e.target.value })}
+                      />
+                      <span className="hint">显示在登录页与分享页底部</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 12 }}>
+                      <button className="primary" onClick={() => void saveBrand()}>保存名称与品牌</button>
+                      <span className="hint">
+                        改完立即生效，无需重启；已发出的邮件不会追改。租户标识 <span className="code">{brand.slug}</span>
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+
               <div className="card pad">
                 <h3 style={{ marginTop: 0, marginBottom: 10 }}>日志与配额</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: '180px 200px 1fr', gap: 10, alignItems: 'center' }}>

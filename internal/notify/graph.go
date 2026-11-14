@@ -26,6 +26,8 @@ type GraphConfig struct {
 	ClientSecret string
 	// Sender 是发件邮箱（必须是租户内存在的邮箱）
 	Sender string
+	// FromName 是收件人看到的发件人名称（可为空 = 用邮箱在 M365 里的显示名）
+	FromName string
 	// LoginBase / GraphBase 可覆盖，便于指向测试服务器或 21Vianet 等主权云
 	LoginBase string
 	GraphBase string
@@ -89,6 +91,15 @@ func (s *GraphSender) Send(ctx context.Context, m Message) error {
 			},
 		},
 		"saveToSentItems": true,
+	}
+	if strings.TrimSpace(s.cfg.FromName) != "" {
+		// 只改显示名，不改地址：Graph 不允许把 from 设成非发件人邮箱
+		payload["message"].(map[string]any)["from"] = map[string]any{
+			"emailAddress": map[string]any{
+				"address": s.cfg.Sender,
+				"name":    s.cfg.FromName,
+			},
+		}
 	}
 	if strings.TrimSpace(m.ReplyTo) != "" {
 		// 与 SMTP 的 Reply-To 头等价：回信进指定邮箱，而不是发件邮箱

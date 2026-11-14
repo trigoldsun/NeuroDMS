@@ -41,6 +41,10 @@ type Router struct {
 	log      *slog.Logger
 	ttl      time.Duration
 
+	// brandName 返回租户的系统名称（品牌），用于"没填发件人显示名"时的默认值。
+	// 用回调而不是直接依赖 tenant 包：notify 不该知道租户表长什么样。
+	brandName func(ctx context.Context, tenantID string) string
+
 	mu    sync.Mutex
 	cache map[string]cacheEntry
 }
@@ -58,6 +62,18 @@ func NewRouter(fallback *Dispatcher, load SettingsLoader, log *slog.Logger) *Rou
 		log = slog.Default()
 	}
 	return &Router{fallback: fallback, load: load, log: log, ttl: time.Minute, cache: map[string]cacheEntry{}}
+}
+
+// SetBrandName 注入品牌名解析函数（启动时接上租户服务）。
+//
+// 不放进构造函数是为了不让所有调用方（含测试）都被迫提供一个品牌来源：
+// 没有它时退回产品名，行为仍然正确。
+func (r *Router) SetBrandName(f func(ctx context.Context, tenantID string) string) {
+	r.brandName = f
+	// 已缓存的通道里可能带着旧的默认显示名，全部失效
+	r.mu.Lock()
+	r.cache = map[string]cacheEntry{}
+	r.mu.Unlock()
 }
 
 // Invalidate 丢弃某租户的缓存。保存/测试配置后调用，下一次发送立即生效。
@@ -100,6 +116,16 @@ func (r *Router) resolve(ctx context.Context, tenantID string) (cacheEntry, erro
 		// 读不到配置时不缓存：数据库抖动的下一封应该立刻重试，
 		// 而不是被一个 60 秒的错误缓存挡住。
 		return cacheEntry{}, err
+	}
+	// 没填发件人显示名 → 用「【系统名文档管理系统】」。
+	// 这一步放在路由层而不是保存时：品牌改了之后，下次发信就该用新名字，
+	// 不需要管理员再去邮件配置页点一次保存。
+	if strings.TrimSpace(s.FromName) == "" {
+		brand := ""
+		if r.brandName != nil {
+			brand = r.brandName(ctx, tenantID)
+		}
+		s.FromName = DefaultFromName(brand)
 	}
 	disp, derr := s.Dispatcher()
 	if derr != nil {
