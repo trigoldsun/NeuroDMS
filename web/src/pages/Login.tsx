@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, setTokens, HttpError, applyTheme } from '../api'
+import { applyProductFavicon } from '../branding'
 import { Icon, InfoDot, Mark } from '../components/ui'
 
 type LoginResp = {
@@ -37,15 +38,30 @@ function StepMotif() {
   )
 }
 
-function Aside() {
+// 登录页是未登录状态，图标与名称来自**公开品牌接口**（/v1/tenant/branding）。
+// 之前这里硬编码 NeuroDMS：客户在「品牌与名称」里改了名、传了图标，
+// 登录页还是厂商品牌——这是客户第一眼看到的地方，分裂感最明显。
+function Aside({ productName, logoUrl, footerText }: {
+  productName: string
+  logoUrl: string
+  footerText: string
+}) {
   return (
     <aside className="login-aside">
       <div className="blade" />
       <div className="stack">
         <div className="row-gap" style={{ gap: 10, marginBottom: 34 }}>
-          <Mark size={30} />
-          <div>
-            <div style={{ color: '#F4F9F4', fontWeight: 600, fontSize: 15, letterSpacing: '-.01em' }}>NeuroDMS</div>
+          {logoUrl
+            ? <img src={logoUrl} alt="" width={30} height={30}
+              style={{ width: 30, height: 30, flex: '0 0 30px', objectFit: 'contain' }} />
+            : <Mark size={30} />}
+          <div style={{ minWidth: 0 }}>
+            <div style={{
+              color: '#F4F9F4', fontWeight: 600, fontSize: 15, letterSpacing: '-.01em',
+              maxWidth: 230, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {productName || 'NeuroDMS'}
+            </div>
             <div style={{ color: 'rgba(234,243,238,.52)', fontSize: 11, letterSpacing: '.14em' }}>DOCUMENT CONTROL</div>
           </div>
         </div>
@@ -69,13 +85,58 @@ function Aside() {
         </div>
       </div>
       <StepMotif />
-      <div className="foot">所有访问均记录于不可篡改的审计链 · 森莘科创</div>
+      <div className="foot">
+        {footerText || '所有访问均记录于不可篡改的审计链'}
+      </div>
     </aside>
   )
 }
 
 export default function Login() {
   const [tenantSlug, setSlug] = useState(() => localStorage.getItem(TENANT_KEY) ?? '')
+  // 品牌（公开接口，未登录可读）：组织标识一变就重新拉，带 350ms 防抖——
+  // 用户逐字输入时不该每敲一下就发一个请求。
+  const [brandName, setBrandName] = useState('')
+  const [brandLogo, setBrandLogo] = useState('')
+  const [brandFooter, setBrandFooter] = useState('')
+
+  // 登录页固定产品图标：这里只显示"是谁的系统"，不替任何租户打标。
+  // 登录成功进入站内后，Shell 才会把图标换成当前租户的（见 branding.ts）。
+  useEffect(() => { applyProductFavicon() }, [])
+
+  useEffect(() => {
+    const slug = tenantSlug.trim()
+    if (!slug) {
+      setBrandName(''); setBrandLogo(''); setBrandFooter('')
+      return
+    }
+    const ctl = new AbortController()
+    const timer = window.setTimeout(() => {
+      fetch('/v1/tenant/branding?slug=' + encodeURIComponent(slug), {
+        headers: { accept: 'application/json' }, signal: ctl.signal,
+        // 品牌接口有 60 秒缓存；登录页是"改完图标马上来验证"的地方，
+        // 吃到旧缓存会让人以为没保存成功。
+        cache: 'no-store',
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => {
+          const d = j?.data
+          if (!d) return
+          setBrandName(String(d.productName ?? ''))
+          setBrandLogo(String(d.logoUrl ?? ''))
+          setBrandFooter(String(d.footerText ?? ''))
+        })
+        .catch(() => { /* 组织标识还没输完/不存在：保持默认品牌即可 */ })
+    }, 350)
+    return () => { window.clearTimeout(timer); ctl.abort() }
+  }, [tenantSlug])
+
+  // 标题也跟着品牌走：只换图标与页眉、标题还写着厂商名，
+  // 浏览器标签上就是"森莘创新的标 + NeuroDMS 的标题"，最容易被当成两个系统。
+  useEffect(() => {
+    const n = brandName.trim()
+    document.title = (n || 'NeuroDMS') + ' · 登录'
+  }, [brandName])
   const [username, setUser] = useState('')
   const [password, setPass] = useState('')
   const [mode, setMode] = useState<Mode>('local')
@@ -94,7 +155,6 @@ export default function Login() {
 
   // 二次验证：口令通过后服务端返回 202 + challenge，此时**没有任何令牌**。
   // 界面必须把用户停在"输验证码"这一步，不能有任何"已登录"的中间态。
-  const [showPass, setShowPass] = useState(false)
   const [challenge, setChallenge] = useState<MfaResp | null>(null)
   const [code, setCode] = useState('')
 
@@ -335,7 +395,7 @@ export default function Login() {
   if (challenge) {
     return (
       <div className="login-wrap">
-        <Aside />
+        <Aside productName={brandName} logoUrl={brandLogo} footerText={brandFooter} />
         <div className="login-card">
           <div className="login-inner">
             <div className="login-head">
@@ -395,7 +455,7 @@ export default function Login() {
 
   return (
     <div className="login-wrap">
-      <Aside />
+      <Aside productName={brandName} logoUrl={brandLogo} footerText={brandFooter} />
       <div className="login-card">
         <div className="login-inner">
           <div className="login-head">
@@ -512,26 +572,20 @@ export default function Login() {
                   <span className="hint" style={{ marginLeft: 'auto' }}>由公司域统一校验</span>
                 )}
               </label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  id="pass"
-                  type={showPass ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPass(e.target.value)}
-                  autoComplete="current-password"
-                  required
-                  style={{ width: '100%', paddingRight: 40 }}
-                />
-                <button
-                  type="button"
-                  className="icon ghost"
-                  aria-label={showPass ? '隐藏口令' : '显示口令'}
-                  onClick={() => setShowPass((v) => !v)}
-                  style={{ position: 'absolute', right: 2, top: 2, height: 30, width: 30 }}
-                >
-                  <Icon name={showPass ? 'eyeOff' : 'eye'} size={16} />
-                </button>
-              </div>
+              {/* 口令一律掩码，不提供"显示"开关：
+                  明文的截图/录屏/肩窥风险高于"看不见自己输了什么"的不便，
+                  后者由需要设置口令时的二次输入兜底（docs/48）。 */}
+              <input
+                id="pass"
+                type="password"
+                value={password}
+                onChange={(e) => setPass(e.target.value)}
+                autoComplete="current-password"
+                required
+                spellCheck={false}
+                autoCorrect="off"
+                autoCapitalize="off"
+              />
             </div>
 
             <div className="field">

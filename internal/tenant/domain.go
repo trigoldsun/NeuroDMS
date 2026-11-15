@@ -26,6 +26,53 @@ type Domain struct {
 	HasCert      bool       `json:"hasCert"`
 	CertNotAfter *time.Time `json:"certNotAfter"`
 	CreatedAt    time.Time  `json:"createdAt"`
+
+	// Token 只在未验证时返回：客户需要它去配 DNS TXT。
+	// 已验证后再回传等于把"重新绑定该域名"的凭据留在页面上，没有收益。
+	Token string `json:"token,omitempty"`
+	// CertSource 见迁移 0056：manual（客户上传）/ acme（本系统签发）/ 空。
+	CertSource string `json:"certSource,omitempty"`
+	// ACMEPending 表示有一条 DNS-01 签发在等客户加 TXT。
+	ACMEPending bool `json:"acmePending,omitempty"`
+	// ACMEError 是上次自动签发失败的原因（已脱敏，只留一句可读的话）。
+	ACMEError string `json:"acmeError,omitempty"`
+}
+
+// ListDomainsFor 列出某租户的域名（租户自助用，按 id 而不是 slug）。
+//
+// 与平台版 ListDomains 的区别只有两点：走 RLS 上下文（WithTenant），
+// 以及多带回验证串与证书来源——自助页面要能自己回答"下一步该做什么"。
+func (s *Service) ListDomainsFor(ctx context.Context, tenantID string) ([]Domain, error) {
+	var out []Domain
+	err := db.WithTenant(ctx, s.pool, tenantID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `
+			SELECT host, is_primary, verified_at IS NOT NULL,
+			       cert_pem IS NOT NULL, cert_not_after, created_at,
+			       verify_token, cert_source, acme_state, acme_last_error
+			  FROM tenant_domain
+			 WHERE tenant_id = $1
+			 ORDER BY is_primary DESC, host`, tenantID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var d Domain
+			var acmeState string
+			if err := rows.Scan(&d.Host, &d.Primary, &d.Verified, &d.HasCert,
+				&d.CertNotAfter, &d.CreatedAt, &d.Token, &d.CertSource,
+				&acmeState, &d.ACMEError); err != nil {
+				return err
+			}
+			d.ACMEPending = acmeState == "pending"
+			if d.Verified {
+				d.Token = ""
+			}
+			out = append(out, d)
+		}
+		return rows.Err()
+	})
+	return out, err
 }
 
 // ErrCertUnavailable 表示未配置加密密钥，无法安全保存私钥。
@@ -165,7 +212,20 @@ type CertInfo struct {
 //  3. 证书不能已过期（否则等于没配）。
 func (s *Service) SetCertificate(ctx context.Context, box *secretbox.Box,
 	tenantID, host, certPEM string, keyPEM []byte) (CertInfo, error) {
+	return s.SetCertificateFrom(ctx, box, tenantID, host, certPEM, keyPEM, "manual")
+}
 
+// SetCertificateFrom 同 SetCertificate，但显式记录证书来源。
+//
+// source 决定自动续期的边界：`acme` 会被续期任务接管，`manual` 永不被动。
+// 让来源成为数据而不是"猜"，是因为猜错的两个方向都很糟——续期覆盖客户证书，
+// 或者自动签发的证书到期没人管。
+func (s *Service) SetCertificateFrom(ctx context.Context, box *secretbox.Box,
+	tenantID, host, certPEM string, keyPEM []byte, source string) (CertInfo, error) {
+
+	if source != "manual" && source != "acme" {
+		return CertInfo{}, fmt.Errorf("%w: 未知的证书来源 %q", ErrInvalidInput, source)
+	}
 	if !box.Available() {
 		return CertInfo{}, ErrCertUnavailable
 	}
@@ -203,9 +263,11 @@ func (s *Service) SetCertificate(ctx context.Context, box *secretbox.Box,
 		ct, e := tx.Exec(ctx, `
 			UPDATE tenant_domain
 			   SET cert_pem = $3, key_enc = $4, cert_not_after = $5,
-			       cert_fingerprint = $6, updated_at = now()
+			       cert_fingerprint = $6, cert_source = $7, updated_at = now(),
+			       acme_state = '', acme_order_url = '', acme_auth_url = '',
+			       acme_dns_name = '', acme_dns_value = '', acme_last_error = ''
 			 WHERE tenant_id = $1 AND host = $2`,
-			tenantID, host, certPEM, sealed, leaf.NotAfter, info.Fingerprint)
+			tenantID, host, certPEM, sealed, leaf.NotAfter, info.Fingerprint, source)
 		if e != nil {
 			return e
 		}
@@ -215,6 +277,30 @@ func (s *Service) SetCertificate(ctx context.Context, box *secretbox.Box,
 		return nil
 	})
 	return info, err
+}
+
+// ClearCertificate 删除证书（保留域名绑定）。
+//
+// 单列一个方法而不是走 SetCertificate(空串)：后者会先做证书解析，
+// 空串必然报"证书无法解析"，错误信息会让人以为操作失败。
+func (s *Service) ClearCertificate(ctx context.Context, tenantID, host string) error {
+	host = strings.ToLower(strings.TrimSpace(host))
+	return db.WithTenant(ctx, s.pool, tenantID, func(tx pgx.Tx) error {
+		ct, err := tx.Exec(ctx, `
+			UPDATE tenant_domain
+			   SET cert_pem = NULL, key_enc = NULL, cert_not_after = NULL,
+			       cert_fingerprint = '', cert_source = '', acme_state = '',
+			       acme_order_url = '', acme_auth_url = '', acme_dns_name = '',
+			       acme_dns_value = '', acme_last_error = '', updated_at = now()
+			 WHERE tenant_id = $1 AND host = $2`, tenantID, host)
+		if err != nil {
+			return err
+		}
+		if ct.RowsAffected() == 0 {
+			return ErrNotFound
+		}
+		return nil
+	})
 }
 
 // CertificateFor 按 Host 取出可用于 TLS 握手的证书（供 GetCertificate 调用）。

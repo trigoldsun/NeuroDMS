@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Dialog, Icon, Menu } from '../components/ui'
 import { api, del, HttpError, postJSON } from '../api'
+import { PasswordPair, passwordPairError } from '../components/PasswordPair'
 import { navigate } from '../router'
 
 // 成员（账号）管理。
@@ -57,7 +58,7 @@ function fmtTime(s: string | null): string {
   return new Date(s).toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
-export default function Members({ roles, meId }: { roles: RoleDef[]; meId: string }) {
+export default function Members({ roles, meId, meClass }: { roles: RoleDef[]; meId: string; meClass: number }) {
   const [items, setItems] = useState<Member[]>([])
   const [total, setTotal] = useState(0)
   const [q, setQ] = useState('')
@@ -70,6 +71,28 @@ export default function Members({ roles, meId }: { roles: RoleDef[]; meId: strin
   const [editing, setEditing] = useState<Member | null>(null)
   const [pwTarget, setPwTarget] = useState<Member | null>(null)
   const [blocked, setBlocked] = useState<{ member: Member; spaces: OwnedSpaceLite[] } | null>(null)
+
+  // 密级可选集合（按档位 + 单项授权）。空数组 = 该租户没有密级功能。
+  //
+  // 此前这里是硬编码 7 档：基础版客户建号时能选到"核心"，后端也照收——
+  // 等于在界面上承诺了一个没买的能力。现在以服务端返回的可选集为准，
+  // 读不到就按"没有密级"处理（宁可不显示，也不要越权写）。
+  const [tenantLevels, setTenantLevels] = useState<number[]>([])
+  useEffect(() => {
+    api<{ classificationLevels: number[] }>('/v1/me/capabilities')
+      .then((c) => setTenantLevels(c.classificationLevels))
+      .catch(() => setTenantLevels([]))
+  }, [])
+  // 可选密级 = 档位允许的集合 ∩ 不高于自己的密级。
+  //
+  // 服务端有"定密不超自身"的强制判定（防止管理员造一个高密级账号、再登录进去读核心文件）。
+  // 界面若把被拒的档位也列出来，用户只会反复撞 403——**能选的必须都是能成功的**。
+  const classLevels = useMemo(
+    () => tenantLevels.filter((v) => v <= meClass),
+    [tenantLevels, meClass],
+  )
+  const hasClass = classLevels.length > 0
+  const cappedBySelf = tenantLevels.length > classLevels.length
 
   const flash = useCallback((m: string) => {
     setToast(m)
@@ -181,6 +204,19 @@ export default function Members({ roles, meId }: { roles: RoleDef[]; meId: strin
 
       {err && <div className="card pad error" style={{ marginBottom: 10 }}>{err}</div>}
 
+      {/* 说明"为什么这里选不到更高的密级"。
+          不写这句，管理员会以为是界面缺了选项；写清了才知道该找谁。 */}
+      {cappedBySelf && (
+        <div className="banner warn" style={{ marginBottom: 10 }}>
+          <span className="ico"><Icon name="alert" size={15} /></span>
+          <div>
+            你的账号密级是 <b>{meClass} · {levelText[meClass] ?? meClass}</b>，
+            只能把成员设到不高于该级别。需要更高密级的账号，请由<b>同级或更高密级的管理员</b>创建，
+            或先由对方提升你的密级（管理员不能自行提升自己）。
+          </div>
+        </div>
+      )}
+
       <div className="card">
         <table>
           <thead>
@@ -241,7 +277,11 @@ export default function Members({ roles, meId }: { roles: RoleDef[]; meId: strin
                   ))}
                 </td>
                 <td>{m.deptName || <span className="hint">—</span>}</td>
-                <td className="tnum">{levelText[m.classification] ?? m.classification} / {m.ceiling}</td>
+                <td className="tnum">
+                  {hasClass
+                    ? <>{levelText[m.classification] ?? m.classification} / {m.ceiling}</>
+                    : <span className="hint">未启用</span>}
+                </td>
                 <td className="hint">{fmtTime(m.lastLoginAt)}</td>
                 <td className="actions">
                   <button className="sm" onClick={() => setEditing(m)}>编辑</button>
@@ -301,6 +341,7 @@ export default function Members({ roles, meId }: { roles: RoleDef[]; meId: strin
         <CreateMember
           depts={depts}
           roles={roles}
+          classLevels={classLevels}
           onClose={() => setCreating(false)}
           onDone={async () => { setCreating(false); await load(); flash('成员已创建，可立即登录') }}
         />
@@ -310,6 +351,7 @@ export default function Members({ roles, meId }: { roles: RoleDef[]; meId: strin
         <EditMember
           member={editing}
           depts={depts}
+          classLevels={classLevels}
           onClose={() => setEditing(null)}
           // 保存后不关窗：手机号刚录入时状态是"待验证"，
           // 关掉再打开才能发码，会让"录入→验证"这一步显得多余且容易漏。
@@ -374,23 +416,34 @@ export default function Members({ roles, meId }: { roles: RoleDef[]; meId: strin
 
 // ---------------- 新建 ----------------
 
-function CreateMember({ depts, roles, onClose, onDone }:
-  { depts: Dept[]; roles: RoleDef[]; onClose: () => void; onDone: () => void }) {
+function CreateMember({ depts, roles, classLevels, onClose, onDone }:
+  { depts: Dept[]; roles: RoleDef[]; classLevels: number[]; onClose: () => void; onDone: () => void }) {
+  const hasClass = classLevels.length > 0
   const [f, setF] = useState({
     username: '', displayName: '', email: '', phone: '', password: '',
     role: '', deptId: '', ceiling: 4, classification: 0,
     principalType: 'internal', mfaRequired: false, expiresAt: '',
   })
+  const [pw2, setPw2] = useState('')
+  const [submitted, setSubmitted] = useState(false)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
+    setSubmitted(true)
+    // 客户端先拦一次：不一致时不要发请求，否则服务端会真的创建出账号，
+    // 管理员再回头改口令——这正是"输错一位导致密码找不回"的来源。
+    const bad = passwordPairError(f.password, pw2)
+    if (bad) { setErr(bad); return }
     setBusy(true)
     setErr('')
     try {
       await postJSON('/v1/admin/members', {
         ...f,
+        // 没有密级能力时**不传**这两个字段：后端会按 0 落库，
+        // 传了反而要多一套"档位不允许"的提示。
+        ...(hasClass ? {} : { classification: undefined, ceiling: undefined }),
         role: f.role || undefined,
         deptId: f.deptId || undefined,
         expiresAt: f.expiresAt ? new Date(f.expiresAt).toISOString() : null,
@@ -449,10 +502,17 @@ function CreateMember({ depts, roles, onClose, onDone }:
               向本人索取验证码后确认即可。域账户的号码由认证源自动同步，无需手填。
             </div>
           </div>
-          <div className="field">
-            <label>初始口令（≥12 位；请让成员首次登录后自行修改）</label>
-            <input value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} required minLength={12} />
-          </div>
+          <PasswordPair
+            id="new-member"
+            label="初始口令（至少 8 位）"
+            value={f.password}
+            onChange={(v) => setF({ ...f, password: v })}
+            confirm={pw2}
+            onConfirm={setPw2}
+            submitted={submitted}
+            disabled={busy}
+            hint="两次输入必须完全一致；请让成员首次登录后自行修改。输入内容以 * 显示。"
+          />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
             <div className="field">
               <label>初始角色</label>
@@ -463,15 +523,19 @@ function CreateMember({ depts, roles, onClose, onDone }:
             </div>
             <div className="field">
               <label>密级（可见上限）</label>
-              <select value={f.classification} onChange={(e) => setF({ ...f, classification: Number(e.target.value) })}>
-                {levelText.map((label, i) => <option key={i} value={i}>{i} · {label}</option>)}
-              </select>
+              {hasClass ? (
+                <select value={f.classification} onChange={(e) => setF({ ...f, classification: Number(e.target.value) })}>
+                  {classLevels.map((v) => <option key={v} value={v}>{v} · {levelText[v]}</option>)}
+                </select>
+              ) : <span className="hint">当前档位不含密级功能</span>}
             </div>
             <div className="field">
               <label>封顶（可授权上限）</label>
-              <select value={f.ceiling} onChange={(e) => setF({ ...f, ceiling: Number(e.target.value) })}>
-                {levelText.map((label, i) => <option key={i} value={i}>{i} · {label}</option>)}
-              </select>
+              {hasClass ? (
+                <select value={f.ceiling} onChange={(e) => setF({ ...f, ceiling: Number(e.target.value) })}>
+                  {classLevels.map((v) => <option key={v} value={v}>{v} · {levelText[v]}</option>)}
+                </select>
+              ) : <span className="hint">不适用</span>}
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -505,8 +569,9 @@ function CreateMember({ depts, roles, onClose, onDone }:
 
 // ---------------- 编辑 ----------------
 
-function EditMember({ member, depts, onClose, onSaved }:
-  { member: Member; depts: Dept[]; onClose: () => void; onSaved: () => void }) {
+function EditMember({ member, depts, classLevels, onClose, onSaved }:
+  { member: Member; depts: Dept[]; classLevels: number[]; onClose: () => void; onSaved: () => void }) {
+  const hasClass = classLevels.length > 0
   const [f, setF] = useState({
     displayName: member.displayName,
     email: member.email,
@@ -594,8 +659,9 @@ function EditMember({ member, depts, onClose, onSaved }:
           displayName: f.displayName,
           email: f.email,
           deptId: f.deptId,
-          classification: f.classification,
-          ceiling: f.ceiling,
+          // 没有密级能力时不提交：后端会把"未传"理解为"不改"，
+          // 提交 0 反而会覆盖掉（降档前遗留的）历史值。
+          ...(hasClass ? { classification: f.classification, ceiling: f.ceiling } : {}),
           mfaRequired: f.mfaRequired,
           expiresAt: f.expiresAt ? new Date(f.expiresAt).toISOString() : null,
           clearExpiry: !f.expiresAt,
@@ -702,15 +768,19 @@ function EditMember({ member, depts, onClose, onSaved }:
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div className="field">
               <label>密级</label>
-              <select value={f.classification} onChange={(e) => setF({ ...f, classification: Number(e.target.value) })}>
-                {levelText.map((label, i) => <option key={i} value={i}>{i} · {label}</option>)}
-              </select>
+              {hasClass ? (
+                <select value={f.classification} onChange={(e) => setF({ ...f, classification: Number(e.target.value) })}>
+                  {classLevels.map((v) => <option key={v} value={v}>{v} · {levelText[v]}</option>)}
+                </select>
+              ) : <span className="hint">当前档位不含密级功能</span>}
             </div>
             <div className="field">
               <label>封顶</label>
-              <select value={f.ceiling} onChange={(e) => setF({ ...f, ceiling: Number(e.target.value) })}>
-                {levelText.map((label, i) => <option key={i} value={i}>{i} · {label}</option>)}
-              </select>
+              {hasClass ? (
+                <select value={f.ceiling} onChange={(e) => setF({ ...f, ceiling: Number(e.target.value) })}>
+                  {classLevels.map((v) => <option key={v} value={v}>{v} · {levelText[v]}</option>)}
+                </select>
+              ) : <span className="hint">不适用</span>}
             </div>
           </div>
           <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
@@ -735,11 +805,16 @@ function EditMember({ member, depts, onClose, onSaved }:
 function ResetPassword({ member, onClose, onDone }:
   { member: Member; onClose: () => void; onDone: () => void }) {
   const [pw, setPw] = useState('')
+  const [pw2, setPw2] = useState('')
+  const [submitted, setSubmitted] = useState(false)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
+    setSubmitted(true)
+    const bad = passwordPairError(pw, pw2)
+    if (bad) { setErr(bad); return }
     setBusy(true)
     setErr('')
     try {
@@ -760,10 +835,17 @@ function ResetPassword({ member, onClose, onDone }:
           <button className="ghost" onClick={onClose}>关闭</button>
         </div>
         <form className="modal-body" onSubmit={submit} style={{ display: 'grid', gap: 12 }}>
-          <div className="field">
-            <label>新口令（≥12 位）</label>
-            <input value={pw} onChange={(e) => setPw(e.target.value)} required minLength={12} autoFocus />
-          </div>
+          <PasswordPair
+            id="reset-member"
+            label="新口令（至少 8 位）"
+            value={pw}
+            onChange={setPw}
+            confirm={pw2}
+            onConfirm={setPw2}
+            submitted={submitted}
+            disabled={busy}
+            autoFocus
+          />
           <div className="hint">重置会立即吊销该成员的全部会话，旧口令同时失效。</div>
           {err && <div className="error-text">{err}</div>}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>

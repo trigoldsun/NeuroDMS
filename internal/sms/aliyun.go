@@ -1,5 +1,11 @@
 package sms
 
+// 阿里云「短信认证服务」（dypnsapi 2017-05-25）。
+//
+// 刻意不引官方 SDK：这一层只用两个 Action，签名算法是公开且稳定的 RPC 风格，
+// 手写 80 行比拖一个依赖树更容易审计——尤其是"到底调的是哪个产品"这件事，
+// 在代码里写死 Action 名称比藏在 SDK 方法后面更不容易搞错。
+
 import (
 	"context"
 	"crypto/hmac"
@@ -16,21 +22,17 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"docvault/internal/integrations"
 )
 
-// Aliyun 对接阿里云"短信认证服务"（dypnsapi 2017-05-25）。
-//
-// 刻意不引官方 SDK：这一层只用两个 Action，签名算法是公开且稳定的 RPC 风格，
-// 手写 80 行比拖一个依赖树更容易审计——尤其是"到底调的是哪个产品"这件事，
-// 在代码里写死 Action 名称比藏在 SDK 方法后面更不容易搞错。
-type Aliyun struct {
-	cfg    AliyunConfig
+type aliyun struct {
+	cfg    aliyunConfig
 	client *http.Client
 	now    func() time.Time
 }
 
-// AliyunConfig 是短信认证服务的凭据与签名模板。
-type AliyunConfig struct {
+type aliyunConfig struct {
 	AccessKeyID     string
 	AccessKeySecret string
 	// SignName / TemplateCode 使用控制台赠送的签名与模板：
@@ -41,42 +43,62 @@ type AliyunConfig struct {
 	SchemeName string
 	// Endpoint 默认 dypnsapi.aliyuncs.com，测试时可指向 httptest。
 	Endpoint string
+	// TestPhone 仅用于自检。
+	TestPhone string
 }
 
 const (
-	actionSend  = "SendSmsVerifyCode"
-	actionCheck = "CheckSmsVerifyCode"
-	apiVersion  = "2017-05-25"
+	actionSend   = "SendSmsVerifyCode"
+	actionCheck  = "CheckSmsVerifyCode"
+	aliyunAPIVer = "2017-05-25"
 )
 
-// NewAliyun 构造通道；缺关键字段直接报 ErrNotConfigured，不留"能构造但一调就错"的对象。
-func NewAliyun(cfg AliyunConfig) (*Aliyun, error) {
-	cfg.AccessKeyID = strings.TrimSpace(cfg.AccessKeyID)
-	cfg.AccessKeySecret = strings.TrimSpace(cfg.AccessKeySecret)
-	cfg.SignName = strings.TrimSpace(cfg.SignName)
-	cfg.TemplateCode = strings.TrimSpace(cfg.TemplateCode)
-	if cfg.Endpoint == "" {
-		cfg.Endpoint = "https://dypnsapi.aliyuncs.com"
+func newAliyun(cfg, sec map[string]string) (Provider, error) {
+	c := aliyunConfig{
+		AccessKeyID:     strings.TrimSpace(cfg["accessKeyId"]),
+		AccessKeySecret: sec["accessKeySecret"],
+		SignName:        strings.TrimSpace(cfg["signName"]),
+		TemplateCode:    strings.TrimSpace(cfg["templateCode"]),
+		SchemeName:      strings.TrimSpace(cfg["schemeName"]),
+		Endpoint:        strings.TrimSpace(cfg["endpoint"]),
+		TestPhone:       strings.TrimSpace(cfg["testPhone"]),
 	}
-	if cfg.AccessKeyID == "" || cfg.AccessKeySecret == "" || cfg.SignName == "" || cfg.TemplateCode == "" {
-		return nil, ErrNotConfigured
+	if c.Endpoint == "" {
+		c.Endpoint = "https://dypnsapi.aliyuncs.com"
 	}
-	return &Aliyun{
-		cfg:    cfg,
-		client: &http.Client{Timeout: 6 * time.Second},
-		now:    time.Now,
-	}, nil
+	if c.AccessKeyID == "" || c.AccessKeySecret == "" || c.SignName == "" || c.TemplateCode == "" {
+		return nil, fmt.Errorf("%w: 阿里云需要 AccessKey、签名与模板", integrations.ErrNotConfigured)
+	}
+	return &aliyun{cfg: c, client: &http.Client{Timeout: 6 * time.Second}, now: time.Now}, nil
 }
+
+// NewAliyun 用平台环境变量构造通道（SaaS 的默认通道，兼容旧配置）。
+//
+// 租户自带通道走 integration_config，不经过这里。
+func NewAliyun(accessKeyID, accessKeySecret, signName, templateCode, schemeName string) (Provider, error) {
+	return newAliyun(
+		map[string]string{
+			"accessKeyId":  accessKeyID,
+			"signName":     signName,
+			"templateCode": templateCode,
+			"schemeName":   schemeName,
+		},
+		map[string]string{"accessKeySecret": accessKeySecret},
+	)
+}
+
+func (a *aliyun) Code() string { return "aliyun" }
+func (a *aliyun) Mode() Mode   { return Managed }
 
 // Send 发送登录验证码。
 //
 // 参数是刻意写死的：6 位、5 分钟、60 秒间隔、新码覆盖旧码。
 // 不读默认值是因为阿里云默认是 4 位——4 位数字只有 1 万种，配合不限次核验，
-// 穷举成本低到不可接受。
-func (a *Aliyun) Send(ctx context.Context, phone string) error {
+// 穷举成本低到不可接受。code 参数在 managed 模式下由厂商生成，这里忽略。
+func (a *aliyun) Send(ctx context.Context, phone, _ string) error {
 	national, err := nationalNumber(phone)
 	if err != nil {
-		return fmt.Errorf("%w: 号码格式不正确", ErrUnavailable)
+		return integrations.Classify(integrations.CodeAuthFailed, "号码格式不正确", err)
 	}
 	params := map[string]string{
 		"Action":           actionSend,
@@ -100,19 +122,19 @@ func (a *Aliyun) Send(ctx context.Context, phone string) error {
 		return err
 	}
 	if !resp.Success || resp.Code != "OK" {
-		return fmt.Errorf("%w: %s %s", ErrUnavailable, resp.Code, resp.Message)
+		return classifyAliyun(resp.Code, resp.Message)
 	}
 	return nil
 }
 
-// Check 核验验证码。
+// Verify 核验验证码。
 //
 // 注意：接口 Success=true 只代表"调用成功"，验证码对不对只看 Model.VerifyResult。
 // 这个区别写错一次，登录就会变成"输入任意验证码都能过"。
-func (a *Aliyun) Check(ctx context.Context, phone, code string) (bool, error) {
+func (a *aliyun) Verify(ctx context.Context, phone, code string) (bool, error) {
 	national, err := nationalNumber(phone)
 	if err != nil {
-		return false, fmt.Errorf("%w: 号码格式不正确", ErrUnavailable)
+		return false, integrations.Classify(integrations.CodeAuthFailed, "号码格式不正确", err)
 	}
 	code = strings.TrimSpace(code)
 	if code == "" {
@@ -133,9 +155,24 @@ func (a *Aliyun) Check(ctx context.Context, phone, code string) (bool, error) {
 		return false, err
 	}
 	if !resp.Success || resp.Code != "OK" {
-		return false, fmt.Errorf("%w: %s %s", ErrUnavailable, resp.Code, resp.Message)
+		return false, classifyAliyun(resp.Code, resp.Message)
 	}
 	return resp.Model.VerifyResult == "PASS", nil
+}
+
+// Test 只核验、不发送（核验接口免费）。
+//
+// 用一个必然错误的码去核验：能拿到 "FAIL" 就说明鉴权、签名、模板都对；
+// 鉴权错会直接返回错误码。这样自检不花钱。
+func (a *aliyun) Test(ctx context.Context) error {
+	if a.cfg.TestPhone == "" {
+		return integrations.Classify(integrations.CodeNotConfigured,
+			"请先填写「自检号码」再测试（阿里云自检只核验，不发送）", nil)
+	}
+	if _, err := a.Verify(ctx, a.cfg.TestPhone, "000000"); err != nil {
+		return err
+	}
+	return nil
 }
 
 type aliyunResp struct {
@@ -148,10 +185,10 @@ type aliyunResp struct {
 }
 
 // call 发起一次 RPC 请求（GET + HMAC-SHA1 签名）。
-func (a *Aliyun) call(ctx context.Context, action map[string]string) (aliyunResp, error) {
+func (a *aliyun) call(ctx context.Context, action map[string]string) (aliyunResp, error) {
 	params := map[string]string{
 		"Format":           "JSON",
-		"Version":          apiVersion,
+		"Version":          aliyunAPIVer,
 		"AccessKeyId":      a.cfg.AccessKeyID,
 		"SignatureMethod":  "HMAC-SHA1",
 		"SignatureVersion": "1.0",
@@ -161,7 +198,7 @@ func (a *Aliyun) call(ctx context.Context, action map[string]string) (aliyunResp
 	for k, v := range action {
 		params[k] = v
 	}
-	params["Signature"] = sign(params, a.cfg.AccessKeySecret)
+	params["Signature"] = signRPC(params, a.cfg.AccessKeySecret)
 
 	// 查询串必须与签名用同一套编码（percentEncode），
 	// 不能图省事用 url.Values.Encode()：它把空格编成 '+'，签名就会对不上。
@@ -177,29 +214,30 @@ func (a *Aliyun) call(ctx context.Context, action map[string]string) (aliyunResp
 	endpoint := strings.TrimRight(a.cfg.Endpoint, "/") + "/?" + strings.Join(parts, "&")
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return aliyunResp{}, fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return aliyunResp{}, integrations.Classify(integrations.CodeNetwork, "请求构造失败", err)
 	}
 	resp, err := a.client.Do(req)
 	if err != nil {
-		return aliyunResp{}, fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return aliyunResp{}, integrations.Classify(integrations.CodeNetwork, "无法连接阿里云接口", err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return aliyunResp{}, fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return aliyunResp{}, integrations.Classify(integrations.CodeNetwork, "读取响应失败", err)
 	}
 	if resp.StatusCode >= 500 {
-		return aliyunResp{}, fmt.Errorf("%w: HTTP %d", ErrUnavailable, resp.StatusCode)
+		return aliyunResp{}, integrations.Classify(integrations.CodeQuota,
+			fmt.Sprintf("阿里云返回 HTTP %d", resp.StatusCode), nil)
 	}
 	var out aliyunResp
 	if err := json.Unmarshal(body, &out); err != nil {
-		return aliyunResp{}, fmt.Errorf("%w: 响应解析失败", ErrUnavailable)
+		return aliyunResp{}, integrations.Classify(integrations.CodeUnknown, "阿里云响应解析失败", err)
 	}
 	return out, nil
 }
 
-// sign 按阿里云 RPC 签名规则计算 Signature。
-func sign(params map[string]string, secret string) string {
+// signRPC 按阿里云 RPC 签名规则计算 Signature。
+func signRPC(params map[string]string, secret string) string {
 	keys := make([]string, 0, len(params))
 	for k := range params {
 		if k == "Signature" {
@@ -256,4 +294,23 @@ func nationalNumber(e164 string) (string, error) {
 		}
 	}
 	return s, nil
+}
+
+// classifyAliyun 把阿里云错误码收敛成前端可解释的分类。
+func classifyAliyun(code, msg string) error {
+	l := strings.ToLower(code + " " + msg)
+	switch {
+	case strings.Contains(l, "accesskey"), strings.Contains(l, "signaturedoesnotmatch"),
+		strings.Contains(l, "forbidden"), strings.Contains(l, "unauthorized"):
+		return integrations.Classify(integrations.CodeAuthFailed, "AccessKey 无效或无权限", nil)
+	case strings.Contains(l, "template"):
+		return integrations.Classify(integrations.CodeTemplateMissing, "模板不存在或未审核通过", nil)
+	case strings.Contains(l, "sign"):
+		return integrations.Classify(integrations.CodeSignMissing, "签名未报备或与模板不匹配", nil)
+	case strings.Contains(l, "amount"), strings.Contains(l, "balance"), strings.Contains(l, "limit"):
+		return integrations.Classify(integrations.CodeQuota, "账户余额不足或被限流", nil)
+	default:
+		return integrations.Classify(integrations.CodeUnknown,
+			fmt.Sprintf("阿里云返回 %s：%s", code, msg), nil)
+	}
 }

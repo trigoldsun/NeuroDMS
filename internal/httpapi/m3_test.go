@@ -52,6 +52,13 @@ func createTenant(t *testing.T, pool *pgxpool.Pool, base, tag string) createdTen
 		tenantID: dataMap(t, body)["tenantId"].(string),
 	}
 	t.Cleanup(func() { dbtestCleanup(t, pool, ct.tenantID) })
+	// 新租户默认基础版（自助开通口径），但本文件的用例验证的是功能行为，
+	// 不是档位限制：先升到旗舰版，否则会被"基础版不含自定义域名"正确拦住。
+	// 档位差异由 edition_test.go 单独覆盖。
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE tenant SET edition = 'business' WHERE id = $1`, ct.tenantID); err != nil {
+		t.Fatalf("升级测试租户失败: %v", err)
+	}
 	ct.token = loginWith(t, base, slug, "admin", "m3-test-password-1")
 	return ct
 }

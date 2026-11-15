@@ -79,5 +79,5 @@ if (problems.length === 0) {
 console.log('发现不符合交互约定的写法：')
 for (const p of problems) console.log('  · ' + p)
 console.log('')
-console.log('约定见 docs/24-交互约定-地址即状态.md。')
+console.log('约定见 docs/NeuroDMS-技术文档-v1.5.1.md 第 6.5 章「交互约定：地址即状态」。')
 process.exit(1)

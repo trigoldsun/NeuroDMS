@@ -21,6 +21,7 @@ import (
 
 	"docvault/internal/auth"
 	"docvault/internal/db"
+	"docvault/internal/password"
 	"docvault/internal/phone"
 	"docvault/internal/rbac"
 
@@ -60,7 +61,7 @@ const (
 )
 
 const (
-	minPasswordLen = 12
+	minPasswordLen = password.MinLength
 	maxUsernameLen = 64
 	maxDisplayLen  = 64
 )
@@ -570,14 +571,15 @@ func (s *Service) SetStatus(ctx context.Context, tenantID, actorID, userID, stat
 // ResetPassword 由管理员重置口令（用户忘记口令时的唯一自救路径之外的手段）。
 //
 // 重置会吊销该用户全部会话：否则"口令泄露后改了口令"依然拦不住已经在用的人。
+//
+// **同时校验密级**（与建号/改号的"定密不超自身"同一条规则）：
+// 建号时不允许造一个比自己高的密级账号，但如果不在这里管，
+// 这条路等于白设——低密级管理员直接重置高密级用户的口令，用对方身份登录即可读到核心文件。
+// 现状是"建号受限、接管不受限"，那是自欺。
+//
+// 代价：高密级用户忘口令时，只能由同级或更高密级的管理员处理；
+// 一个都找不到时走运维通道（`cmd/tenantpass`，需服务器权限 + 审计留痕）。
 func (s *Service) ResetPassword(ctx context.Context, tenantID, actorID, userID, newPassword string) error {
-	if len([]rune(newPassword)) < minPasswordLen {
-		return fmt.Errorf("%w: 新口令至少 %d 位", ErrInvalidInput, minPasswordLen)
-	}
-	hash, err := auth.HashPassword(newPassword)
-	if err != nil {
-		return err
-	}
 	return db.WithTenant(ctx, s.pool, tenantID, func(tx pgx.Tx) error {
 		actor, e := actorOf(ctx, tx, actorID)
 		if e != nil {
@@ -586,19 +588,49 @@ func (s *Service) ResetPassword(ctx context.Context, tenantID, actorID, userID, 
 		if !actor.IsSysAdmin() {
 			return ErrForbidden
 		}
-		if _, e := getMember(ctx, tx, userID); e != nil {
+		target, e := getMember(ctx, tx, userID)
+		if e != nil {
 			return e
 		}
-		if _, e := tx.Exec(ctx, `
-			UPDATE app_user
-			   SET password_hash = $2, session_epoch = session_epoch + 1, updated_at = now()
-			 WHERE id = $1`, userID, hash); e != nil {
-			return e
+		if target.Classification > actor.Classification {
+			return fmt.Errorf("%w：目标账号密级 %d 高于你的密级 %d，不能重置其口令",
+				ErrEscalation, target.Classification, actor.Classification)
 		}
-		_, e = tx.Exec(ctx,
-			`UPDATE session SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`, userID)
-		return e
+		return SetPasswordTx(ctx, tx, userID, newPassword)
 	})
+}
+
+// SetPasswordTx 在**调用方的事务内**改口令并吊销该用户全部会话。
+//
+// 抽成包级函数是为了让运维工具（`cmd/tenantpass`）能把"改口令"和"写审计"
+// 放进同一个事务：口令改成功但审计没写，是最不能接受的一类不一致。
+// 它自己不做权限判断——权限由调用方负责（HTTP 层是 ResetPassword 的 actor 校验，
+// 运维通道是"能登录服务器"这件事本身）。
+//
+// session_epoch 自增与 session 吊销必须一起做，否则会出现
+// "改了口令、旧会话还能继续用"。
+func SetPasswordTx(ctx context.Context, tx pgx.Tx, userID, newPassword string) error {
+	if len([]rune(newPassword)) < minPasswordLen {
+		return fmt.Errorf("%w: 新口令至少 %d 位", ErrInvalidInput, minPasswordLen)
+	}
+	// 先确认目标存在：否则 UPDATE 影响 0 行也会返回成功，
+	// 界面上会显示"已重置"，实际什么都没发生。
+	if _, err := getMember(ctx, tx, userID); err != nil {
+		return err
+	}
+	hash, err := auth.HashPassword(newPassword)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE app_user
+		   SET password_hash = $2, session_epoch = session_epoch + 1, updated_at = now()
+		 WHERE id = $1`, userID, hash); err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx,
+		`UPDATE session SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`, userID)
+	return err
 }
 
 // Delete 逻辑删除成员（保留审计与追溯）。最后一个系统管理员不可删。

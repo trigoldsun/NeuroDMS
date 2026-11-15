@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import {
-  clearTokens, confirmPhoneChange, deleteAccount, deletionPreview, handoverCandidates,
-  logout, requestPhoneChange,
+  changePassword, clearTokens, confirmPhoneChange, deleteAccount, deletionPreview,
+  handoverCandidates, logout, requestPhoneChange,
   HttpError, type HandoverCandidate, type HandoverSummary, type Me,
 } from '../api'
+import { PasswordPair, passwordPairError } from '../components/PasswordPair'
 
 // 账户抽屉：退出登录 + 注销账号（含数字资产交接）。
 //
@@ -15,7 +16,7 @@ import {
 export default function AccountDrawer({ me, onClose }: { me: Me | null; onClose: () => void }) {
   // ui-route-exempt: 抽屉内部的临时分栏（会话/注销），随抽屉一起关闭，
   // 不存在"收藏、分享、后退回到这一栏"的场景；主菜单与列表不适用此豁免。
-  const [tab, setTab] = useState<'session' | 'phone' | 'delete'>('session')
+  const [tab, setTab] = useState<'session' | 'password' | 'phone' | 'delete'>('session')
   // 手机号绑定：与邮箱换绑同构（口令 + 新号码验证码）。
   // 小程序只允许"已验证手机号"的账号登录，这里是唯一的登记入口。
   const [phone, setPhone] = useState('')
@@ -24,6 +25,13 @@ export default function AccountDrawer({ me, onClose }: { me: Me | null; onClose:
   const [phoneStep, setPhoneStep] = useState<'input' | 'code'>('input')
   const [phoneMsg, setPhoneMsg] = useState('')
   const [phoneBusy, setPhoneBusy] = useState(false)
+  // 改密：旧口令 + 新口令 + 确认新口令。三次输入都不回显。
+  const [oldPw, setOldPw] = useState('')
+  const [newPw, setNewPw] = useState('')
+  const [newPw2, setNewPw2] = useState('')
+  const [pwMsg, setPwMsg] = useState('')
+  const [pwBusy, setPwBusy] = useState(false)
+  const [pwSubmitted, setPwSubmitted] = useState(false)
   const [sum, setSum] = useState<HandoverSummary | null>(null)
   const [cands, setCands] = useState<HandoverCandidate[]>([])
   const [picked, setPicked] = useState('')
@@ -101,6 +109,24 @@ export default function AccountDrawer({ me, onClose }: { me: Me | null; onClose:
     }
   }
 
+  async function onChangePassword() {
+    setPwSubmitted(true)
+    const bad = passwordPairError(newPw, newPw2)
+    if (bad) { setPwMsg(bad); return }
+    if (!oldPw) { setPwMsg('请填写当前口令'); return }
+    setPwMsg('')
+    setPwBusy(true)
+    try {
+      await changePassword(oldPw, newPw)
+      setPwMsg('口令已修改，全部会话已失效，正在返回登录页…')
+      clearTokens()
+      window.setTimeout(() => location.assign('/login'), 1800)
+    } catch (err) {
+      setPwMsg(err instanceof HttpError ? err.message : '修改失败')
+      setPwBusy(false)
+    }
+  }
+
   return (
     <>
       <div className="drawer-backdrop" onClick={onClose} />
@@ -110,8 +136,9 @@ export default function AccountDrawer({ me, onClose }: { me: Me | null; onClose:
           {me ? `${me.displayName || me.username}（${me.username}）· 密级 ${me.classification}` : '读取中…'}
         </div>
 
-        <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
           <button className={tab === 'session' ? 'primary' : ''} onClick={() => setTab('session')}>会话</button>
+          <button className={tab === 'password' ? 'primary' : ''} onClick={() => setTab('password')}>修改口令</button>
           <button className={tab === 'phone' ? 'primary' : ''} onClick={() => setTab('phone')}>手机号</button>
           <button className={tab === 'delete' ? 'primary' : ''} onClick={() => setTab('delete')}>注销账号</button>
         </div>
@@ -131,6 +158,48 @@ export default function AccountDrawer({ me, onClose }: { me: Me | null; onClose:
             </button>
             <button className="primary" onClick={() => void logout()} style={{ width: '100%' }}>
               退出登录
+            </button>
+          </>
+        )}
+
+        {tab === 'password' && (
+          <>
+            <p className="hint" style={{ marginTop: 0 }}>
+              修改成功后，本账号的<b>全部会话</b>（含当前这个窗口）会立即失效，
+              需要用新口令重新登录——这是"口令泄露后改密"唯一有效的做法。
+            </p>
+            <div className="field">
+              <label htmlFor="old-pw">当前口令</label>
+              <input
+                id="old-pw"
+                type="password"
+                value={oldPw}
+                onChange={(e) => setOldPw(e.target.value)}
+                autoComplete="current-password"
+                spellCheck={false}
+                autoCorrect="off"
+                autoCapitalize="off"
+              />
+            </div>
+            <PasswordPair
+              id="chpw"
+              label="新口令（至少 8 位）"
+              value={newPw}
+              onChange={setNewPw}
+              confirm={newPw2}
+              onConfirm={setNewPw2}
+              submitted={pwSubmitted}
+              disabled={pwBusy}
+              hint="输入内容以 * 显示；两次输入必须完全一致（区分大小写与空格）。"
+            />
+            {pwMsg && <div className="hint" style={{ marginBottom: 10 }}>{pwMsg}</div>}
+            <button
+              className="primary"
+              style={{ width: '100%' }}
+              disabled={pwBusy || !oldPw || passwordPairError(newPw, newPw2) !== null}
+              onClick={() => void onChangePassword()}
+            >
+              {pwBusy ? '提交中…' : '修改口令'}
             </button>
           </>
         )}

@@ -57,6 +57,7 @@ const PATHS: Record<string, ReactNode> = {
   command: <path d="M9 6.6a2.4 2.4 0 1 0-2.4 2.4H17.4A2.4 2.4 0 1 0 15 6.6v10.8A2.4 2.4 0 1 0 17.4 15H6.6A2.4 2.4 0 1 0 9 17.4V6.6Z" />,
   tag: <><path d="M4.6 10.4V5c0-.2.2-.4.4-.4h5.4l8.2 8.2-5.8 5.8-8.2-8.2Z" /><circle cx="8.4" cy="8.4" r="1.1" /></>,
   drop: <><path d="M12 3.6c3.2 3.6 5.2 6.4 5.2 9a5.2 5.2 0 1 1-10.4 0c0-2.6 2-5.4 5.2-9Z" /></>,
+  globe: <><circle cx="12" cy="12" r="8.2" /><path d="M3.8 12h16.4" /><path d="M12 3.8c2.4 2.3 3.6 5.1 3.6 8.2s-1.2 5.9-3.6 8.2c-2.4-2.3-3.6-5.1-3.6-8.2s1.2-5.9 3.6-8.2Z" /></>,
 }
 
 export function Icon({ name, size = 16, stroke = 1.55, className }: { name: keyof typeof PATHS | string; size?: number; stroke?: number; className?: string }) {

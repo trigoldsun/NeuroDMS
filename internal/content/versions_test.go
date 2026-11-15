@@ -46,6 +46,8 @@ func seedNode(t *testing.T) (pool *pgxpool.Pool, tenantID, userID, nodeID string
 		t.Fatalf("连接失败: %v", err)
 	}
 	t.Cleanup(p.Close)
+	// 不依赖"别的包先跑过迁移"：并行跑测试时顺序不可控（代码审查发现）
+	dbtest.EnsureSchema(t, p)
 
 	ctx := context.Background()
 	tenantID, userID = vUUID(t), vUUID(t)

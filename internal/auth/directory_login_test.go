@@ -34,6 +34,13 @@ func TestLDAPUserLoginDelegatesToDirectory(t *testing.T) {
 	svc.SetDirectory(dir)
 
 	slug, username, _, userID := seedUser(t, pool)
+	// 这些用例验证的是"域认证委托/错误分类"，需要租户**真的具备 AD 能力**。
+	// 测试租户默认是 basic（无 AD），不升档会被能力判定挡在前面，
+	// 测到的就不是目录行为了。
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE tenant SET edition = 'business' WHERE slug = $1`, slug); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := pool.Exec(context.Background(), `
 		UPDATE app_user SET source='ldap', external_id='ldap-uid-1', password_hash=NULL WHERE id=$1`,
 		userID); err != nil {
@@ -65,6 +72,13 @@ func TestLDAPDisabledInDirectoryRejected(t *testing.T) {
 	svc.SetDirectory(&fakeDirectory{disabled: true})
 
 	slug, username, _, userID := seedUser(t, pool)
+	// 这些用例验证的是"域认证委托/错误分类"，需要租户**真的具备 AD 能力**。
+	// 测试租户默认是 basic（无 AD），不升档会被能力判定挡在前面，
+	// 测到的就不是目录行为了。
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE tenant SET edition = 'business' WHERE slug = $1`, slug); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := pool.Exec(context.Background(), `
 		UPDATE app_user SET source='ldap', external_id='ldap-uid-1', password_hash=NULL WHERE id=$1`,
 		userID); err != nil {
@@ -92,5 +106,31 @@ func TestLDAPUserWithoutDirectoryFailsClosed(t *testing.T) {
 
 	if _, err := svc.Login(context.Background(), slug, username, "anything", LoginDomain, "", ""); err != ErrDirectoryNotConfigured {
 		t.Fatalf("未接目录应返回 ErrDirectoryNotConfigured（拒登），实际 %v", err)
+	}
+}
+
+// 基础版租户：目录配置可能"还在"（降档不会删配置），但域账号必须登不进来。
+//
+// 这是 docs/56 的核心一条：降档要改**行为**，不能只改报价单。
+// 同时断言没有打到域控——否则这条路径会变成免费的"账号是否存在"探测器。
+func TestLDAPRejectedWhenTenantLacksDirectoryEntitlement(t *testing.T) {
+	pool := svcPool(t)
+	svc := newService(pool)
+	dir := &fakeDirectory{}
+	svc.SetDirectory(dir)
+
+	slug, username, _, userID := seedUser(t, pool) // 默认 basic，无 AD 能力
+	if _, err := pool.Exec(context.Background(), `
+		UPDATE app_user SET source='ldap', external_id='ldap-uid-1', password_hash=NULL WHERE id=$1`,
+		userID); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := svc.Login(context.Background(), slug, username, "domain-pass", LoginDomain, "", "")
+	if err != ErrDirectoryNotEntitled {
+		t.Fatalf("基础版域登录应返回 ErrDirectoryNotEntitled，实际 %v", err)
+	}
+	if dir.calls != 0 {
+		t.Fatalf("能力不足时不应调用目录（会被当成账号探测器），实际调用 %d 次", dir.calls)
 	}
 }

@@ -110,6 +110,18 @@ html[data-theme='dark'] {
   color-scheme: dark;
 }
 
+/* 暗色下原生的日历/时钟小图标、下拉箭头默认是黑色，压在深色输入框上几乎看不见。
+   filter 只作用于这些浏览器绘制的控件，不影响输入内容。 */
+html[data-theme='dark'] input[type='date']::-webkit-calendar-picker-indicator,
+html[data-theme='dark'] input[type='time']::-webkit-calendar-picker-indicator,
+html[data-theme='dark'] input[type='datetime-local']::-webkit-calendar-picker-indicator {
+  filter: invert(1) opacity(.62);
+}
+html[data-theme='dark'] input[type='date']::-webkit-calendar-picker-indicator:hover,
+html[data-theme='dark'] input[type='time']::-webkit-calendar-picker-indicator:hover {
+  filter: invert(1) opacity(.9);
+}
+
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }
 
@@ -242,6 +254,31 @@ html[data-theme='dark'] .side::after { background-image: radial-gradient(rgba(25
   color: inherit;
   flex: none;
 }
+/* 品牌与名称表单：标签 / 控件 / 说明三列。
+   窄屏收成一列——图标那块内容较宽，硬挤三列会让说明文字变成竖排。 */
+.brand-grid {
+  display: grid;
+  grid-template-columns: 180px 260px 1fr;
+  gap: 10px;
+  align-items: start;
+}
+.brand-grid > label { padding-top: 6px; }
+.brand-span { grid-column: 2 / 4; }
+@media (max-width: 1180px) {
+  .brand-grid { grid-template-columns: minmax(0, 1fr); }
+  .brand-span { grid-column: auto; }
+  .brand-grid > label { padding-top: 0; }
+}
+
+/* 租户自定义图标：与内置 Mark 同为 30px，等比缩放不裁切。
+   不加背景与圆角——客户图标可能自带底色，加底会出现"双层方框"。 */
+.side-logo {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  object-fit: contain;
+}
+
 .side-brand .word {
   display: flex;
   flex-direction: column;
@@ -501,6 +538,14 @@ td.actions { text-align: right; white-space: nowrap; }
 td.actions button { height: 26px; padding: 0 8px; font-size: 12px; margin-left: 2px; border-radius: 7px; }
 td.actions .select, td.actions select { height: 26px; font-size: 12px; padding: 0 6px; }
 .admin-table table, .panel-body > table { min-width: 860px; }
+
+/* .tablewrap：表格的横向滚动容器。
+   这个类在 6 个页面里被使用（审批、空间台账、域名、许可证、能力授权…），
+   但样式表里一直没有它——等于写了 class 却没有任何效果：窄屏下表格被裁掉
+   右侧的按钮列，而浏览器不会给滚动条。这里补上，并给表格一个下限宽度，
+   让"列被挤成两行字"变成"可以横向滚动"。 */
+.tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.tablewrap > table { min-width: 860px; }
 th.tight, td.tight { width: 36px; padding-right: 0; }
 .tnum { font-variant-numeric: tabular-nums; }
 

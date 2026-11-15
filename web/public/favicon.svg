@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" width="28" height="28" role="img" aria-label="文档中心">
+  <rect width="28" height="28" rx="8" fill="#0F5C40"/>
+  <path d="M8.6 19.6V8.6l10.8 10.8V8.6" fill="none" stroke="#F7FBF5" stroke-width="1.9"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="20.2" cy="7.6" r="2.1" fill="#C6EE4B"/>
+</svg>

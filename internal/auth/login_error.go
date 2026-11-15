@@ -50,6 +50,12 @@ var (
 	// ErrDirectoryNotConfigured 该租户没有启用域登录。
 	ErrDirectoryNotConfigured = errors.New("该组织未启用域账号登录")
 
+	// ErrDirectoryNotEntitled 目录已经配置，但当前档位/授权不含 AD 登录。
+	//
+	// 与 ErrDirectoryNotConfigured 分开：一个是"没配"，一个是"配了但不该用"。
+	// 混成一句会让运维去查 LDAP 配置（那里一切正常），实际是档位降了。
+	ErrDirectoryNotEntitled = errors.New("该组织当前档位不含域账号登录")
+
 	// ErrDomainUnavailable 目录不可达（网络、证书、服务账号口令失效等）。
 	ErrDomainUnavailable = errors.New("暂时无法连接组织的域控制器")
 
@@ -69,6 +75,8 @@ func Hint(err error) string {
 		return "请刷新页面后重试；若仍失败，请联系管理员。"
 	case errors.Is(err, ErrDomainNotSynced):
 		return "请联系管理员在「管理台 → 目录认证」执行一次全量同步，同步完成后再登录。"
+	case errors.Is(err, ErrDirectoryNotEntitled):
+		return "请改用「本地账号」登录；如需继续用 AD 登录，请联系运营恢复档位或单独开通该能力。"
 	case errors.Is(err, ErrDirectoryNotConfigured):
 		return "请改用「本地账号」登录；若组织已接入 AD，请联系管理员在「管理台 → 目录认证」启用。"
 	case errors.Is(err, ErrDomainUnavailable):
@@ -85,6 +93,10 @@ func Hint(err error) string {
 		return "连续多次口令错误会触发临时锁定，请稍后再试，或联系管理员提前解锁。"
 	case errors.Is(err, ErrAccountDisabled):
 		return "该账号当前不可用（可能已停用或已过期），请联系管理员确认。"
+	case errors.Is(err, ErrWeakPassword):
+		// 只判长度，不要求大小写/符号：与其逼用户加个 "!" 写在便签上，
+		// 不如把位数说清、把二次输入做对。
+		return "口令只校验长度（至少 8 位），中文与空格都算字符；建议用便于记忆的长口令。"
 	case errors.Is(err, ErrInvalidCredentials):
 		return "" // 由前端按当前选择的登录方式给出针对性提示
 	default:

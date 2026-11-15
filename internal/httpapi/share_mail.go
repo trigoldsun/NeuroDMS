@@ -195,6 +195,26 @@ func (a *API) brandName(ctx context.Context, tenantID string) string {
 	return strings.TrimSpace(b.ProductName)
 }
 
+// brandLogo 返回租户图标的公开地址与 MIME（未登录可见）。
+//
+// 分享页页眉与浏览器标签图标都要用它。分享页是**未登录**页面，
+// 不能内联 base64：那会把每一次访问都撑大几十 KB，而且没法缓存。
+// 读不到时返回空串，前端回落内置图形——图标缺失不该让分享打不开。
+func (a *API) brandLogo(ctx context.Context, tenantID string) (url, mime string) {
+	if a.Tenants == nil {
+		return "", ""
+	}
+	slug, err := a.Tenants.SlugOf(ctx, tenantID)
+	if err != nil || slug == "" {
+		return "", ""
+	}
+	b, err := a.Tenants.BrandingBySlug(ctx, slug)
+	if err != nil {
+		return "", ""
+	}
+	return b.LogoURL(slug), b.LogoMimeOr()
+}
+
 // privacyURL 返回租户配置的隐私政策地址；没配就返回空（邮件里只留说明，不放死链）。
 //
 // 刻意不硬编码一个平台地址：私有化部署的客户不会访问我们的站点，

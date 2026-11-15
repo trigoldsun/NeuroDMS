@@ -18,7 +18,7 @@ set -u
 cd "$(dirname "$0")/.." || exit 1
 
 export GOPROXY="${GOPROXY:-https://goproxy.cn,direct}"
-MATRIX="docs/07-越权用例覆盖矩阵-v1.0.md"
+MATRIX="docs/archive/sources-v1.5.1/07-越权用例覆盖矩阵-v1.5.1.md"
 
 if [ ! -f "$MATRIX" ]; then
   echo "找不到覆盖矩阵: $MATRIX"

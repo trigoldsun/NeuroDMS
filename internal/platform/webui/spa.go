@@ -45,6 +45,27 @@ func (h *Handler) entryFor(clean string) string {
 	return "index.html"
 }
 
+// looksLikeAsset 判断这个路径是否"看起来是静态资源/探测路径"而不是 SPA 路由。
+//
+// 两类：
+//  1. 任一段以点开头（.env、.git/config）——扫描器与小动作最常试的形态；
+//     .well-known 例外（ACME / 站点验证要能访问）。
+//  2. 最后一段带扩展名（/go.mod、/backup.sql）。
+//
+// SPA 路由约定为纯标识段（/files/<uuid>、/s/<token>、/platform/tenants），
+// 所以这个判断不会误伤正常页面。
+func looksLikeAsset(p string) bool {
+	for _, seg := range strings.Split(p, "/") {
+		if seg == "" || seg == "." || seg == ".." {
+			continue
+		}
+		if strings.HasPrefix(seg, ".") && seg != ".well-known" {
+			return true
+		}
+	}
+	return path.Ext(p) != ""
+}
+
 // Available 表示前端产物是否就绪。
 func (h *Handler) Available() bool { return h.available }
 
@@ -88,6 +109,31 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.ServeFile(w, r, idx)
 			return
 		}
+	}
+
+	// 浏览器没用 link[rel=icon] 时仍会盲取 /favicon.ico（旧书签、外链预览、
+	// 部分安卓浏览器的"添加到桌面"）。直接落到下面的 SPA 回退会返回 HTML，
+	// 浏览器解码失败，标签页上就是一个空白文档图标——像没做完的产品。
+	// 这里回落到内置的 SVG 图标；真放了 favicon.ico 时上面的 Stat 已经命中。
+	if clean == "/favicon.ico" {
+		svg := filepath.Join(h.dir, "favicon.svg")
+		if st, err := os.Stat(svg); err == nil && !st.IsDir() {
+			w.Header().Set("Content-Type", "image/svg+xml")
+			w.Header().Set("Cache-Control", "public, max-age=3600")
+			http.ServeFile(w, r, svg)
+			return
+		}
+	}
+
+	// 带扩展名且确实不存在实体文件的请求 → 404，不回退 index.html。
+	//
+	// SPA 的地址约定是"无扩展名"（/files/<uuid>、/s/<token>、/platform/tenants），
+	// 而扫描器与运维探测的都是 /.env、/.git/config、/backup.sql 这类带扩展名的路径。
+	// 把探测回退成 200 + 首页，会让人误以为"这个路径存在"，也让日志里的 404
+	// 失去排障价值。真实文件（/manual/x.html、/assets/x.js）在上面的 Stat 已经命中。
+	if looksLikeAsset(clean) {
+		http.NotFound(w, r)
+		return
 	}
 
 	// SPA 回退：入口 HTML 不缓存，避免发版后用户仍拿到旧页面

@@ -153,7 +153,10 @@ func (a *API) handleCreateSpace(w http.ResponseWriter, r *http.Request) {
 	id, err := a.Content.CreateSpace(r.Context(), c.TenantID, c.Subject, req.Kind, req.Name)
 	if err != nil {
 		if errors.Is(err, content.ErrBadInput) {
-			writeErr(w, r, http.StatusBadRequest, "INVALID_ARGUMENT", "空间类型或名称不合法")
+			// 把合法值写进错误里：对接方不该靠读代码猜枚举（E2E 验收 F-04）
+			writeErr(w, r, http.StatusBadRequest, "INVALID_ARGUMENT",
+				"空间类型只能是 "+strings.Join(content.SpaceKinds, " / ")+
+					"；名称需为 1-100 个字符")
 			return
 		}
 		writeErr(w, r, http.StatusInternalServerError, "INTERNAL", "创建空间失败")
@@ -282,7 +285,7 @@ func (a *API) handleUpload(w http.ResponseWriter, r *http.Request) {
 	actorClass := 0
 	// 档位能力先判：这是"产品有没有这个功能"，比"个人密级够不够"更靠前。
 	// 顺序反了的话，客户会先去找管理员提升密级，办完才发现档位根本不支持。
-	ed, eerr := a.editionState(r.Context(), c.TenantID)
+	levels, ed, eerr := a.classLevels(r.Context(), c.TenantID)
 	if eerr != nil {
 		writeErr(w, r, http.StatusServiceUnavailable, "ENTITLEMENT_UNAVAILABLE",
 			"无法读取租户档位，请稍后重试")
@@ -294,14 +297,14 @@ func (a *API) handleUpload(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, r, http.StatusBadRequest, "INVALID_ARGUMENT", "密级必须在 0..6 之间")
 			return
 		}
-		if !ed.CanWriteClass(n) {
+		if !levelAllowed(levels, n) {
 			_ = a.emit(r, c.TenantID, AuditEntry{
 				ActorID: c.Subject, Action: "node.upload", ObjectID: spaceID, Result: "denied",
 				Detail: map[string]any{"reason": "edition_classification", "requested": n,
 					"edition": string(ed.Edition), "name": hdr.Filename},
 			})
 			writeErr(w, r, http.StatusForbidden, "FEATURE_NOT_ENABLED",
-				"当前档位（"+ed.Spec.Name+"）不支持该密级")
+				"当前档位或授权不支持该密级（"+ed.Spec.Name+"）")
 			return
 		}
 		if err := db.WithTenant(r.Context(), a.Pool, c.TenantID, func(tx pgx.Tx) error {

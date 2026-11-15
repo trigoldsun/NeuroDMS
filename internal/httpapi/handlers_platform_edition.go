@@ -74,7 +74,7 @@ func (a *API) handlePlatformEditionPut(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, r, http.StatusConflict, map[string]any{
 				"code": "EDITION_DOWNGRADE_BLOCKED",
 				"message": fmt.Sprintf(
-					"存在 %d 个目标档位无法表达的密级对象，请先降密或先导出，再降档",
+					"存在 %d 项目标档位无法表达的密级数据（文件或成员），请先降密或移出，再降档",
 					chg.BlockedCount),
 				"requestId": httpmw.RequestIDFrom(r.Context()),
 				"data": map[string]any{

@@ -6,8 +6,11 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/netip"
@@ -19,15 +22,20 @@ import (
 	"syscall"
 	"time"
 
+	"docvault/internal/acmecert"
 	"docvault/internal/audit"
 	"docvault/internal/auth"
 	"docvault/internal/bootstrap"
 	"docvault/internal/content"
 	"docvault/internal/db"
+	"docvault/internal/dept"
 	"docvault/internal/directory"
+	"docvault/internal/entitlement"
 	"docvault/internal/feature"
 	"docvault/internal/httpapi"
 	"docvault/internal/iam"
+	"docvault/internal/integrations"
+	"docvault/internal/license"
 	"docvault/internal/media"
 	"docvault/internal/metering"
 	"docvault/internal/netinfo"
@@ -153,6 +161,12 @@ func main() {
 
 	mux := http.NewServeMux()
 
+	// tlsCertFor 由下面的业务装配块注入：按 SNI 从租户域名取证书。
+	// 为空表示本进程不终止 TLS（走隧道或反向代理的部署）。
+	var tlsCertFor func(*tls.ClientHelloInfo) (*tls.Certificate, error)
+	// acmeRenewer 供启动后的续期协程使用（装配块内创建）。
+	var acmeRenewer *acmecert.Service
+
 	// ---- 业务路由：需要数据库与有效签名密钥 ----
 	if pool != nil {
 		if len(cfg.JWTSecret) < 32 {
@@ -168,42 +182,44 @@ func main() {
 			// 短信认证服务（阿里云 PNVS）。三种状态都要显式：
 			// 已配置 / 未配置（功能关闭）/ 配置了但启用失败（打日志，不阻断启动——
 			// 短信登录只是登录方式之一，不该让整个系统起不来）。
-			var smsProvider sms.Provider
+			var platformSMS sms.Provider
 			switch {
 			case cfg.SMSMock:
 				if cfg.Mode == "production" {
 					log.Error("生产环境禁止使用短信 mock（DOCVAULT_SMS_MOCK=1），拒绝启动")
 					os.Exit(2)
 				}
-				smsProvider = sms.NewMock("123456")
+				platformSMS = sms.NewMock("123456")
 				log.Warn("短信认证服务使用模拟通道（固定验证码 123456），仅限开发环境")
 			case cfg.SMSAccessKeyID != "":
-				p, serr := sms.NewAliyun(sms.AliyunConfig{
-					AccessKeyID:     cfg.SMSAccessKeyID,
-					AccessKeySecret: cfg.SMSAccessKeySecret,
-					SignName:        cfg.SMSSignName,
-					TemplateCode:    cfg.SMSTemplateCode,
-					SchemeName:      cfg.SMSSchemeName,
-				})
+				p, serr := sms.NewAliyun(
+					cfg.SMSAccessKeyID, cfg.SMSAccessKeySecret,
+					cfg.SMSSignName, cfg.SMSTemplateCode, cfg.SMSSchemeName)
 				if serr != nil {
 					log.Error("短信认证服务配置不完整，短信登录未启用", "err", serr.Error())
 				} else {
-					smsProvider = p
+					platformSMS = p
 					log.Info("短信认证服务已启用（阿里云 dypnsapi）")
 				}
 			default:
 				log.Info("短信认证服务未配置（DOCVAULT_SMS_* 为空），短信登录不可用")
 			}
-			if smsProvider != nil {
-				authSvc.SetSMS(smsProvider)
-			}
-
 			// 配置加密密钥：证书私钥与目录服务账号口令都用它。
 			// 在这里创建（只依赖 cfg），后面几处复用同一个实例。
 			box, boxErr := secretbox.New(cfg.SecretKey)
 			if boxErr != nil {
 				log.Warn("配置加密未启用（自定义域名证书、目录服务账号口令将无法保存）", "reason", boxErr.Error())
 			}
+
+			// 凭证中心：第三方服务的租户级配置（短信/SSO/在线编辑…）。
+			// 必须在短信服务之前建：短信服务要按租户读 integration_config。
+			integReg := integrations.NewRegistry()
+			sms.Register(integReg)
+			integStore := integrations.NewStore(pool, box, integReg)
+			// 短信服务：租户自带通道优先，否则平台环境变量通道（platformSMS）。
+			// key 用 JWT 密钥派生：验证码只存 HMAC，需要一个进程级秘密。
+			smsSvc := sms.NewService(pool, integStore, []byte(cfg.JWTSecret), platformSMS)
+			authSvc.SetSMS(smsSvc)
 
 			// 目录认证：配置优先取数据库（管理台可改），无记录时回退环境变量。
 			// 必须按租户解析：不同租户可能接不同的域；启动时固定一个连接
@@ -251,6 +267,82 @@ func main() {
 			// 租户服务：这里就需要它——邮件主题与发件人显示名要用租户自己的系统名称。
 			// 之前是在 M3 区块才创建，导致通知装配拿不到品牌。
 			tenantSvc := tenant.New(pool)
+
+			// 本地版许可证：只验签，不联网。
+			// 公钥为空 = 云端版，不接受许可证（界面显示"无需许可证"）。
+			var licPub ed25519.PublicKey
+			if cfg.LicensePublicKey != "" {
+				pk, lerr := license.ParsePublicKey(cfg.LicensePublicKey)
+				if lerr != nil {
+					// 公钥写错不阻断启动，但必须显眼：否则客户以为导入的许可证生效了，
+					// 实际每次验签都失败。
+					log.Error("许可证公钥无效，许可证功能未启用", "err", lerr.Error())
+				} else {
+					licPub = pk
+					log.Info("许可证校验已启用", "pub", license.MaskKey(cfg.LicensePublicKey))
+				}
+			}
+			licMgr := license.NewManager(pool, licPub)
+			if licMgr.Enabled() {
+				// 启动时把已存许可证重新应用一次：容器重建后租户档位可能来自旧备份，
+				// 幂等地写回"许可证声明的档位"比依赖人工核对可靠。
+				var primaryTenant string
+				if e := pool.QueryRow(context.Background(),
+					`SELECT id::text FROM tenant
+					  WHERE deleted_at IS NULL ORDER BY created_at LIMIT 1`).Scan(&primaryTenant); e == nil {
+					if e := licMgr.Reapply(context.Background(), primaryTenant); e != nil {
+						log.Warn("许可证重放失败（不影响启动，界面会显示原因）", "err", e.Error())
+					}
+				}
+			}
+
+			// 自动签发证书（ACME）。配置写错必须**拒绝启动**：
+			// 把 "http-01" 拼成 "http01 " 当成 off 处理，客户会以为开了自动续期，
+			// 直到证书过期那天才发现——这类"静默降级"比启动失败贵得多。
+			acmeMode, acmeErr := acmecert.ParseMode(cfg.ACMEMode)
+			if acmeErr != nil {
+				log.Error("ACME 配置错误，拒绝启动", "err", acmeErr.Error())
+				os.Exit(2)
+			}
+			acmeSvc := acmecert.New(pool, box, acmecert.Config{
+				Mode:         acmeMode,
+				Email:        cfg.ACMEEmail,
+				DirectoryURL: cfg.ACMEDirectoryURL,
+				HTTP01Addr:   cfg.ACMEHTTPAddr,
+			}, func(ctx context.Context, tenantID, host, certPEM string, keyPEM []byte) error {
+				// 与手工上传走**同一个**写入路径：证书校验、私钥加密、AAD 绑定
+				// 都只有一份实现，不会出现"自动签的证书握手失败"这种分叉故障。
+				_, err := tenantSvc.SetCertificateFrom(ctx, box, tenantID, host, certPEM, keyPEM, "acme")
+				return err
+			})
+			acmeRenewer = acmeSvc
+			if err := acmeSvc.Start(context.Background()); err != nil {
+				// 不退出：证书由反代/边缘托管的部署照样要能跑。
+				// 失败原因会通过 Status 显示在页面上（见 acmecert.startErr）。
+				log.Error("ACME 挑战端口监听失败，自动签发不可用", "err", err.Error())
+			} else if acmeMode != acmecert.ModeOff {
+				log.Info("自动签发已启用", "mode", string(acmeMode),
+					"directory", acmeSvc.Status().DirectoryURL)
+			}
+
+			// 按 SNI 取证书（只有本进程终止 TLS 时才用到）。
+			if cfg.TLSListen != "" {
+				tlsCertFor = func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+					c, cerr := tenantSvc.CertificateFor(context.Background(), box, hello.ServerName)
+					if cerr == nil {
+						return c, nil
+					}
+					// 没有匹配的租户域名时回落到默认证书（例如主站域名）。
+					if cfg.TLSFallbackCert != "" && cfg.TLSFallbackKey != "" {
+						fb, ferr := tls.LoadX509KeyPair(cfg.TLSFallbackCert, cfg.TLSFallbackKey)
+						if ferr == nil {
+							return &fb, nil
+						}
+					}
+					// 两者都没有：让握手失败。返回一张自签证书会训练用户忽略证书告警。
+					return nil, fmt.Errorf("没有为 %q 配置证书", hello.ServerName)
+				}
+			}
 
 			// 邮件通道：环境变量是平台默认，租户可在管理台配置自己的发件邮箱。
 			// 配置里有密文口令，与证书私钥共用同一个加密实例。
@@ -387,6 +479,11 @@ func main() {
 			// ---- M3：多租户 SaaS 能力 ----
 			meterSvc := metering.New(pool)
 			featureSvc := feature.New(pool)
+			// 能力授权：档位默认 + 单租户特批 + 平台强制关（docs/47）。
+			// 三个消费方共用同一个实例，避免"解析口径不一致"这种最难查的问题。
+			entSvc := entitlement.New(pool)
+			tenantSvc.SetEntitlements(entSvc)
+			authSvc.SetEntitlements(entSvc)
 			platformAuth := platformauth.New(pool)
 
 			// 平台账号初始化：空表时才建。口令来自环境变量，不写进镜像。
@@ -488,15 +585,21 @@ func main() {
 				Watermark:     wm,
 				Tenants:       tenantSvc,
 				IAM:           iam.New(pool),
+				Depts:         dept.New(pool),
 				Metering:      meterSvc,
 				Features:      featureSvc,
+				Entitlements:  entSvc,
+				Acme:          acmeSvc,
+				License:       licMgr,
 				PlatformAuth:  platformAuth,
 				Outbox:        notifierOutbox,
 				Mail:          mailStore,
 				MailRouter:    mailRouter,
 				Geo:           geo,
 				SecretBox:     box,
-				SMSConfigured: smsProvider != nil,
+				SMS:           smsSvc,
+				SMSConfigured: platformSMS != nil,
+				Integrations:  integStore,
 				Directory:     dirStore,
 				DirResolver:   dirResolver,
 				DirRunner:     dirRunner,
@@ -578,31 +681,21 @@ func main() {
 		spa.ServeHTTP(w, r)
 	})
 
-	// 限流：分档而不是一刀切。
+	// 限流：分四档而不是一刀切（E2E 验收 F-06）。
 	//
-	// 公开端点（登录、兑换链接、票据）是暴力破解与枚举的首选入口，必须很严；
-	// 业务端点给正常并发留余量。两者按 IP 维度计数——
-	// 按"IP+路径"计数会让枚举 nodeId 完全不受限（每条路径一个独立桶）。
-	limiter := httpmw.RateLimitRules([]httpmw.RateRule{
-		{
-			Match: func(r *http.Request) bool {
-				p := r.URL.Path
-				// 平台登录同样是暴力破解入口，必须与租户登录同档
-				return p == "/v1/auth/login" || p == "/v1/platform/auth/login" ||
-					strings.HasPrefix(p, "/v1/public/")
-			},
-			Limiter: httpmw.NewLimiter(cfg.PublicRateRPS, cfg.PublicRateBurst),
-			Key: func(r *http.Request) string {
-				return "public:" + httpmw.ClientIP(r, trusted).String()
-			},
-		},
-		{
-			Limiter: httpmw.NewLimiter(cfg.RateRPS, cfg.RateBurst),
-			Key: func(r *http.Request) string {
-				return "api:" + httpmw.ClientIP(r, trusted).String()
-			},
-		},
-	})
+	// 早先登录与外链共用一个 2 rps 的桶，结果是**两件互不相干的事互相误伤**：
+	// 同一办公网 10 人早上同时登录会 429；外链页首屏（兑换 + 票据 + 列表）连发也会 429。
+	// 分档依据见 httpmw.DefaultRules 的注释与 docs 技术文档 7.1「环境变量」表。
+	limiter := httpmw.RateLimitRules(httpmw.DefaultRules(httpmw.Limits{
+		API:         cfg.RateRPS,
+		APIBurst:    cfg.RateBurst,
+		Public:      cfg.PublicRateRPS,
+		PublicBurst: cfg.PublicRateBurst,
+		Login:       cfg.LoginRateRPS,
+		LoginBurst:  cfg.LoginRateBurst,
+		Ticket:      cfg.TicketRateRPS,
+		TicketBurst: cfg.TicketRateBurst,
+	}, trusted))
 
 	// RealIP 放在访问日志之外：否则日志里的 ip 字段永远是反向代理地址。
 	// 它只改 r.RemoteAddr，后续所有取来源 IP 的地方（审计、IP 白名单、水印、限流）
@@ -641,6 +734,35 @@ func main() {
 			errCh <- err
 		}
 	}()
+
+	// 证书续期：每 12 小时扫一次"30 天内到期且由我方签发"的域名。
+	// 放在启动之后而不是之前：续期要联网，失败不该影响服务起来。
+	if acmeRenewer != nil {
+		go acmeRenewer.RenewLoop(ctx, 12*time.Hour, log)
+	}
+
+	// 可选 HTTPS 监听：证书按 SNI 从 tenant_domain 取。
+	// 只有"域名直指本机"的部署才需要它；隧道/反代部署保持 DOCVAULT_TLS_LISTEN 为空。
+	if cfg.TLSListen != "" && tlsCertFor != nil {
+		tlsSrv := &http.Server{
+			Addr:    cfg.TLSListen,
+			Handler: handler,
+			TLSConfig: &tls.Config{
+				GetCertificate: tlsCertFor,
+				MinVersion:     tls.VersionTLS12,
+			},
+			ReadHeaderTimeout: 10 * time.Second,
+			ReadTimeout:       10 * time.Minute,
+			IdleTimeout:       120 * time.Second,
+		}
+		go func() {
+			log.Info("HTTPS 监听已启动", "addr", cfg.TLSListen)
+			// 证书来自 GetCertificate，所以文件名传空串（Go 支持这种用法）。
+			if err := tlsSrv.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Error("HTTPS 监听异常退出", "err", err.Error())
+			}
+		}()
+	}
 
 	select {
 	case err := <-errCh:

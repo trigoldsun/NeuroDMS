@@ -376,8 +376,12 @@ export default function ShareDrawer({
 
             <div className="field">
               <label htmlFor="sh-pwd">访问口令（可留空）</label>
-              <input id="sh-pwd" type="text" value={password} onChange={(e) => setPassword(e.target.value)}
-                autoComplete="new-password" placeholder="留空表示无口令" />
+              {/* 访问口令同样是口令：掩码显示，粘贴/删除都走原生 input 的掩码。
+                  这里不做二次确认——创建后仍可在「我的分享」里重设，
+                  而输入两次会让"留空表示无口令"的语义变复杂。 */}
+              <input id="sh-pwd" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password" placeholder="留空表示无口令"
+                spellCheck={false} autoCorrect="off" autoCapitalize="off" />
             </div>
 
             <div className="field">

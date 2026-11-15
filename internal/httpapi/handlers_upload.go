@@ -17,6 +17,7 @@ import (
 
 	"docvault/internal/authz"
 	"docvault/internal/content"
+	"docvault/internal/entitlement"
 	"docvault/internal/tenant"
 )
 
@@ -81,15 +82,15 @@ func extOfHint(name string) string {
 // folderUploadEnabled 判断本租户此刻能不能用"整目录上传"。
 //
 // 两把锁，缺一不可：
-//  1. 档位必须含该能力（基础版没有）——它是批量写入口，不是协议能力；
+//  1. 授权层必须含该能力（档位默认或单项加购）——它是批量写入口，不是协议能力；
 //  2. 租户管理员必须在系统设置里显式打开（默认关）。
 //
 // 读不到配置一律返回 false（fail-closed）。这里与"扩展名白名单读不到就放行"
 // 的取舍不同：白名单是体验约束，而批量上传会一次创建大量目录与文件，
 // 把配额、预览转码队列、审计量同时打满——宁可拒，也不能在数据库抖动时放开。
 func (a *API) folderUploadEnabled(ctx context.Context, tenantID string) bool {
-	st, err := a.editionState(ctx, tenantID)
-	if err != nil || !st.Spec.FolderUpload {
+	ok, err := a.entitled(ctx, tenantID, entitlement.UploadFolder)
+	if err != nil || !ok {
 		return false
 	}
 	pol, err := a.tenantPolicy(ctx, tenantID)

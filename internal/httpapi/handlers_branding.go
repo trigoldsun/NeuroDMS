@@ -80,6 +80,9 @@ func (a *API) handlePutBranding(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, r, http.StatusBadRequest, "INVALID_ARGUMENT", err.Error())
 			return
 		}
+		// 500 必须留服务端日志：品牌是"所有分享页都会变"的配置，
+		// 客户报"改了没生效"时，界面只有一句通用提示，排障全靠这条。
+		a.logErr("保存品牌失败", "tenant", c.TenantID, "err", err.Error())
 		writeErr(w, r, http.StatusInternalServerError, "INTERNAL", "保存品牌失败")
 		return
 	}
@@ -94,8 +97,13 @@ func (a *API) handlePutBranding(w http.ResponseWriter, r *http.Request) {
 		"footerText":   req.FooterText,
 		"privacyUrl":   req.PrivacyURL,
 	})
-	if len(req.Logo) > 0 {
-		// Logo 是二进制，不放进 before/after（会撑爆审计行），只记"换了"
+	// Logo 是二进制，不放进 before/after（会撑爆审计行），只记意图。
+	// 必须区分"更换"与"移除"：客户报"我的图标怎么没了"时，
+	// 只有 logoChanged 分不清是换了还是删了。
+	switch {
+	case req.RemoveLogo:
+		detail["logoRemoved"] = true
+	case len(req.Logo) > 0:
 		detail["logoChanged"] = true
 	}
 	if err := a.emit(r, c.TenantID, AuditEntry{
@@ -240,9 +248,9 @@ func brandingView(b tenant.Branding, slug string) map[string]any {
 	if slug == "" {
 		slug = b.Slug
 	}
-	if len(b.Logo) > 0 {
-		v["logoUrl"] = "/v1/tenant/branding/logo?slug=" + slug + "&v=" + b.LogoSHA()
-		v["logoMime"] = b.LogoMime
+	if u := b.LogoURL(slug); u != "" {
+		v["logoUrl"] = u
+		v["logoMime"] = b.LogoMimeOr()
 	}
 	return v
 }

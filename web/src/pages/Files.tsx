@@ -243,10 +243,15 @@ export default function Files({ spaceId, folderId }: { spaceId: string; folderId
   const failed = uploads.filter((u) => u.phase === 'error').length
   const active = uploads.filter((u) => u.phase === 'hash' || u.phase === 'upload').length
 
-  const canClassify = caps?.capabilities.classification ?? true
+  // 密级：能力读不到时按**没有**处理（fail-closed）。
+  // 早先这里写的是 `?? true`：接口慢或失败时界面会短暂给出"设置密级"入口，
+  // 点了才 403——把一次能力缺失变成了误导。
+  const canClassify = caps?.capabilities.classification ?? false
   const classLabels = useMemo(() => {
     const allowed = caps?.classificationLevels
-    if (!allowed || allowed.length === 0) return labels
+    // 空集合 = 该租户没有密级功能：返回空数组，抽屉里一个选项都不会出现。
+    // 早先这里 `!allowed` 时返回全部标签，等于把 7 档都放出来。
+    if (!allowed || allowed.length === 0) return []
     return labels.filter((l) => allowed.includes(l.level))
   }, [labels, caps])
 
@@ -1538,7 +1543,7 @@ export default function Files({ spaceId, folderId }: { spaceId: string; folderId
           target={{ id: shareTarget.id, name: shareTarget.name }}
           onClose={() => setShareTarget(null)}
           onDone={(m) => flash(m)}
-          canMail={caps?.capabilities.shareMail ?? true}
+          canMail={caps?.capabilities.shareMail ?? false}
         />
       )}
       {versionTarget && (

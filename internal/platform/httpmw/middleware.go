@@ -109,7 +109,15 @@ func SecurityHeadersFor(extraOrigin string) func(http.Handler) http.Handler {
 			// 就等于公开（robots.txt 只是请求，响应头才是逐页生效的那道）。
 			h.Set("X-Robots-Tag", "noindex, nofollow, noarchive")
 			h.Set("Content-Security-Policy", csp)
-			if r.TLS != nil {
+			// HSTS 只对"真的是 https"的响应有意义（浏览器会忽略 http 响应里的这条头）。
+			//
+			// 必须同时认 X-Forwarded-Proto：生产经 Cloudflare Tunnel，TLS 在边缘终止，
+			// 应用收到的永远是 http —— 只看 r.TLS 会让 HSTS 在生产**一次都不下发**，
+			// 客户端首次访问或手输 http:// 时就没有强制升级这道防线。
+			//
+			// 伪造该头无害：浏览器只接受来自安全上下文的 HSTS，伪造者最多让自己的
+			// 客户端更强制地用 https。
+			if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
 				h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 			}
 			next.ServeHTTP(w, r)

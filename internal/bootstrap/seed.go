@@ -11,6 +11,7 @@ import (
 
 	"docvault/internal/auth"
 	"docvault/internal/db"
+	"docvault/internal/password"
 	"docvault/internal/rbac"
 
 	"github.com/jackc/pgx/v5"
@@ -31,8 +32,10 @@ func SeedDemo(ctx context.Context, pool *pgxpool.Pool, tenantSlug, adminUser, ad
 	if tenantSlug == "" || adminUser == "" || adminPassword == "" {
 		return DemoResult{}, errors.New("种子参数不完整")
 	}
-	if len(adminPassword) < 12 {
-		return DemoResult{}, fmt.Errorf("演示管理员口令需 ≥12 位，当前 %d 位", len(adminPassword))
+	// 与产品口令口径同源（docs/48）：演示数据不能用一个正式界面建不出来的口令。
+	if password.TooShort(adminPassword) {
+		return DemoResult{}, fmt.Errorf("演示管理员口令需 ≥%d 位，当前 %d 位",
+			password.MinLength, password.Runes(adminPassword))
 	}
 
 	// 幂等判断按 slug：只要目标租户已存在就跳过。

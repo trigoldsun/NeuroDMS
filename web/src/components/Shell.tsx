@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { searchNodes, type Me, type SearchHit } from '../api'
+import { applyFavicon, applyProductFavicon } from '../branding'
 import { navigate, adminPath, currentPath, filesPath, previewPath, subscribe } from '../router'
 import { Avatar, Icon, Mark, Menu, Tooltip, fmtSize, relTime } from './ui'
 
@@ -85,25 +86,63 @@ export function Shell({
   // 硬编码 NeuroDMS 会出现"邮件写【森莘科创】、界面写 NeuroDMS"的分裂，
   // 而品牌名正是收件人判断"这是不是我们单位的系统"的依据。
   const [productName, setProductName] = useState('')
+  // 左上角图标跟随租户品牌（管理台「系统设置 · 品牌与名称」上传）。
+  // 没有上传时保持内置图形，不显示空白——否则"没配图标"看起来像加载失败。
+  const [logoUrl, setLogoUrl] = useState('')
+
   useEffect(() => {
-    let tenant = ''
-    try { tenant = localStorage.getItem('dv_tenant') || '' } catch { /* 隐私模式 */ }
-    const url = '/v1/tenant/branding' + (tenant ? '?slug=' + encodeURIComponent(tenant) : '')
     let alive = true
-    fetch(url, { headers: { accept: 'application/json' } })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => {
-        const n = (j?.data?.productName ?? '').trim()
-        if (alive && n) {
-          setProductName(n)
-          // 页签标题也换掉：多标签页时人靠标题区分系统
-          if (document.title.startsWith('NeuroDMS')) {
-            document.title = n + document.title.slice('NeuroDMS'.length)
-          }
-        }
-      })
-      .catch(() => { /* 读不到就用默认名，不影响使用 */ })
-    return () => { alive = false }
+
+    function apply(d: { productName?: string; logoUrl?: string; logoMime?: string } | undefined | null) {
+      if (!alive || !d) return
+      const n = String(d.productName ?? '').trim()
+      if (n) {
+        setProductName(n)
+        // 页签标题也换掉：多标签页时人靠标题区分系统。
+        // 不能写成"只在以 NeuroDMS 开头时才换"——登录页已经先把标题改成了
+        // 租户名，登录后那个判断永远不命中，标题会停在"· 登录"。
+        document.title = n + ' · 文档中心'
+      }
+      setLogoUrl(String(d.logoUrl ?? ''))
+      // 标签页图标与侧栏是同一个组织标识，必须一起换。
+      // 只改侧栏会出现"系统里是客户的标、浏览器标签上还是厂商的标"。
+      applyFavicon(d)
+    }
+
+    function load() {
+      let tenant = ''
+      try { tenant = localStorage.getItem('dv_tenant') || '' } catch { /* 隐私模式 */ }
+      const url = '/v1/tenant/branding' + (tenant ? '?slug=' + encodeURIComponent(tenant) : '')
+      // no-store：这个接口带 max-age=60，普通访客那边是合理的，
+      // 但管理台刚保存完必须立刻看到新值，不能被自己 60 秒前的缓存挡住。
+      fetch(url, { headers: { accept: 'application/json' }, cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => apply(j?.data))
+        .catch(() => {
+          // 读不到品牌（含 401：令牌刚失效）就回退产品图标，
+          // 不能把上一个租户的标留在标签页上。
+          applyProductFavicon()
+        })
+    }
+
+    load()
+
+    // 管理员在「品牌与名称」保存后立即同步侧栏。
+    // 事件里直接带保存接口返回的品牌对象：即使 HTTP 缓存还没过期，
+    // 侧栏也能立刻显示新图标（只靠再 fetch 一次会被缓存挡住）。
+    const onChanged = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { productName?: string; logoUrl?: string } | undefined
+      if (detail && typeof detail === 'object') apply(detail)
+      else load()
+    }
+    window.addEventListener('dv-branding-changed', onChanged)
+    return () => {
+      alive = false
+      window.removeEventListener('dv-branding-changed', onChanged)
+      // 离开站内（退出登录 / 401 跳转）→ 立刻回产品图标，
+      // 不等登录页挂载，避免地址栏已经是 /login、标签页还是客户的标。
+      applyProductFavicon()
+    }
   }, [])
 
   return (
@@ -112,7 +151,9 @@ export function Shell({
         {/* 左上角产品名＝回工作台。这是全站唯一"always there"的入口，
             放 /files 等于让人只能回到某个目录，回不了自己的首页。 */}
         <a className="side-brand" href="/home" title="回到工作台" onClick={(e) => { e.preventDefault(); navigate('/home') }}>
-          <Mark size={30} />
+          {logoUrl
+            ? <img className="side-logo" src={logoUrl} alt="" width={30} height={30} />
+            : <Mark size={30} />}
           <span className="word">
             <b>{productName || 'NeuroDMS'}</b>
             <span className="tenant">受控文档 · 全程留痕</span>

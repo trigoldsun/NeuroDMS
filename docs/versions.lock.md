@@ -1,6 +1,7 @@
 # 版本锁定表（versions.lock）
 
-- 版本：v1.0 ｜ 日期：2026-11-08 ｜ 状态：**生效**
+- 版本：V1.8.0（与产品版本一致） ｜ 日期：2026-11-08 ｜ 状态：**生效**
+- 沿革：首版 v1.0；自 V1.5.1 起随产品发版（表内各组件版本是**依赖版本**，与本文档版本无关）
 - 纪律依据：用户规范「必须使用最新稳定版（经产品官方网站及下载页确认），禁止旧版或 beta」
 - 使用方式：CI 与构建脚本以本表为准；任何偏离必须在 PR 中说明原因并经评审
 
@@ -10,7 +11,7 @@
 
 | 层 | 组件 | 锁定版本 | 发布/核实日期 | 许可 | 核实来源 |
 |---|---|---|---|---|---|
-| 后端语言 | **Go** | **1.27.3** | 1.27.3 于 2026-10-19；1.27.0 于 2026-08-19 | BSD-3 | go.dev/doc/devel/release |
+| 后端语言 | **Go** | **1.27.4** | 1.27.4 为 2026-11-15 最新稳定版；升级原因：1.27.3 及以下含 21 项标准库漏洞（net/http 请求处理、crypto/tls、crypto/x509 等），govulncheck 在 1.27.4 下清零 | BSD-3 | go.dev/doc/devel/release |
 | HTTP 路由 | **chi** | **v5.5.0** | 2026-10-14（v5.4.0 于 2026-10-12） | MIT | github.com/go-chi/chi/releases |
 | PG 驱动 | **pgx** | **v5.11.0** | 2026-09-07 | MIT | github.com/jackc/pgx |
 | 数据库 | **PostgreSQL** | **18.6** | 18.x 当前 minor；19 仍为 beta 不采用 | PostgreSQL License | postgresql.org/support/versioning |
@@ -148,6 +149,7 @@ Ghostscript 是 AGPLv3 或 Artifex 商业授权。官方 FAQ 明确：**闭源�
 | 2026-11-08 | Go / chi / pgx / PostgreSQL / Node / React / TS / Vite / antd / LibreOffice / ONLYOFFICE | 见 §1 | — | 本轮设计阶段核实 |
 | 2026-11-08 | **postgres:18.6-alpine** | 容器内实测 `PostgreSQL 18.6` | 实测 | 曾用 `postgres:18-alpine` 得到 18.3，已改为精确 tag |
 | 2026-11-08 | **golang:1.27.3-alpine / alpine:3.24 / valkey/valkey:8-alpine** | 已拉取到本地 | 实测 | 均为官方镜像 |
+| 2026-11-15 | **golang:1.27.4-alpine**（安全审查升级） | govulncheck 标准库漏洞 21 → 0 | 实测 | 官方镜像 |
 | 2026-11-08 | **pgx v5.11.0** | 已写入 go.mod 并通过构建 | 实测 | 经 goproxy.cn 获取 |
 | （待填） | 其余 §2 组件 | — | — | 编码首日 |
 
@@ -157,7 +159,7 @@ Ghostscript 是 AGPLv3 或 Artifex 商业授权。官方 FAQ 明确：**闭源�
 
 | # | 偏离 | 事实 | 影响 | 处置 |
 |---|---|---|---|---|
-| DV-01 | 本机 Go 为 **1.26.3**，低于锁定的 1.27.3 | 主机工具链未升级 | 若 `go.mod` 写 `go 1.27.3`，本机无法编译 | `go.mod` 语言版本写 `1.26` 作为编译下限；**构建镜像固定 `golang:1.27.3`**，CI 用 1.27.3 编译并测试。上线前需在本机或 CI 侧确认 1.27.3 双跑通过 |
+| DV-01 | ~~本机 Go 为 1.26.3，低于锁定的 1.27.3~~ **已关闭（2026-11-15）** | — | — | `go.mod` 已写 `go 1.27.4` + `toolchain go1.27.4`（Go 自动下载工具链），构建镜像同为 1.27.4；本机 `go version` 与全量测试均在该版本下通过 |
 | DV-02 | 本机 Node 为 **22.22.2**，低于锁定的 24.21.0 LTS | 主机工具链未升级 | 前端尚未开工，暂无实际影响 | 前端里程碑开始前升级，或统一在容器内构建 |
 | DV-03 | Docker 镜像拉取 | 首次失败（镜像源 `docker.mirrors.ustc.edu.cn` 已失效 + 官方 registry 直连不可达），**重试后恢复** | 已拉取所需镜像 | daemon.json 已改为 `https://docker.m.daocloud.io` 并备份原文件；**需重启 Docker Desktop 生效**，因有 20 个其他项目容器在跑，未擅自重启 |
 | DV-03b | 容器编排已端到端验证 | 2026-11-08 实跑：`docker/` 下 postgres 18.6 + valkey 8 + server 三容器 healthy，`/readyz` 返回 `database: ok` | 无 | 构建期曾因容器内默认 `proxy.golang.org` 不可达导致 `go mod download` 失败，已在 Dockerfile 用 `ARG GOPROXY_URL` 显式指定并允许覆盖 |
@@ -199,7 +201,7 @@ Ghostscript 是 AGPLv3 或 Artifex 商业授权。官方 FAQ 明确：**闭源�
 
 | 组件 | 镜像内实际版本 | 与锁定值的关系 |
 |---|---|---|
-| Go | 1.27.3（构建阶段） | 一致 |
+| Go | 1.27.4（构建阶段） | 一致 |
 | Alpine | 3.24 | 一致 |
 | LibreOffice | **25.8.7.3**（Alpine 官方包） | ⚠️ 低于锁定 26.8.0，记为 DV-11 |
 | ffmpeg | **8.1.3（源码自建，`--disable-gpl --enable-libopenh264`）** | 无现成 LGPL 包，按"源码自建"约束构建，记为 DV-12 |
@@ -224,4 +226,4 @@ Ghostscript 是 AGPLv3 或 Artifex 商业授权。官方 FAQ 明确：**闭源�
 |---|---|---|
 | v1.0 | 2026-11-08 | 首版：11 项已核实 + 14 项待锁定 + 禁止清单 + 供应链纪律 |
 | v1.1 | 2026-11-08 | 新增 §6.6 交付镜像实际装配；记录 DV-11（LibreOffice 25.8）/ DV-12（ffmpeg 源码自建 LGPL）/ hls.js 1.7.4 锁定 |
-| v1.2 | 2026-11-09 | 登记 cloudflared（公网发布）；见 `10-公网发布（Cloudflare Tunnel）-v1.0.md` |
+| v1.2 | 2026-11-09 | 登记 cloudflared（公网发布）；见 `10-公网发布（Cloudflare Tunnel）-v1.5.1.md` |

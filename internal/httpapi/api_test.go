@@ -16,6 +16,8 @@ import (
 	"docvault/internal/auth"
 	"docvault/internal/content"
 	"docvault/internal/db"
+	"docvault/internal/dept"
+	"docvault/internal/entitlement"
 	"docvault/internal/feature"
 	"docvault/internal/iam"
 	"docvault/internal/metering"
@@ -96,16 +98,26 @@ func setupWith(t *testing.T, decorate func(*API)) (*httptest.Server, *pgxpool.Po
 	if err != nil {
 		t.Fatalf("初始化存储失败: %v", err)
 	}
+	// 授权服务必须装配：不装的话 capability 判定一律 503，
+	// 测试会以"上传失败"的形式报错，看起来像存储问题。
+	entSvc := entitlement.New(pool)
+	authSvc := auth.New(pool, []byte("0123456789abcdef0123456789abcdef"), auth.DefaultConfig())
+	authSvc.SetEntitlements(entSvc)
+	tenantSvc := tenant.New(pool)
+	tenantSvc.SetEntitlements(entSvc)
+
 	api := &API{
 		Pool:    pool,
-		Auth:    auth.New(pool, []byte("0123456789abcdef0123456789abcdef"), auth.DefaultConfig()),
+		Auth:    authSvc,
 		Content: store,
 		// M3 依赖：平台侧与计量/开关。测试里同样装配，否则平台端点会因
 		// "服务未初始化"返回 401，看起来像权限问题。
-		Tenants:       tenant.New(pool),
+		Tenants:       tenantSvc,
 		IAM:           iam.New(pool),
+		Depts:         dept.New(pool),
 		Metering:      metering.New(pool),
 		Features:      feature.New(pool),
+		Entitlements:  entSvc,
 		PlatformAuth:  platformauth.New(pool),
 		PlatformToken: "test-platform-token",
 	}

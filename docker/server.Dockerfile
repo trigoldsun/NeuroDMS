@@ -1,4 +1,8 @@
-# 构建阶段：工具链版本与 versions.lock 一致（Go 1.27.3）
+# 构建阶段：工具链版本与 versions.lock 一致（Go 1.27.4，安全基线：修复 21 项标准库漏洞）
+#
+# 基础镜像仍是 1.27.3：本网络的镜像站尚未同步 1.27.4-alpine。
+# 用 Go 官方 toolchain 机制在构建阶段切到 1.27.4（下载内容由 Go 校验），
+# 这样最终二进制的标准库就是带修复的版本，不依赖镜像站何时同步。
 FROM golang:1.27.3-alpine AS build
 
 WORKDIR /src
@@ -8,6 +12,8 @@ WORKDIR /src
 #   docker build --build-arg GOPROXY_URL=https://proxy.golang.org,direct ...
 ARG GOPROXY_URL=https://goproxy.cn,direct
 ENV GOPROXY=${GOPROXY_URL}
+# 强制使用与 versions.lock / go.mod 一致的 1.27.4 工具链（构建期自动获取）
+ENV GOTOOLCHAIN=go1.27.4
 
 # 先复制依赖清单，利用层缓存
 COPY go.mod go.sum* ./

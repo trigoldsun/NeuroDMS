@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import Members from './Members'
+import Depts from './Depts'
 import ActivityTable from './ActivityTable'
 import DirectorySettings from './DirectorySettings'
 import MailSettings from './MailSettings'
@@ -7,6 +8,10 @@ import { adminPath, navigate } from '../router'
 import { api, postJSON, fetchMe, applyTheme, cycleTheme, getBranding, saveBranding, getCapabilities, HttpError, type BrandingInfo, type Capabilities, type Me } from '../api'
 import { Shell } from '../components/Shell'
 import { AdminSpaces } from './AdminSpaces'
+import Domains from './Domains'
+import License from './License'
+import Integrations from './Integrations'
+import { BrandLogoField, type LogoDraft } from '../components/BrandLogoField'
 import { Icon, InfoDot } from '../components/ui'
 import AuditDetail, { changeSummary } from '../components/AuditDetail'
 import { actionLabel } from '../activity'
@@ -52,7 +57,7 @@ function resultBadge(r: string) {
   return <span className={`badge ${cls}`}>{text}</span>
 }
 
-type TabKey = 'overview' | 'members' | 'spaces' | 'directory' | 'mail' | 'audit' | 'logs' | 'settings' | 'class' | 'policy' | 'approval' | 'share-approvals'
+type TabKey = 'overview' | 'members' | 'spaces' | 'depts' | 'directory' | 'mail' | 'integrations' | 'domains' | 'license' | 'audit' | 'logs' | 'settings' | 'class' | 'policy' | 'approval' | 'share-approvals'
 
 // 待审批的外发链接。
 //
@@ -129,7 +134,6 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
 
   const [summary, setSummary] = useState<Summary | null>(null)
   const [roles, setRoles] = useState<RoleDef[]>([])
-
   const [events, setEvents] = useState<AuditEvent[]>([])
   const [auditFilter, setAuditFilter] = useState({ action: '', result: '' })
   // 展开的是哪一条（按 seq）：审计要能就地看到改前改后，而不是再点一次跳转
@@ -141,10 +145,17 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
   const [newPolicy, setNewPolicy] = useState({ label: '', minLevel: 1 })
   const [requests, setRequests] = useState<ClassRequest[]>([])
   const [shareApprovals, setShareApprovals] = useState<ShareApproval[]>([])
-  // 品牌：系统名称（邮件主题与发件人显示名都用它）+ 颜色 + 页脚
+  // 品牌：系统名称（邮件主题与发件人显示名都用它）+ 颜色 + 页脚 + 左上角图标
   const [brand, setBrand] = useState<BrandingInfo | null>(null)
-  // 档位能力：设置页要据此决定"文件夹上传"开关是否可点
+  // 图标草稿：只有选了新文件才非空；不改图标时保存请求里不带 logo 字段
+  const [logoDraft, setLogoDraft] = useState<LogoDraft | null>(null)
+  const [logoRemoving, setLogoRemoving] = useState(false)
+  const [logoErr, setLogoErr] = useState('')
+  // 档位能力：设置页要据此决定"文件夹上传"开关是否可点；
+  // 密级页面据此显示"当前档位不含密级"的说明（入口保留，写入由服务端拒绝——
+  // 直接隐藏会让人以为功能丢了）。
   const [caps, setCaps] = useState<Capabilities | null>(null)
+  const canClassify = caps?.capabilities.classification ?? true
   const [tpolicy, setTpolicy] = useState<TenantPolicy>({
     shareDefaultExpireDays: 0, maxUploadMB: 0, auditRetentionDays: 730,
     uploadTimeoutSeconds: 300, allowedExts: null, folderUpload: false, smsLogin: false,
@@ -179,13 +190,21 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
   // 只展示当前角色真正能用的页签：能看不能用比看不到更糟
   const tabs = useMemo(() => {
     const list: { key: TabKey; label: string }[] = []
-    if (isSys) list.push({ key: 'overview', label: '概览' }, { key: 'members', label: '成员与角色' }, { key: 'spaces', label: '空间台账' })
+    if (isSys) {
+      list.push({ key: 'overview', label: '概览' }, { key: 'members', label: '成员与角色' },
+        { key: 'spaces', label: '空间台账' })
+      // 部门：ACL 的授权主体之一。不接 AD 的租户原先没有入口，
+      // 等于"按部门授权"这个能力只对接了域控的客户开放（E2E 验收 F-03）。
+      list.push({ key: 'depts', label: '部门' })
+    }
     // 操作日志：sysadmin 看全量治理动作，secadmin 只看权限/密级/外发审批
     if (isSys || isAud || isSec) list.push({ key: 'logs', label: '操作日志' })
     // 外发审批对 sysadmin 与 secadmin 都开放：实际能不能批由服务端按
     // 对象级 manage_acl 判定，角色只决定"能不能进到这个页面"。
     if (isSys || isSec) list.push({ key: 'share-approvals', label: '外发审批' })
-    if (isSys) list.push({ key: 'settings', label: '系统设置' }, { key: 'directory', label: '目录认证' }, { key: 'mail', label: '邮件服务' })
+    if (isSys) list.push({ key: 'settings', label: '系统设置' }, { key: 'directory', label: '目录认证' },
+      { key: 'mail', label: '邮件服务' }, { key: 'integrations', label: '集成与凭证' },
+      { key: 'domains', label: '域名与证书' }, { key: 'license', label: '许可证' })
     if (isAud) list.push({ key: 'audit', label: '审计日志' })
     if (isSec) list.push({ key: 'class', label: '密级定义' }, { key: 'policy', label: '标签策略' }, { key: 'approval', label: '降密审批' })
     return list
@@ -232,7 +251,12 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
         const d = await api<{ items: AuditEvent[] }>(`/v1/admin/audit/events?${q.toString()}`)
         setEvents(d.items ?? [])
       }
-      if (tab === 'class' || tab === 'approval') {
+      if (tab === 'class' || tab === 'policy' || tab === 'approval') {
+        // 密级相关页要知道"这个租户有没有密级能力"，否则会给出一套可编辑但
+        // 保存必失败的界面。失败按"有"处理（不显示误导性的警告），写入仍被服务端拦。
+        if (!caps) {
+          setCaps(await getCapabilities().catch(() => null))
+        }
         const d = await api<{ items: ClassLabel[] }>('/v1/classifications')
         setClasses(d.items ?? [])
       }
@@ -325,17 +349,37 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
       setErr('系统名称不能为空（它会显示在邮件主题与分享页上）')
       return
     }
+    if (logoErr) {
+      setErr('图标还没有通过校验，请先处理（' + logoErr + '）')
+      return
+    }
     setErr('')
     try {
-      const saved = await saveBranding({
+      // 只把"有变化的意图"放进请求：
+      // 没选新图也没点移除时**不带** logo 字段，后端据此保留原图标。
+      const payload: Parameters<typeof saveBranding>[0] = {
         productName: brand.productName.trim(),
         primaryColor: brand.primaryColor,
         accentColor: brand.accentColor,
         footerText: brand.footerText,
         privacyUrl: brand.privacyUrl,
-      })
+      }
+      if (logoRemoving) {
+        payload.removeLogo = true
+      } else if (logoDraft) {
+        payload.logoBase64 = logoDraft.dataUrl
+        payload.logoMime = logoDraft.mime
+      }
+      const saved = await saveBranding(payload)
       setBrand(saved)
-      flash('名称已保存：之后发出的邮件主题为【' + saved.productName + '】，发件人显示名同步更新')
+      setLogoDraft(null)
+      setLogoRemoving(false)
+      setLogoErr('')
+      // 侧栏与登录页拿的是公开品牌接口（带 60 秒 HTTP 缓存），
+      // 所以把保存结果**直接带在事件里**，接收方不必再请求一次，
+      // 也就不存在"刚保存但缓存还是旧的"这种窗口。
+      window.dispatchEvent(new CustomEvent('dv-branding-changed', { detail: saved }))
+      flash('品牌已保存：邮件主题、分享页页眉与左上角图标同步更新')
     } catch (e) {
       setErr(e instanceof HttpError ? `${e.code}：${e.message}` : '保存失败')
     }
@@ -406,9 +450,9 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
 
   const tabLabel = tabs.find((t) => t.key === tab)?.label ?? '管理台'
   const tabIcon: Record<string, string> = {
-    overview: 'grid', members: 'users', spaces: 'folder', logs: 'list', 'share-approvals': 'share',
+    overview: 'grid', members: 'users', spaces: 'folder', depts: 'children', logs: 'list', 'share-approvals': 'share',
     settings: 'sparkle', directory: 'users', audit: 'shield', class: 'lock',
-    policy: 'tag', approval: 'check',
+    policy: 'tag', approval: 'check', integrations: 'key', domains: 'globe', license: 'shield',
   }
 
   return (
@@ -504,8 +548,9 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
             </div>
           )}
 
-          {tab === 'members' && <Members roles={roles} meId={me?.userId ?? ''} />}
+          {tab === 'members' && <Members roles={roles} meId={me?.userId ?? ''} meClass={me?.classification ?? 0} />}
           {tab === 'spaces' && <AdminSpaces meId={me?.userId ?? ''} flash={flash} />}
+          {tab === 'depts' && <Depts canWrite={isSys} flash={flash} />}
 
           {tab === 'audit' && (
             <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -601,6 +646,15 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
 
           {tab === 'class' && (
             <div style={{ padding: 14 }}>
+              {!canClassify && (
+                <div className="banner warn" style={{ marginBottom: 10 }}>
+                  <span className="ico"><Icon name="alert" size={15} /></span>
+                  <div>
+                    当前档位或授权<b>不含密级功能</b>，这里的定义仅作只读展示，保存会被拒绝。
+                    成员密级固定为 0（公开），上传与分享也不提供密级选项。
+                  </div>
+                </div>
+              )}
               <table>
                 <thead><tr><th style={{ width: 80 }}>等级</th><th style={{ width: 180 }}>名称</th><th>说明</th><th style={{ width: 170 }}>外发需所有者确认</th><th style={{ width: 90 }} /></tr></thead>
                 <tbody>
@@ -651,6 +705,12 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
 
           {tab === 'policy' && (
             <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {!canClassify && (
+                <div className="banner warn">
+                  <span className="ico"><Icon name="alert" size={15} /></span>
+                  <div>当前档位或授权不含密级功能，标签策略无法生效，保存会被拒绝。</div>
+                </div>
+              )}
               <div className="card pad">
                 <h3 style={{ marginBottom: 8 }}>新增 / 覆盖策略</h3>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -684,6 +744,9 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
           {tab === 'directory' && <DirectorySettings onFlash={flash} />}
 
           {tab === 'mail' && <MailSettings onFlash={flash} />}
+          {tab === 'integrations' && <Integrations />}
+          {tab === 'domains' && <Domains />}
+          {tab === 'license' && <License />}
 
           {tab === 'settings' && (
             <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -693,8 +756,23 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
                   <div className="hint">读取品牌配置失败，稍后重试。</div>
                 ) : (
                   <>
-                    <div style={{ display: 'grid', gridTemplateColumns: '180px 260px 1fr', gap: 10, alignItems: 'center' }}>
-                      <label htmlFor="brand-name">系统名称</label>
+                    <div className="brand-grid">
+                      <label style={{ paddingTop: 6 }}>系统图标</label>
+                      <div className="brand-span">
+                        <BrandLogoField
+                          currentUrl={brand.logoUrl}
+                          draft={logoDraft}
+                          removing={logoRemoving}
+                          error={logoErr}
+                          disabled={!isSys}
+                          onChange={(d) => { setLogoDraft(d); setLogoRemoving(false); setLogoErr('') }}
+                          onRemove={() => { setLogoDraft(null); setLogoRemoving(true); setLogoErr('') }}
+                          onUndoRemove={() => setLogoRemoving(false)}
+                          onError={setLogoErr}
+                        />
+                      </div>
+
+                      <label htmlFor="brand-name" style={{ paddingTop: 6 }}>系统名称</label>
                       <input
                         id="brand-name" maxLength={20}
                         value={brand.productName}
@@ -705,7 +783,7 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
                         「【{brand.productName || '…'}文档管理系统】」；分享页页眉也显示它
                       </span>
 
-                      <label htmlFor="brand-primary">主色</label>
+                      <label htmlFor="brand-primary" style={{ paddingTop: 6 }}>主色</label>
                       <input
                         id="brand-primary" type="color"
                         value={brand.primaryColor}
@@ -714,7 +792,7 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
                       />
                       <span className="hint">登录页与分享页的主色调</span>
 
-                      <label htmlFor="brand-accent">辅色</label>
+                      <label htmlFor="brand-accent" style={{ paddingTop: 6 }}>辅色</label>
                       <input
                         id="brand-accent" type="color"
                         value={brand.accentColor}
@@ -723,7 +801,7 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
                       />
                       <span className="hint">强调色，用于次级按钮与标记</span>
 
-                      <label htmlFor="brand-privacy">隐私政策链接</label>
+                      <label htmlFor="brand-privacy" style={{ paddingTop: 6 }}>隐私政策链接</label>
                       <input
                         id="brand-privacy" placeholder="https://example.com/privacy（可留空）"
                         value={brand.privacyUrl}
@@ -733,7 +811,7 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
                         会写进外发邮件正文底部：说明收集 IP/浏览器/时间用于安全审计，并给出完整条款地址
                       </span>
 
-                      <label htmlFor="brand-footer">页脚文案</label>
+                      <label htmlFor="brand-footer" style={{ paddingTop: 6 }}>页脚文案</label>
                       <input
                         id="brand-footer" maxLength={200} placeholder="可选，例如：某某公司 内部系统"
                         value={brand.footerText}

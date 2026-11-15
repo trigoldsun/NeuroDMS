@@ -5,12 +5,10 @@ import (
 	"net/http"
 	"strconv"
 
-	"docvault/internal/db"
+	"docvault/internal/classification"
 	"docvault/internal/iam"
 	"docvault/internal/platform/httpmw"
 	"docvault/internal/rbac"
-
-	"github.com/jackc/pgx/v5"
 )
 
 // registerMembers 注册成员（账号）管理端点。
@@ -36,8 +34,6 @@ func (a *API) registerMembers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/admin/members/{id}/phone/confirm", a.requireRole(rbac.SysAdmin)(a.handleMemberPhoneConfirm))
 	mux.HandleFunc("DELETE /v1/admin/members/{id}/phone", a.requireRole(rbac.SysAdmin)(a.handleMemberPhoneClear))
 
-	// 部门下拉：建号时要选部门
-	mux.HandleFunc("GET /v1/admin/depts", a.requireRole(rbac.SysAdmin)(a.handleDeptList))
 }
 
 // iamErr 把 iam 的业务错误映射成稳定的状态码与错误码。
@@ -66,7 +62,9 @@ func (a *API) iamErr(w http.ResponseWriter, r *http.Request, tenantID, action, t
 	case errors.Is(err, iam.ErrSelfTarget):
 		code, status, msg = "SELF_OPERATION", http.StatusBadRequest, err.Error()
 	case errors.Is(err, iam.ErrEscalation):
-		code, status, msg = "CEILING_EXCEEDED", http.StatusForbidden, err.Error()
+		// 把"找谁办"写进消息：只报"不能授予高于自己"会让人反复重试同一个下拉框。
+		code, status = "CEILING_EXCEEDED", http.StatusForbidden
+		msg = err.Error() + "。管理员不能提升自己的密级；这类操作需要由同级或更高密级的管理员完成"
 	case errors.Is(err, iam.ErrOwnsSpaces):
 		code, status, msg = "OWNS_SPACES", http.StatusConflict, err.Error()
 	}
@@ -179,10 +177,74 @@ func (a *API) handleMemberGet(w http.ResponseWriter, r *http.Request) {
 
 // ---------------- 创建与修改 ----------------
 
+// guardMemberClass 按"档位 + 授权"判定成员密级是否可写。
+//
+// 为什么在 HTTP 层而不是 iam：判定要读 edition 与 entitlement（产品能力面），
+// iam 是人员域，不该反向依赖档位包。成员写入只有这一个入口，拦在这里是完整的
+// （与上传、改对象密级用的是同一个 classLevels/levelAllowed）。
+//
+// 三件事一起做：
+//  1. 显式传入的密级必须落在"该租户此刻允许写入的集合"内（基础版为空集 → 只准 0）；
+//  2. 没有密级能力时，**未传**的密级强制落 0，避免 iam 的默认值写出一个不存在的档位；
+//  3. 拒绝时用 FEATURE_NOT_ENABLED，与上传入口同码，前端只需认一处。
+//
+// ceiling（封顶）不在这里限：它是"能授出的上限"，不产生对象数据；
+// 对象密级本身已被上传/改密级入口拦住，封顶超出档位不会造成越权。
+func (a *API) guardMemberClass(w http.ResponseWriter, r *http.Request, tenantID string, class **int, forceZero bool) bool {
+	c, _ := claimsFrom(r.Context())
+	levels, st, err := a.classLevels(r.Context(), tenantID)
+	if err != nil {
+		writeErr(w, r, http.StatusServiceUnavailable, "ENTITLEMENT_UNAVAILABLE",
+			"无法读取租户档位，请稍后重试")
+		return true
+	}
+	if len(levels) == 0 {
+		if class != nil && *class != nil && **class > 0 {
+			_ = a.emit(r, tenantID, AuditEntry{
+				ActorID: c.Subject, Action: "admin.member.classification", Result: "denied",
+				Detail: map[string]any{"reason": "edition_classification",
+					"requested": **class, "edition": string(st.Edition)},
+			})
+			writeErr(w, r, http.StatusForbidden, "FEATURE_NOT_ENABLED",
+				"当前档位或授权不含密级功能（"+st.Spec.Name+"），成员密级只能为 0")
+			return true
+		}
+		// 只在"新建"时补 0：编辑成员时未传密级表示"不改"，
+		// 强行置 0 会让"改个显示名"顺手把密级清掉。
+		if class != nil && forceZero && *class == nil {
+			zero := 0
+			*class = &zero
+		}
+		return false
+	}
+	if class == nil || *class == nil {
+		return false
+	}
+	v := **class
+	if v < 0 || v > classification.MaxLevel {
+		writeErr(w, r, http.StatusBadRequest, "INVALID_ARGUMENT", "密级必须在 0..6 之间")
+		return true
+	}
+	if !levelAllowed(levels, v) {
+		_ = a.emit(r, tenantID, AuditEntry{
+			ActorID: c.Subject, Action: "admin.member.classification", Result: "denied",
+			Detail: map[string]any{"reason": "edition_classification",
+				"requested": v, "edition": string(st.Edition), "allowed": levels},
+		})
+		writeErr(w, r, http.StatusForbidden, "FEATURE_NOT_ENABLED",
+			"当前档位或授权不支持该密级（"+st.Spec.Name+"）")
+		return true
+	}
+	return false
+}
+
 func (a *API) handleMemberCreate(w http.ResponseWriter, r *http.Request) {
 	c, _ := claimsFrom(r.Context())
 	var in iam.CreateInput
 	if !decode(w, r, &in) {
+		return
+	}
+	if a.guardMemberClass(w, r, c.TenantID, &in.Classification, true) {
 		return
 	}
 	m, err := a.IAM.Create(r.Context(), c.TenantID, c.Subject, in)
@@ -210,6 +272,9 @@ func (a *API) handleMemberUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	var in iam.UpdateInput
 	if !decode(w, r, &in) {
+		return
+	}
+	if a.guardMemberClass(w, r, c.TenantID, &in.Classification, false) {
 		return
 	}
 	// 改前值：成员的密级/档位决定他能看到什么，改错一次就是一次越权，
@@ -390,39 +455,6 @@ func (a *API) handleMemberRevokeRole(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---------------- 部门 ----------------
-
-func (a *API) handleDeptList(w http.ResponseWriter, r *http.Request) {
-	c, _ := claimsFrom(r.Context())
-
-	type dept struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
-	}
-	items := []dept{}
-
-	err := db.WithTenant(r.Context(), a.Pool, c.TenantID, func(tx pgx.Tx) error {
-		rows, e := tx.Query(r.Context(),
-			`SELECT id::text, name FROM dept WHERE deleted_at IS NULL ORDER BY path`)
-		if e != nil {
-			return e
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var d dept
-			if e := rows.Scan(&d.ID, &d.Name); e != nil {
-				return e
-			}
-			items = append(items, d)
-		}
-		return rows.Err()
-	})
-	if err != nil {
-		a.logErr("读取部门失败", "err", err)
-		writeErr(w, r, http.StatusInternalServerError, "INTERNAL", "读取部门失败")
-		return
-	}
-	writeOK(w, r, map[string]any{"items": items, "count": len(items)})
-}
 
 // writeOwnsSpaces 返回 409 + 名下空间清单。
 //

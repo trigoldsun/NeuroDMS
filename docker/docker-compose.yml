@@ -151,8 +151,16 @@ services:
       DOCVAULT_CLAMAV_TIMEOUT: ${DOCVAULT_CLAMAV_TIMEOUT:-30}
       DOCVAULT_RATE_RPS: ${DOCVAULT_RATE_RPS:-50}
       DOCVAULT_RATE_BURST: ${DOCVAULT_RATE_BURST:-100}
+      # 外链兑换（/v1/public/shares/*）：防令牌枚举，保持最严
       DOCVAULT_PUBLIC_RATE_RPS: ${DOCVAULT_PUBLIC_RATE_RPS:-2}
       DOCVAULT_PUBLIC_RATE_BURST: ${DOCVAULT_PUBLIC_RATE_BURST:-10}
+      # 登录（口令 / 短信 / 二次验证 / 平台账号）：同一出口 IP 会多人同时登录，
+      # 真正的爆破防线是账号级锁定，这里只做第一层
+      DOCVAULT_LOGIN_RATE_RPS: ${DOCVAULT_LOGIN_RATE_RPS:-10}
+      DOCVAULT_LOGIN_RATE_BURST: ${DOCVAULT_LOGIN_RATE_BURST:-30}
+      # 外链票据（/v1/public/tickets/*）：已凭票据认证，按票据计数而非按 IP
+      DOCVAULT_TICKET_RATE_RPS: ${DOCVAULT_TICKET_RATE_RPS:-20}
+      DOCVAULT_TICKET_RATE_BURST: ${DOCVAULT_TICKET_RATE_BURST:-60}
     volumes:
       - ./data/blob:/data/blob
       - ./data/preview:/data/preview
@@ -161,7 +169,22 @@ services:
       - ./certs:/certs:ro
     ports:
       # 18090：避开其他项目占用的 8080 / 8081
+      # 只绑回环：公网入口只有 Cloudflare Tunnel，容器端口不对局域网开放
       - "127.0.0.1:18090:8080"
+    # ---- 容器最小权限（安全审查 2026-11-15）----
+    # no-new-privileges：即使进程内有 setuid 程序也无法提权
+    # cap_drop ALL：服务只需要普通文件与网络能力，不需要任何 Linux capability
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # 根文件系统只读 + 显式 tmpfs：服务本身不写根目录，
+    # 写操作全部落在挂载的数据卷与 tmpfs 里（减少镜像被篡改为后门的持久性）
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+      # RAW 预览的缓存目录（可再生：重启即清空，不占数据盘）
+      - /data/rawcache:size=1g,mode=0755
     depends_on:
       postgres:
         condition: service_healthy

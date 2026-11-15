@@ -37,7 +37,7 @@
     <h1>把每一步交到对的人手上</h1>
     <p class="subtitle">七个高频场景，每个场景讲清三件事：谁做、怎么做、什么情况下会被拦下来。</p>
     <div class="meta">
-      <span class="chip v">V1.1.0</span>
+      <span class="chip v">V1.8.0</span>
       <span class="chip">适用 <b>所有登录用户（含外部协作者）</b></span>
       <span class="chip">配套 <b>角色能力</b> · <b>管理员手册</b></span>
       <button class="chip" type="button" data-print style="cursor:pointer;font-family:inherit">打印 / 存为 PDF</button>
@@ -492,10 +492,22 @@
           <tr><td class="n"><b>4</b></td><td><span class="who admin">管理员</span></td><td>被拒后先去「空间台账」移交</td><td>移交完成再停用即可通过；不想移交就不能停用</td></tr>
           <tr><td class="n"><b>5</b></td><td><span class="who admin">管理员</span></td><td>只是账号被盗要立刻踢下线</td><td>用<b>重置口令</b>：立即吊销全部会话，但账号仍可登录，不会让空间失去负责人</td></tr>
           <tr><td class="n"><b>6</b></td><td><span class="who admin">管理员</span></td><td>停用立即生效、删除是软删除</td><td>令牌在 30 秒内失效；软删除保留 30 天，期间审计与回收站仍可追溯</td></tr>
-          <tr><td class="n"><b>6</b></td><td><span class="who user">用户</span></td><td>外部协作者默认强制二次验证</td><td>外部账号创建时 <code>mfa_required</code> 自动为真，收不到验证码则无法登录（fail-closed）</td></tr>
+          <tr><td class="n"><b>7</b></td><td><span class="who user">用户</span></td><td>外部协作者默认强制二次验证</td><td>外部账号创建时 <code>mfa_required</code> 自动为真，收不到验证码则无法登录（fail-closed）</td></tr>
+          <tr><td class="n"><b>8</b></td><td><span class="who user">用户</span></td><td>自己改口令：右上角账号菜单 →「修改口令」</td><td>先输<b>当前口令</b>，再输两遍新口令；两次不一致会当场提示，<b>不会提交</b></td></tr>
+          <tr><td class="n"><b>9</b></td><td><span class="who user">用户</span></td><td>口令一律以 <code>*</code> 显示，没有"看一眼"按钮</td><td>防截屏 / 录屏 / 肩窥。看不清就重输一遍，不要写在便签上</td></tr>
+          <tr><td class="n"><b>10</b></td><td><span class="who user">用户</span></td><td>新口令至少 <b>8 位字符</b></td><td>中文与空格都算一个字符。改完所有设备（含当前窗口）立即下线，需用新口令重新登录</td></tr>
+          <tr><td class="n"><b>11</b></td><td><span class="who admin">系统管理员</span></td><td>先建部门再放人：管理台 → 部门，可新建 / 改名 / 移动（整棵子树跟着走）/ 删除</td><td>部门是授权载体，按部门共享时命中整棵子树。有成员或子部门时不能删，提示会告诉你有几个人</td></tr>
+          <tr><td class="n"><b>12</b></td><td><span class="who admin">系统管理员</span></td><td>给同事建号、改号时，<b>密级最多设到你自己那一级</b></td><td>超过会被服务端拒绝（<code>CEILING_EXCEEDED</code>）。管理员也不能提升自己的密级；需要更高密级的账号，由同级或更高密级的管理员创建</td></tr>
         </tbody>
       </table>
     </div>
+
+    <p><b>忘记口令怎么办</b>：本系统不提供自助找回——能自助重置就意味着"拿到邮箱的人就能接管账号"。按这个顺序处理：</p>
+    <ol>
+      <li>还记得当前口令 → 用「修改口令」自己改（最快）；</li>
+      <li>忘了 → 找管理员在「成员与角色」点「重置口令」，<b>当面或电话</b>拿到新口令，登录后立刻改成自己的；</li>
+      <li>手机号已验证 → 用「手机号 + 验证码」登录（需组织已开通短信登录），登录后再改口令。</li>
+    </ol>
 
     <h3 id="s7-transfer">7.2 空间移交：谁能发起、怎么生效</h3>
 
@@ -565,7 +577,7 @@
 
 <footer class="foot">
   <span>NeuroDMS · 用户手册 · 场景操作 V1.1.0</span>
-  <span>网页版 v1.6.0 · 源文件 docs/29-用户手册-场景操作-v1.3.5.md</span>
+  <span>网页版 v1.8.0 · 源文件 docs/29-用户手册-场景操作-v1.8.0.md</span>
 </footer>
 
 <button class="totop" type="button" aria-label="回到顶部">

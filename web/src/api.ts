@@ -21,6 +21,9 @@ export function setTokens(access: string, refresh: string) {
 export function clearTokens() {
   localStorage.removeItem(ACCESS_KEY)
   localStorage.removeItem(REFRESH_KEY)
+  // 登录态没了，站点图标必须回到产品图标（见 branding.ts 的适用范围）。
+  // 用事件而不是直接 import branding：api 处于最底层，不该反向依赖 UI 模块。
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('dv-auth-lost'))
 }
 
 async function parse(resp: Response): Promise<unknown> {
@@ -134,7 +137,9 @@ export type Capabilities = {
   folderUploadAllowed: boolean
   // 短信登录是否具备开通条件（档位 + 通道）；与 capabilities.smsLogin（当前生效值）区分
   smsLoginAllowed: boolean
-  classificationLevels: number[] | null
+  // 该租户此刻可写的密级集合。
+  // 空数组 = 没有密级功能（基础版且未加购）；服务端保证列表字段永不为 null。
+  classificationLevels: number[]
   limits: {
     versionKeep: number
     maxUploadMB: number
@@ -562,6 +567,12 @@ export async function logout(): Promise<void> {
   }
 }
 
+// 修改自己的口令。成功后服务端会吊销全部会话（含当前这条），
+// 所以调用方拿到成功响应后必须清令牌并回到登录页。
+export function changePassword(oldPassword: string, newPassword: string): Promise<{ changed: boolean }> {
+  return postJSON('/v1/auth/password/change', { oldPassword, newPassword })
+}
+
 export type HandoverCandidate = { id: string; username: string; displayName: string }
 
 export type HandoverSummary = {
@@ -592,6 +603,208 @@ export type SelfDeleteResult = {
 
 export function deleteAccount(successorId: string, confirm: string): Promise<SelfDeleteResult> {
   return postJSON<SelfDeleteResult>('/v1/me/account/delete', { successorId, confirm })
+}
+
+// ---------------- 本地版许可证 ----------------
+
+export type LicenseStatus = {
+  enabled: boolean
+  present: boolean
+  valid: boolean
+  reason: string
+  // 客户申请许可证时要把这个发给厂商，所以要显示出来
+  instanceId: string
+  licenseId?: string
+  customer?: string
+  edition?: string
+  capabilities?: string[]
+  seats?: number
+  expiresAt?: string
+  appliedAt?: string
+}
+
+export function getLicenseStatus(): Promise<LicenseStatus> {
+  return api('/v1/admin/license')
+}
+
+export function applyLicense(lic: string): Promise<{
+  applied: boolean
+  licenseId: string
+  customer: string
+  edition: string
+}> {
+  return postJSON('/v1/admin/license', { license: lic })
+}
+
+// ---------------- 自定义域名与证书 ----------------
+
+export type DomainItem = {
+  host: string
+  primary: boolean
+  verified: boolean
+  hasCert: boolean
+  certNotAfter?: string
+  certSource?: 'manual' | 'acme' | ''
+  acmePending?: boolean
+  acmeError?: string
+  token?: string
+  createdAt: string
+}
+
+export type AcmeStatus = {
+  mode: 'off' | 'http01' | 'dns01'
+  enabled: boolean
+  available: boolean
+  reason: string
+  directoryUrl: string
+  challengeAt?: string
+  staging: boolean
+}
+
+export type DnsRecord = { host: string; type: string; name: string; value: string; note: string }
+
+export function listDomains(): Promise<{ items: DomainItem[]; count: number; acme?: AcmeStatus }> {
+  return api('/v1/admin/domains')
+}
+
+export function addDomain(host: string, primary: boolean): Promise<{
+  host: string
+  verified: boolean
+  dns: { type: string; name: string; value: string }
+}> {
+  return postJSON('/v1/admin/domains', { host, primary })
+}
+
+export function deleteDomain(host: string): Promise<unknown> {
+  return del(`/v1/admin/domains/${encodeURIComponent(host)}`)
+}
+
+export function verifyDomain(host: string): Promise<{ host: string; verified: boolean }> {
+  return postJSON(`/v1/admin/domains/${encodeURIComponent(host)}/verify`, {})
+}
+
+export function uploadDomainCert(
+  host: string, certPem: string, keyPem: string,
+): Promise<{ notAfter: string; fingerprint: string; domains: string[] }> {
+  return api(`/v1/admin/domains/${encodeURIComponent(host)}/certificate`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ certPem, keyPem }),
+  })
+}
+
+export function deleteDomainCert(host: string): Promise<unknown> {
+  return del(`/v1/admin/domains/${encodeURIComponent(host)}/certificate`)
+}
+
+// issueCertificate 按服务端当前模式行事：http01 直接签发；
+// dns01 返回要添加的 TXT 记录（issued=false）。
+export function issueCertificate(host: string): Promise<{
+  issued: boolean
+  mode: string
+  dns?: DnsRecord
+}> {
+  return postJSON(`/v1/admin/domains/${encodeURIComponent(host)}/acme`, {})
+}
+
+export function finishCertificate(host: string): Promise<{ issued: boolean }> {
+  return postJSON(`/v1/admin/domains/${encodeURIComponent(host)}/acme/finish`, {})
+}
+
+// ---------------- 凭证中心（集成与凭证）----------------
+
+export type IntegrationField = {
+  key: string
+  label: string
+  secret: boolean
+  required: boolean
+  placeholder?: string
+  help?: string
+}
+
+export type IntegrationProvider = {
+  kind: string
+  code: string
+  name: string
+  docsUrl?: string
+  mode?: string
+  fields: IntegrationField[]
+  notes?: string[]
+}
+
+export type IntegrationKind = {
+  kind: string
+  name: string
+  description: string
+  status: 'available' | 'external' | 'planned'
+  pagePath?: string
+}
+
+export type IntegrationSettings = {
+  kind: string
+  provider: string
+  config: Record<string, string>
+  active: boolean
+  status: string
+  hasSecret: Record<string, boolean>
+  lastTestAt?: string
+  lastTestOk?: boolean
+  lastTestError?: string
+  lastTestCode?: string
+  updatedAt?: string
+  updatedBy?: string
+}
+
+export type IntegrationTestResult = {
+  ok: boolean
+  code: string
+  message: string
+  hint: string
+  at: string
+}
+
+export function getIntegrationKinds(): Promise<{ items: IntegrationKind[]; count: number }> {
+  return api('/v1/admin/integrations/kinds')
+}
+
+export function getIntegrationProviders(kind: string): Promise<{
+  items: IntegrationProvider[]
+  status: string
+  secretAvailable: boolean
+}> {
+  return api(`/v1/admin/integrations/${encodeURIComponent(kind)}/providers`)
+}
+
+export function listIntegrations(kind: string): Promise<{
+  items: IntegrationSettings[]
+  providers: IntegrationProvider[]
+  secretAvailable: boolean
+}> {
+  return api(`/v1/admin/integrations?kind=${encodeURIComponent(kind)}`)
+}
+
+export function saveIntegration(
+  kind: string,
+  provider: string,
+  body: { config: Record<string, string>; secrets: Record<string, string>; active?: boolean },
+): Promise<{ settings: IntegrationSettings; changed: boolean }> {
+  return api(`/v1/admin/integrations/${encodeURIComponent(kind)}/${encodeURIComponent(provider)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export function testIntegration(kind: string, provider: string): Promise<IntegrationTestResult> {
+  return postJSON(`/v1/admin/integrations/${encodeURIComponent(kind)}/${encodeURIComponent(provider)}/test`, {})
+}
+
+export function activateIntegration(kind: string, provider: string): Promise<unknown> {
+  return postJSON(`/v1/admin/integrations/${encodeURIComponent(kind)}/${encodeURIComponent(provider)}/activate`, {})
+}
+
+export function deleteIntegration(kind: string, provider: string): Promise<unknown> {
+  return del(`/v1/admin/integrations/${encodeURIComponent(kind)}/${encodeURIComponent(provider)}`)
 }
 
 // ---------------- 操作日志（我的活动 / 管理日志）----------------
@@ -818,7 +1031,16 @@ export function getBranding(): Promise<BrandingInfo> {
   return api<BrandingInfo>('/v1/admin/branding')
 }
 
-export function saveBranding(b: Pick<BrandingInfo, 'productName' | 'primaryColor' | 'accentColor' | 'footerText' | 'privacyUrl'>): Promise<BrandingInfo> {
+// 图标三态：
+//   不传 logoBase64 也不传 removeLogo → **保留原图标**（只改名称时走这条）
+//   logoBase64 + logoMime             → 替换
+//   removeLogo: true                  → 移除
+// 早期后端用 EXCLUDED.logo 直接覆盖，导致"只改名称"会把图标清空（已修）。
+export type BrandingPatch =
+  Pick<BrandingInfo, 'productName' | 'primaryColor' | 'accentColor' | 'footerText' | 'privacyUrl'>
+  & { logoBase64?: string; logoMime?: string; removeLogo?: boolean }
+
+export function saveBranding(b: BrandingPatch): Promise<BrandingInfo> {
   return api<BrandingInfo>('/v1/admin/branding', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },

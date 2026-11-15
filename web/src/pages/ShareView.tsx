@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Icon, Mark } from '../components/ui'
+import { applyProductFavicon } from '../branding'
 import PdfCanvasViewer from '../components/PdfCanvasViewer'
 
 // 对外分享页：免登录。
@@ -16,6 +17,9 @@ type ShareInfo = {
   allowSave: boolean
   allowPrint: boolean
   productName?: string
+  // 租户上传的品牌图标；公开接口下发，未登录也能取
+  logoUrl?: string
+  logoMime?: string
   watermark: boolean
   oneTime: boolean
   ticket: string
@@ -99,6 +103,10 @@ export default function ShareView({ token }: { token: string }) {
   // 否则两条路径迟早会漂移成"验证过的那个才能看到目录"。
   const openWith = useCallback(async (data: ShareInfo) => {
     setInfo(data)
+    // 分享页面向未登录的访客：浏览器标签页固定产品图标，不显示租户图标。
+    // 页眉仍用租户图标（内容品牌），但"窗口身份"保持厂商——否则访客会以为
+    // 自己已经进了对方的系统，也给仿冒页面留下可乘之机。
+    applyProductFavicon()
 
     const tResp = await fetch(`/v1/public/tickets/${encodeURIComponent(data.ticket)}`)
     if (tResp.ok) {
@@ -126,9 +134,11 @@ export default function ShareView({ token }: { token: string }) {
       const code = body?.code as string | undefined
 
       if (resp.status === 410) return setPhase('gone')
-      if (resp.status === 411 || code === 'PASSWORD_REQUIRED') return setPhase('password')
-      // 428 = 口令已通过，但该链接还要求邮箱验证（服务端强制，不是前端能跳过的）
-      if (resp.status === 428 || code === 'VERIFY_REQUIRED') return setPhase('verify')
+      // 428 是当前状态码（需要前置条件）；411 兼容旧服务端的响应
+      if (code === 'PASSWORD_REQUIRED' || resp.status === 428 || resp.status === 411) return setPhase('password')
+      // 邮箱验证：428 现在两个关卡共用（口令 / 验证），**必须按 code 判断**，
+      // 只看状态码会把"要口令"误认成"要验证码"。
+      if (code === 'VERIFY_REQUIRED') return setPhase('verify')
       if (resp.status === 403 && code === 'PASSWORD_WRONG') {
         setMsg('口令不正确')
         return setPhase('wrong-password')
@@ -175,7 +185,7 @@ export default function ShareView({ token }: { token: string }) {
     setMsg('')
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      // 口令与验证是两道独立关卡：验证请求也要带上口令，否则服务端仍会 411
+      // 口令与验证是两道独立关卡：验证请求也要带上口令，否则服务端会回 428 PASSWORD_REQUIRED
       if (password) headers['X-Share-Password'] = password
       const resp = await fetch(`/v1/public/shares/${encodeURIComponent(token)}/verify/confirm`, {
         method: 'POST',
@@ -183,7 +193,7 @@ export default function ShareView({ token }: { token: string }) {
         body: JSON.stringify({ email, code }),
       })
       const body = await resp.json().catch(() => ({}))
-      if (resp.status === 411 || body?.code === 'PASSWORD_REQUIRED') return setPhase('password')
+      if (body?.code === 'PASSWORD_REQUIRED' || resp.status === 428 || resp.status === 411) return setPhase('password')
       if (!resp.ok) {
         setMsg(body?.message ?? '验证码不正确或已失效')
         return
@@ -413,7 +423,10 @@ export default function ShareView({ token }: { token: string }) {
   return (
     <div className="share-wrap">
       <header className="share-head">
-        <Mark size={26} />
+        {info?.logoUrl
+          ? <img src={info.logoUrl} alt="" width={26} height={26}
+            style={{ width: 26, height: 26, flex: '0 0 26px', objectFit: 'contain' }} />
+          : <Mark size={26} />}
         <div>
           <b>{info?.productName || 'NeuroDMS'}</b>
           <span>安全分享</span>

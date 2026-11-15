@@ -2,7 +2,6 @@ package directory
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"sort"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"docvault/internal/db"
+	"docvault/internal/dept"
 	"docvault/internal/phone"
 
 	"github.com/jackc/pgx/v5"
@@ -412,7 +412,7 @@ func ensureDeptChain(ctx context.Context, tx pgx.Tx, tenantID string, chain []De
 			return "", err
 		}
 
-		label := ltreeLabel(name)
+		label := dept.LTLabel(name)
 		fullPath := label
 		if parentPath != "" {
 			fullPath = parentPath + "." + label
@@ -434,28 +434,6 @@ func ensureDeptChain(ctx context.Context, tx pgx.Tx, tenantID string, chain []De
 		return "", errors.New("部门链为空")
 	}
 	return lastID, nil
-}
-
-// ltreeLabel 把部门名转成合法的 ltree 标签。
-//
-// ltree 只接受字母数字下划线，中文与 & 号都得替换；替换后可能撞名，
-// 因此追加名称哈希的后 8 位十六进制保证同父下唯一。
-func ltreeLabel(name string) string {
-	var b strings.Builder
-	for _, r := range name {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
-			b.WriteRune(r)
-		default:
-			b.WriteByte('_')
-		}
-	}
-	label := b.String()
-	if len(label) > 40 {
-		label = label[:40]
-	}
-	sum := sha256.Sum256([]byte(name))
-	return fmt.Sprintf("%s_%x", label, sum[:4])
 }
 
 // upsertUser 按外部标识插入或更新。

@@ -48,9 +48,11 @@ var (
 )
 
 // SMSProvider 是认证服务需要的短信能力（由 internal/sms 实现）。
+// tenantID 必须传入：短信通道现在是**每租户一份**（客户可自带厂商账号），
+// 不带租户就不知道该用哪套签名与模板——早期只有平台环境变量时不需要这个参数。
 type SMSProvider interface {
-	Send(ctx context.Context, phone string) error
-	Check(ctx context.Context, phone, code string) (bool, error)
+	Send(ctx context.Context, tenantID, phone string) error
+	Check(ctx context.Context, tenantID, phone, code string) (bool, error)
 }
 
 // SetSMS 注入短信通道。未注入时短信登录一律拒绝（fail-closed）。
@@ -284,7 +286,7 @@ func (s *Service) RequestPhoneChange(ctx context.Context, tenantID, userID, newP
 		return "", ErrPhoneTaken
 	}
 
-	if err := s.sms.Send(ctx, phone); err != nil {
+	if err := s.sms.Send(ctx, tenantID, phone); err != nil {
 		return "", mapSMSError(err)
 	}
 	return MaskPhone(phone), nil
@@ -299,7 +301,7 @@ func (s *Service) ConfirmPhoneChange(ctx context.Context, tenantID, userID, newP
 	if s.sms == nil {
 		return "", ErrSMSNotConfigured
 	}
-	ok, err := s.sms.Check(ctx, phone, strings.TrimSpace(code))
+	ok, err := s.sms.Check(ctx, tenantID, phone, strings.TrimSpace(code))
 	if err != nil {
 		return "", mapSMSError(err)
 	}

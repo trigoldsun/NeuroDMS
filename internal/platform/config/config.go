@@ -73,11 +73,25 @@ type Config struct {
 	ClamAVTimeout int // 秒
 
 	// 限流阈值（按客户端 IP 计数，进程内）。
-	// 公开端点（登录/开放链接）单独一档：它们是暴力破解与枚举的首选入口。
+	//
+	// 分四档，而不是"公开/业务"两档：登录、外链兑换、票据三种流量的风险
+	// 与正常并发量完全不同，塞进同一个桶会互相误伤（E2E 验收 F-06）：
+	//
+	//	业务（其余 /v1/*）        50 rps / burst 100
+	//	登录（租户 + 平台）        10 rps / burst 30   ← 同一出口 IP 的多人在上班高峰同时登录
+	//	外链兑换（/public/shares）  2 rps / burst 10   ← 防令牌枚举，必须最严
+	//	票据（/public/tickets）    20 rps / burst 60   ← 已凭票据认证，一屏要连发多个请求
+	//
+	// 登录之所以能放宽：账号级锁定（failed_attempts + locked_until）才是
+	// 爆破防线，IP 限流只是第一层；把 IP 桶做得太严，受害的是"同一个公司出口 IP"。
 	RateRPS         float64
 	RateBurst       int
 	PublicRateRPS   float64
 	PublicRateBurst int
+	LoginRateRPS    float64
+	LoginRateBurst  int
+	TicketRateRPS   float64
+	TicketRateBurst int
 
 	// PlatformToken 是平台运营跨租户只读访问的独立令牌。
 	//
@@ -140,6 +154,31 @@ type Config struct {
 	// SMSMock 仅用于本地开发与自动化测试：不联网、固定验证码。
 	// 生产模式（DOCVAULT_MODE=production）下启用会拒绝启动。
 	SMSMock bool
+
+	// LicensePublicKey 是许可证验签公钥（base64 编码的 32 字节 Ed25519）。
+	// 为空表示本实例是云端版，不接受许可证——这时界面只显示"云端版无需许可证"。
+	// 私钥绝不在这里：它只存在于厂商侧的离线签发工具里（cmd/licensegen）。
+	LicensePublicKey string
+
+	// ---- 自动签发证书（ACME，docs/47 §4.6）----
+	//
+	// 只有"域名直指本机、80/443 可达"的部署能自动签发。走 Cloudflare Tunnel
+	// 或反向代理终止 TLS 的部署必须保持 off——挑战请求到不了本进程。
+	// off 时界面会说明"证书应由边缘托管"，而不是留一个点了必失败的按钮。
+	ACMEMode  string // off | http01 | dns01
+	ACMEEmail string
+	// ACMEDirectoryURL 为空用 Let's Encrypt 生产环境；联调请用 staging，
+	// 否则反复失败会吃掉生产配额（同一域名每周 5 次失败上限）。
+	ACMEDirectoryURL string
+	// ACMEHTTPAddr 是 HTTP-01 挑战端口，默认 :80。
+	ACMEHTTPAddr string
+	// TLSListen 非空时额外起一个 HTTPS 监听（如 :443），
+	// 证书按 SNI 从 tenant_domain 取；证书由客户上传或自动签发。
+	// 走隧道/反代的部署保持为空。
+	TLSListen string
+	// TLSFallbackCert/Key 是没有匹配到租户域名时使用的默认证书。
+	TLSFallbackCert string
+	TLSFallbackKey  string
 
 	// ---- 通知通道（二选一或都配，都配时 SMTP 为主、Graph 为备）----
 	SMTPHost     string
@@ -246,6 +285,10 @@ func Load(getenv Getenv) (Config, error) {
 		RateBurst:       atoiDefault(getenv("DOCVAULT_RATE_BURST"), 100),
 		PublicRateRPS:   rateDefault(getenv("DOCVAULT_PUBLIC_RATE_RPS"), 2),
 		PublicRateBurst: atoiDefault(getenv("DOCVAULT_PUBLIC_RATE_BURST"), 10),
+		LoginRateRPS:    rateDefault(getenv("DOCVAULT_LOGIN_RATE_RPS"), 10),
+		LoginRateBurst:  atoiDefault(getenv("DOCVAULT_LOGIN_RATE_BURST"), 30),
+		TicketRateRPS:   rateDefault(getenv("DOCVAULT_TICKET_RATE_RPS"), 20),
+		TicketRateBurst: atoiDefault(getenv("DOCVAULT_TICKET_RATE_BURST"), 60),
 
 		// 目录（LDAP / AD）
 		LDAPURL:             strings.TrimSpace(getenv("DOCVAULT_LDAP_URL")),
@@ -270,6 +313,18 @@ func Load(getenv Getenv) (Config, error) {
 		SMSTemplateCode:    strings.TrimSpace(getenv("DOCVAULT_SMS_TEMPLATE_CODE")),
 		SMSSchemeName:      strings.TrimSpace(getenv("DOCVAULT_SMS_SCHEME_NAME")),
 		SMSMock:            strings.TrimSpace(getenv("DOCVAULT_SMS_MOCK")) == "1",
+
+		// 许可证验签公钥
+		LicensePublicKey: strings.TrimSpace(getenv("DOCVAULT_LICENSE_PUBKEY")),
+
+		// 自动签发证书
+		ACMEMode:         strings.TrimSpace(getenv("DOCVAULT_ACME_MODE")),
+		ACMEEmail:        strings.TrimSpace(getenv("DOCVAULT_ACME_EMAIL")),
+		ACMEDirectoryURL: strings.TrimSpace(getenv("DOCVAULT_ACME_DIRECTORY")),
+		ACMEHTTPAddr:     strings.TrimSpace(getenv("DOCVAULT_ACME_HTTP_ADDR")),
+		TLSListen:        strings.TrimSpace(getenv("DOCVAULT_TLS_LISTEN")),
+		TLSFallbackCert:  strings.TrimSpace(getenv("DOCVAULT_TLS_CERT")),
+		TLSFallbackKey:   strings.TrimSpace(getenv("DOCVAULT_TLS_KEY")),
 
 		// 通知通道
 		SMTPHost:     strings.TrimSpace(getenv("DOCVAULT_SMTP_HOST")),

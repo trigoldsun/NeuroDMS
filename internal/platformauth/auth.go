@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"docvault/internal/auth"
+	pwpolicy "docvault/internal/password"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -214,8 +215,8 @@ func (s *Service) Bootstrap(ctx context.Context, email, password, display string
 	if n > 0 {
 		return false, nil
 	}
-	if len([]rune(password)) < 12 {
-		return false, fmt.Errorf("平台账号口令至少 12 位")
+	if pwpolicy.TooShort(password) {
+		return false, fmt.Errorf("平台账号口令至少 %d 位", pwpolicy.MinLength)
 	}
 	hash, err := auth.HashPassword(password)
 	if err != nil {
@@ -368,8 +369,8 @@ func (s *Service) CreateUser(ctx context.Context, email, display, role, password
 	default:
 		return User{}, ErrInvalidRole
 	}
-	if len([]rune(password)) < 12 {
-		return User{}, fmt.Errorf("%w: 初始口令至少 12 位", ErrInvalidInput)
+	if pwpolicy.TooShort(password) {
+		return User{}, fmt.Errorf("%w: 初始口令至少 %d 位", ErrInvalidInput, pwpolicy.MinLength)
 	}
 	if display == "" {
 		display = email
@@ -462,8 +463,8 @@ func (s *Service) SetUserStatus(ctx context.Context, actorID, userID, status str
 
 // ResetUserPassword 重置平台账号口令，并吊销其全部会话。
 func (s *Service) ResetUserPassword(ctx context.Context, userID, newPassword string) error {
-	if len([]rune(newPassword)) < 12 {
-		return fmt.Errorf("%w: 新口令至少 12 位", ErrInvalidInput)
+	if pwpolicy.TooShort(newPassword) {
+		return fmt.Errorf("%w: 新口令至少 %d 位", ErrInvalidInput, pwpolicy.MinLength)
 	}
 	hash, err := auth.HashPassword(newPassword)
 	if err != nil {

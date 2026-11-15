@@ -37,14 +37,15 @@
     <h1>只写会被系统真正读取的参数</h1>
     <p class="subtitle">界面上存在但不生效的开关，一律不写——那属于缺陷，不是功能。这份手册按"改完会发生什么"来组织。</p>
     <div class="meta">
-      <span class="chip v">V1.2.0</span>
+      <span class="chip v">V1.8.0</span>
       <span class="chip">适用 <b>系统 / 安全 / 审计管理员 · 实施与运维</b></span>
       <span class="chip">管理台 <b><code>/admin/{tab}</code></b></span>
       <button class="chip" type="button" data-print style="cursor:pointer;font-family:inherit">打印 / 存为 PDF</button>
     </div>
 
     <div class="note">
-      <p><b>修订记录</b>　V1.0.0 首版；V1.1.0 新增 §9.1 三级开关求值（放量 0% 与总开关开启的组合此前在界面上显示为"已开启"，导致运营无法解释"功能全部不可用"）；V1.2.0 重写 §6 外发审批，补上管理台入口、审批人三条件、单人空间的死链风险；V1.3.0 新增 §6 空间台账与所有权移交（停用/删除前的强制校验、三种移交组合、管理员转自己需确认），外发审批补 /approvals 独立入口。</p>
+      <p><b>版本说明</b>：手册版本自 <b>V1.3.2</b> 起与产品版本一致（当前 V1.8.0）；下列"V1.10.0–V1.13.0"为手册自身编号的历史记录，仅用于追溯。　</p>
+      <p><b>修订记录</b>　<b>V1.8.0 新增 §2.1 部门树（手工建/改名/移动/删除，六条护栏）、接口层约定（列表永不为 null、口令关卡 428）</b>；<b>V1.7.1 §3.8 图标适用范围：登录页与分享页固定产品图标，仅登录后站内跟随租户，失效即回退</b>；<b>V1.7.0 新增 §10.4 调整系统管理员密级（运营台租户详情；受档位约束、只限管理员、平台与租户两侧审计）</b>；V1.0.0 首版；V1.1.0 新增 §9.1 三级开关求值（放量 0% 与总开关开启的组合此前在界面上显示为"已开启"，导致运营无法解释"功能全部不可用"）；V1.2.0 重写 §6 外发审批，补上管理台入口、审批人三条件、单人空间的死链风险；<b>V1.6.0 §4.1 管理员自身密级决定能建多高的账号（口令重置同规则、不能自提密级、开通即给档位最高值）</b>；<b>V1.5.1 §11.7 部署加固基线（容器最小权限与只读根、HSTS、探测路径 404）</b>；<b>V1.5.0 §4.1 档位决定密级可选范围（成员与文件同规则）、§5.1 AD 降档即停用、降档校验含成员</b>；<b>V1.4.4 §11.6 唯一管理员口令丢失的运维通道（tenantpass）、§10.0 交付清单当场记口令</b>；<b>V1.4.3 §10.0 开通租户交付清单（首个管理员）、弹窗提交按钮固定</b>；<b>V1.4.2 浏览器标签页图标跟随系统图标、分享页页眉图标修复</b>；<b>V1.4.1 §3.8 新增系统图标上传</b>；V1.4.0 运营台改为桌面后台布局、新增 §10.3 租户详情；V1.13.0 新增 §10.1 能力授权（单租户加购/收回）；V1.12.1 补短信模板变量与自动签发限流；V1.12.0 新增 §3.13 域名与证书、§3.14 许可证；V1.11.0 新增 §3.12 短信通道（集成与凭证）；V1.10.0 新增 §3.11 口令规则与二次输入（8 位、掩码、两次一致）；V1.3.0 新增 §6 空间台账与所有权移交（停用/删除前的强制校验、三种移交组合、管理员转自己需确认），外发审批补 /approvals 独立入口。</p>
     </div>
 
     <h2 id="roles" data-nav="1 · 三个管理角色的边界"><span class="num">1</span>开始之前：三个管理角色的边界</h2>
@@ -97,6 +98,29 @@
     </div>
 
     <div class="warn">
+      <h3 id="depts" data-nav="2.1 部门树">2.1 部门树</h3>
+      <p><b>入口</b>：管理台 → 部门。</p>
+      <p>部门不只是"成员的一个属性"，它同时是<b>授权的载体</b>：在文件或空间的「共享」里可以按部门授权，命中范围是<b>整棵子树</b>。所以"组织架构建对了，权限就少配一半"。</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>操作</th><th>规则</th></tr></thead>
+          <tbody>
+            <tr><td class="nowrap">新建</td><td>选上级部门；同级<b>不能重名</b>（不区分大小写）。顶层部门随开通自动创建（「总部」）</td></tr>
+            <tr><td class="nowrap">改名</td><td>只改显示名，<b>路径不变</b>；已授出的权限继续有效</td></tr>
+            <tr><td class="nowrap">移动</td><td>连同<b>整棵子树</b>一起走；不能移动到自己的下级（会成环，直接拒绝）</td></tr>
+            <tr><td class="nowrap">删除</td><td>有子部门、成员或空间时<b>不允许删除</b>，提示里给出数量；根部门不能删</td></tr>
+            <tr><td class="nowrap">目录同步来的部门</td><td>标有「目录」，界面不提供改名/移动/删除——请在 AD / LDAP 里改</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note"><p><b>为什么删除不级联</b>：级联删除会把"某些人的部门"悄悄改掉，事后没人说得清是谁动的手。系统宁可拒绝，让你先把人挪走再删。</p></div>
+      <p><b>两个常见场景</b>：</p>
+      <ul>
+        <li>只想给某个组看一份文件 → 先建「财务部」并把 3 个人放进去，然后在文件共享里授给「财务部」，以后来新人只要入到该部门就自动能看到；</li>
+        <li>公司调整组织架构 → 直接把「研发部」移到别的部门下，子树里的成员与已授权限一起跟着走，不需要逐个重配。</li>
+      </ul>
+      <div class="warn"><p><b>目录同步与手工建部门共存</b>：两者共用一棵树。手工建的部门可以移动到同步来的部门下；但如果 AD 里改了该部门的层级，下次同步会以目录为准。审计会记录每次建/改/移/删（<code>admin.dept.*</code>，含改前改后）。</p></div>
+
       <p><b>外部协作者</b>：创建时 <code>mfa_required</code> 自动为真，必须有可用邮箱，否则登不上（fail-closed）。</p>
     </div>
 
@@ -240,6 +264,7 @@ UPDATE tenant SET share_approval_min_class = 3 WHERE slug = 'demo';
       <table>
         <thead><tr><th>字段</th><th>作用</th><th>限制</th></tr></thead>
         <tbody>
+          <tr><td><b>系统图标</b></td><td>登录后左上角（30px）、登录页（30px）、分享页页眉（26px）、<b>浏览器标签页 / 收藏夹 / 手机桌面</b></td><td>PNG / JPEG / WebP / SVG；≤ 256KB；建议 128×128，范围 16×16 ~ 4096×4096</td></tr>
           <tr><td>系统名称</td><td>外发邮件<b>主题</b>【xxxx】、发件人显示名【xxxx文档管理系统】、分享页页眉</td><td>20 字以内，不能为空</td></tr>
           <tr><td>主色 / 辅色</td><td>登录页与分享页的主色调</td><td><code>#rrggbb</code></td></tr>
           <tr><td>页脚文案</td><td>登录页与分享页底部</td><td>200 字以内</td></tr>
@@ -247,6 +272,52 @@ UPDATE tenant SET share_approval_min_class = 3 WHERE slug = 'demo';
       </table>
     </div>
     <div class="note"><p>改完<b>立即生效、无需重启</b>；已经发出的邮件不会追改。名称是<b>租户级</b>的：同一实例里 A 租户的收件人看到【甲公司】，B 租户看到【乙公司】。名称里不要带方括号——主题与显示名会自动加【】。</p></div>
+
+    <p><b>上传图标</b>：点「选择图片」→ 选好后立刻能看到<b>读到的真实尺寸与体积</b>（例如 <code>128×128 · 48 KB</code>），确认无误再点「保存名称与品牌」。</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>项</th><th>要求</th></tr></thead>
+        <tbody>
+          <tr><td class="nowrap">格式</td><td><b>PNG / JPEG / WebP / SVG</b>（有透明背景请用 PNG 或 SVG）</td></tr>
+          <tr><td class="nowrap">分辨率</td><td><b>正方形，建议 128×128 或更大</b>；最小 16×16，最大 4096×4096</td></tr>
+          <tr><td class="nowrap">体积</td><td>不超过 <b>256KB</b></td></tr>
+          <tr><td class="nowrap">安全</td><td>SVG 里不能含脚本或事件属性（会渲染到未登录的登录页，出于安全直接拒绝）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <ul>
+      <li>图标<b>不要自带大片白底</b>：侧栏是纸绿底、登录页是深绿底，白底图标会显得突兀；透明背景的 PNG/SVG 效果最好。</li>
+      <li>图标会同时出现在<b>登录页与分享页</b>，外部访客也能看到，请确认可以用作品牌标识。</li>
+      <li>移除图标后立即回退为系统内置图形，不会留空。</li>
+      <li><b>只改名称不会影响已上传的图标</b>；更换与移除分别记 <code>logoChanged</code> / <code>logoRemoved</code> 进审计。</li>
+    </ul>
+
+    <h4>浏览器标签页图标（favicon）</h4>
+    <p>同一个图标会自动用作<b>浏览器标签页、收藏夹、手机「添加到主屏幕」</b>的图标，不用单独上传，也没有额外开关。</p>
+    <p><b>哪里用租户图标、哪里用产品图标（V1.7.2 起明确）</b></p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>场景</th><th>标签页图标</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td class="nowrap">登录页 <code>/login</code></td><td><b>产品图标（固定）</b></td><td>面向"还没证明身份"的人；这里挂客户标识会让人以为已经进了系统</td></tr>
+          <tr><td class="nowrap">登录后站内页面</td><td><b>当前租户图标</b></td><td>侧栏、文件页、管理台等全部一致</td></tr>
+          <tr><td class="nowrap">外部分享页 <code>/s/{token}</code></td><td><b>产品图标（固定）</b></td><td>访客未登录；页眉仍显示租户图标（那是内容品牌）</td></tr>
+          <tr><td class="nowrap">平台运营控制台 <code>/platform</code></td><td><b>产品图标（固定）</b></td><td>平台侧不跟随任何租户品牌</td></tr>
+          <tr><td class="nowrap">登录态失效 / 主动退出</td><td>立即回退<b>产品图标</b></td><td>不等页面跳转，标签页不会停在客户图标上</td></tr>
+          <tr><td class="nowrap">未上传图标 / 读取失败</td><td>回退<b>产品图标</b></td><td>深绿底 + 白色 N</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note"><p>一句话：<b>标签页图标表示"我现在是谁的会话"</b>——没有有效会话时，只能显示产品本身。同一台电脑先后登录两家组织时图标会跟着换；多个标签页分别登录不同组织时，各标签页显示各自的图标（图标属于页面）。</p></div>
+
+    <div class="note"><p><b>边界</b>：浏览器的标签页图标缓存比普通页面顽固得多。Chrome 把图标存在自己的数据库里，换图后<b>已经打开的老标签页</b>可能仍显示旧图，清空站点缓存也未必立刻更新——刷新页面或关掉标签页重开通常就好。这是浏览器行为，不是配置没生效；验证请新开一个标签页或用无痕窗口。</p></div>
+    <ul>
+      <li>没上传图标时，标签页用系统内置图形（深绿底 + 白色 N）。</li>
+      <li>手机主屏图标只认 <b>PNG</b>：用 JPEG / WebP / SVG 时主屏回落为系统内置图标。</li>
+      <li>平台运营控制台（<code>/platform</code>）固定用系统内置图标，不跟随租户品牌。</li>
+    </ul>
 
     <h3 id="p-folder" data-nav="3.9 文件夹上传（增值功能）">3.9 文件夹上传（增值功能）</h3>
     <p>入口：管理台 → 系统设置 → <b>上传与协作</b> → 「文件夹上传」。</p>
@@ -341,6 +412,120 @@ go run ./cmd/smscheck</code></pre>
 
     <p><b>直线上级与职位</b>：从认证源自动同步（<code>title</code> / <code>manager</code>），<b>只读</b>。域里删掉上级后本地写成空——保留旧值会让组织关系指向一个不存在的人。同步记录的 <code>managers_linked</code> 是本次解析成功的条数，出现「上级一栏是空的」先看这个数。</p>
 
+    <h3 id="p-password" data-nav="3.11 口令规则与二次输入">3.11 口令规则与二次输入</h3>
+    <p><b>长度</b>：至少 <b>8 位字符</b>（不是字节）。中文与空格都算一个字符：「文档中心密码」是 6 个字，不合格；「文档中心密码2026」是 10 个字，合格。</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>入口</th><th>谁在设置</th><th>校验位置</th></tr></thead>
+        <tbody>
+          <tr><td>成员新建 / 管理员重置</td><td>管理员</td><td><code>internal/iam</code></td></tr>
+          <tr><td>开通租户的管理员初始口令</td><td>平台运营</td><td><code>internal/tenant</code></td></tr>
+          <tr><td>平台账号新建 / 重置</td><td>平台运营</td><td><code>internal/platformauth</code></td></tr>
+          <tr><td>用户自助改密（账户抽屉）</td><td>本人</td><td><code>internal/auth</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>四处读同一个常量 <code>internal/password.MinLength</code>：改长度只改一处，不会出现"管理员建号能过、用户自己改密过不去"。</p>
+
+    <p><b>掩码</b>：所有口令输入框都以 <code>*</code> 显示，且<b>没有"显示口令"按钮</b>。输入、删除、粘贴、输入法上屏都是掩码。这是刻意的：明文口令在共享屏幕、截图、录屏时会被完整记录，风险高于"看不见自己输了什么"。</p>
+
+    <p><b>二次输入</b>：设置或重置口令时全部要求连续输入两次。两次不一致时输入框下方立刻红字提示「两次输入的口令不一致」，<b>不会提交</b>。管理员给成员设的初始口令，交付后应让本人第一次登录就改掉——管理员知道的口令不算秘密。</p>
+
+    <p><b>边界（务必知道）</b></p>
+    <ul>
+      <li><b>老口令不受影响</b>：长度只在"设置新口令"时校验，不会因为规则变化把已登录的人踢出去。</li>
+      <li><b>管理员重置仍是人工传递</b>：系统不会给成员发"你的新口令是 xxx"的邮件，请电话或当面告知。</li>
+      <li><b>服务端仍是权威</b>：界面校验只是少一次往返；绕过页面直接调接口，服务端同样拒绝短于 8 位的口令。</li>
+      <li><b>粘贴是允许的</b>：拦粘贴会让密码管理器失效，反而促使人们用更短更好记的口令。</li>
+    </ul>
+
+    <h3 id="p-sms" data-nav="3.12 短信通道（集成与凭证）">3.12 短信通道（集成与凭证）</h3>
+    <p>入口：管理台 → <b>集成与凭证</b>（仅系统管理员）。这一页管"短信从哪家出去"：加密保存厂商凭证、真实测一次连通性、失败时告诉你在哪一环。</p>
+
+    <p><b>短信登录要同时满足三层</b>：授权（平台/档位）、租户开关（系统设置 → 登录方式）、通道就绪（本页）。任一层不满足，登录页不会出现短信入口。</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>通道</th><th>核验在哪</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>阿里云短信认证服务</td><td><b>云端</b></td><td>验证码由阿里云生成与核验，本地不存码；核验接口免费</td></tr>
+          <tr><td>腾讯云短信</td><td>本地</td><td>本系统生成 6 位码，5 分钟有效，最多试 5 次</td></tr>
+          <tr><td>华为云消息&amp;短信</td><td>本地</td><td>需要通道号（与签名关联）</td></tr>
+          <tr><td>天翼云短信</td><td>本地</td><td>尚未与我方账号实测，首次务必点「测试连接」</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p><b>操作顺序</b>：厂商控制台完成实名/买包/签名/模板（模板第 1 个变量必须是验证码）→ 本页填非密字段 → 填密钥（只写不读，留空沿用）→ 填自检号码 → 保存 → 测试连接 → <b>设为生效</b> → 系统设置里打开短信登录。</p>
+
+    <p><b>保存不等于生效</b>：多条通道可以并存，只有一条"当前生效"；加备用不会影响线上；删除生效通道不会自动启用别的。</p>
+
+    <p><b>模板里必须只有 1 个变量</b>（就是验证码）。写法：阿里云 <code>##code##</code>、腾讯 <code>{1}</code>、华为 <code>${1}</code>、天翼 <code>${code}</code>（变量名可配）。「有效期 5 分钟」这类固定文案请写死在模板文字里，不要做成第二个变量，否则发送会因"变量个数不匹配"失败。</p>
+
+    <p><b>切换通道的副作用</b>：切换前发出的验证码无法核验（本地核验的码存在本系统里），让用户重发一次即可。</p>
+
+    <p><b>失败提示</b>：密钥无效 / 模板不存在 / 签名未报备 / 余额不足 / 网络不可达 / 其它（详情记服务端日志，不含密钥）。按提示回厂商控制台对应项核对。</p>
+
+    <h3 id="p-domain" data-nav="3.13 自定义域名与证书">3.13 自定义域名与证书</h3>
+    <p>入口：管理台 → <b>域名与证书</b>（仅系统管理员）。绑定自有域名是为了让客户看到的链接显示成你自己的品牌。</p>
+
+    <p><b>两件独立的事</b>：<b>绑定域名</b>让地址被解析到本系统；<b>准备证书</b>让浏览器不报警。域名绑好不等于能用。</p>
+
+    <p><b>第 1 步：证明域名归你</b>：填域名（只填主机名）→ 系统给出一条 TXT 记录（<code>_docvault-challenge.&lt;域名&gt;</code>）→ 到 DNS 服务商添加 → 等 1–10 分钟后点「验证归属」。不验证的话，任何人都能把别人的域名绑到自己这里。</p>
+
+    <p><b>第 2 步：准备证书（三选一）</b></p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>方式</th><th>适用</th><th>谁续期</th></tr></thead>
+        <tbody>
+          <tr><td>自动签发</td><td>域名直接解析到本服务器，且 80 端口对外开放</td><td>系统自动（到期前 30 天）</td></tr>
+          <tr><td>上传证书</td><td>已有证书（公司 CA、云厂商、其它工具签的）</td><td><b>你自己</b>，系统不会碰</td></tr>
+          <tr><td>上游代理托管</td><td>前面有 Nginx / Cloudflare 等终止了 HTTPS</td><td>上游负责</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p><b>自动签发的三种模式</b>：<b>关闭</b>（走隧道或反向代理时最常见，界面会说明证书该由边缘托管，不给点了必然失败的按钮）；<b>HTTP-01 自动</b>（域名直连本机、80 可达）；<b>DNS-01 手动</b>（任何形态可用，每次要手工加一条 TXT，<b>不会自动续期</b>）。</p>
+
+    <p><b>证书优先级</b>：你上传的证书优先——一旦手工上传，系统就不再对该域名自动续期。</p>
+
+    <p><b>签发失败会限流，别连点</b>：CA 对"同一域名每小时失败 5 次"有硬限制，超过后该域名一小时内连申请都提交不了。界面在失败后 <b>60 秒内</b>不允许再次点击。调通阶段建议让部署方把 <code>DOCVAULT_ACME_DIRECTORY</code> 设成<b>测试目录</b>（页面会标注），配额宽松、证书不被信任，走通后再切生产。</p>
+
+    <p><b>常见失败</b>：未找到匹配的 TXT（记录未生效/记录名错/同名多条）；DNS 查询失败（服务器不能解析外网）；挑战端口启动失败（80 被占用）；域名校验未通过（DNS 未指向本机或 80 被防火墙拦）；证书不覆盖域名；证书已过期。</p>
+
+    <ul>
+      <li><b>一个域名一张证书</b>：通配符证书请走手工上传。</li>
+      <li><b>解绑会连带删除证书</b>，该地址立刻无法访问。</li>
+      <li><b>降档后已绑定的域名不会被自动删除</b>，但不能再新增；仍可解绑。</li>
+      <li><b>私钥加密保存</b>，保存后界面不再显示，也不进审计日志。</li>
+    </ul>
+
+    <h3 id="p-license" data-nav="3.14 许可证（本地部署版）">3.14 许可证（本地部署版）</h3>
+    <p>入口：管理台 → <b>许可证</b>。云端版打开这一页会显示"本实例是云端版，无需许可证"——这是正常的。</p>
+    <p>许可证是<b>离线校验</b>的：不联网、不上报，断网的内网照样能启动。</p>
+
+    <p><b>两步完成</b>：① 把页面顶部的<b>实例指纹</b>（一串 UUID，不含业务数据，可安全外发）发给厂商；② 把厂商给的一串文本粘贴进来点「导入」。许可证绑定指纹，<b>换服务器需要重新申请</b>。</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>状态</th><th>含义</th><th>处理</th></tr></thead>
+        <tbody>
+          <tr><td>已授权</td><td>验签通过、指纹匹配、未过期</td><td>无需操作</td></tr>
+          <tr><td>许可证无效</td><td>内容被改过，或用别的密钥签的</td><td>找厂商重新签发</td></tr>
+          <tr><td>与本实例指纹不匹配</td><td>这串是给别的机器签的</td><td>用本页指纹重新申请</td></tr>
+          <tr><td>已过期</td><td>超过许可证到期日</td><td>联系厂商续期</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <ul>
+      <li><b>导入许可证只改档位</b>：不删除、不改动任何文件与用户。</li>
+      <li><b>到期不会降档</b>：继续以原档位运行，只在许可证页提示。</li>
+      <li><b>席位为 0 表示不限人数</b>；本地版默认就是 0。</li>
+      <li>改过 <code>DOCVAULT_SECRET_KEY</code> 不影响许可证（许可证不加密保存）。</li>
+    </ul>
+
     <h2 id="class" data-nav="4 · 密级与标签策略"><span class="num">4</span>密级与标签策略</h2>
     <p>入口：管理台 → 密级定义 / 标签策略（仅安全管理员）。</p>
 
@@ -361,6 +546,29 @@ go run ./cmd/smscheck</code></pre>
     </div>
     <div class="danger">
       <p><b>只能改名称与描述，等级数值固定。</b>改数值会让历史数据的语义整体翻转——昨天标记"秘密"的文件会突然变成"公开"。系统刻意不给这个入口。</p>
+
+      <p><b>能选到几档，由档位决定</b>（这是最容易被忽略的一条）：</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>档位</th><th>可写密级</th><th>界面表现</th></tr></thead>
+          <tbody>
+            <tr><td class="nowrap">基础版</td><td>只有 <b>0（公开）</b></td><td>成员页密级列显示「未启用」；上传/分享没有密级选项；密级定义页顶部有"仅只读"提示</td></tr>
+            <tr><td class="nowrap">专业版</td><td><b>0 / 3 / 4</b></td><td>成员与文件只能选公开、秘密、机密</td></tr>
+            <tr><td class="nowrap">旗舰版</td><td>0–6 全部</td><td>七档可选</td></tr>
+            <tr><td class="nowrap">基础版 + 单项加购密级</td><td>0–6 全部</td><td>与旗舰版一致（买的是能力，不是档位）</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note"><p>规则落在<b>写入口</b>，不只是界面：超出范围的密级提交会被拒（<code>FEATURE_NOT_ENABLED</code>），成员密级也一样——早先只有文件受控、成员不受控，基础版能建出"核心"级账号。<b>降档</b>时对象与成员一起校验：任一项超出目标档位就整体拒绝，并给出清单。</p></div>
+
+      <p><b>管理员自身的密级，决定他能建多高的账号</b>（V1.6.0 起明确）：</p>
+      <ul>
+        <li>建号与改号时，成员密级不能高于操作者本人，服务端强制（<code>CEILING_EXCEEDED</code>）；</li>
+        <li><b>重置口令同样受这条限制</b>：低密级管理员不能重置高密级账号的口令——否则他改口令、用对方身份登录，等于绕过上一条（此前只拦了建号，等于控制只做了一半）；</li>
+        <li>管理员<b>不能提升自己的密级</b>。需要更高密级的账号时，由同级或更高密级的管理员创建；</li>
+        <li>开通租户时，首个管理员的密级自动取该档位允许的<b>最高值</b>（基础版 0 / 专业版 4 / 旗舰版 6）。若客户希望"管理员看不到核心内容"，应另建低密级管理员并分配日常管理工作，而不是依赖"管理员默认低密级"——把唯一的首管理员压到 0，会导致谁都建不出有密级的账号；</li>
+        <li>租户里无人具备所需密级、或客户管理员已失联：由运维用 <code>tenantpass -setclass</code>（§11.6）处理，改密级与写审计在同一事务，输出留档。</li>
+      </ul>
     </div>
 
     <h3 id="class-points" data-nav="4.2 密级的两个作用点">4.2 密级的两个作用点</h3>
@@ -424,6 +632,7 @@ go run ./cmd/smscheck</code></pre>
       </table>
     </div>
     <div class="note"><p><b>同名账号</b>：同一租户允许本地账号与域账号同名（如 <code>zhangsan</code> 与 <code>zhangsan@corp</code>）。登录时若出现歧义，系统默认取本地账号——这是为了升级兼容，不是安全判断。</p></div>
+    <div class="warn"><p><b>能力边界（基础版不可用）</b>：AD/LDAP 属于<b>专业版及以上</b>能力。降档到基础版后，即使目录配置仍然保留，<b>域账号也会立即无法登录</b>（返回"该组织当前档位不含域账号登录"），并且系统不会再去连接域控。恢复档位或单项加购后自动恢复，不需要重新配置。降档不会删除目录配置与已同步的账号，只是让它们暂时不可用。</p></div>
 
     <h3 id="auth-sso" data-nav="5.2 SSO 断言">5.2 SSO 断言（反向代理注入头）</h3>
     <div class="tablewrap">
@@ -718,12 +927,14 @@ go run ./cmd/smscheck</code></pre>
 
     <h2 id="platform" data-nav="10 · 平台运营台"><span class="num">10</span>平台运营台（仅 SaaS 形态）</h2>
     <p>入口：<code>/platform/{tab}</code>，账号在 <code>platform_user</code> 表，与租户账号完全分离。</p>
+    <p>运营台是<b>桌面后台</b>布局：左侧固定 240px 导航、顶部面包屑、内容区限宽居中。窗口窄于 960px 时导航转为顶部横条、表格改为横向滚动（仍可用，但运营建议 ≥1280px）。</p>
 
     <div class="tablewrap">
       <table>
         <thead><tr><th>页签</th><th>能做什么</th><th>不能做什么</th></tr></thead>
         <tbody>
-          <tr><td class="nowrap">租户</td><td>新建、停用、逻辑删除、改档位、配额、<b>按租户开关能力</b></td><td>不能读租户文件内容</td></tr>
+          <tr><td class="nowrap">租户</td><td>新建、停用、逻辑删除、<b>点名称进详情</b>（档位/配额/域名/开关/用量/审计）</td><td>不能读租户文件内容</td></tr>
+          <tr><td class="nowrap">能力授权</td><td><b>单租户加购/收回</b>某项能力（跟随档位 / 开通 / 关闭 + 到期 + 原因）</td><td>不能改档位默认值（那是「租户」页签的事）</td></tr>
           <tr><td class="nowrap">用量与对账</td><td>存储、API 调用、导出对账单</td><td>不能改租户业务数据</td></tr>
           <tr><td class="nowrap">灰度开关</td><td>平台默认值与放量比例（<b>全局</b>）</td><td>关闭只影响<b>新建</b>，存量链接不受影响</td></tr>
           <tr><td class="nowrap">平台账号</td><td>建号、改密、停用</td><td>—</td></tr>
@@ -732,7 +943,58 @@ go run ./cmd/smscheck</code></pre>
       </table>
     </div>
 
-    <h3 id="flags" data-nav="10.1 能力开关：三级求值">10.1 能力开关：全局、放量、租户覆盖（三级）</h3>
+    <h3 id="provision" data-nav="10.0 开通租户：第一个管理员从哪来">10.0 开通租户：第一个管理员从哪来</h3>
+    <p>「租户」页签右上角 <b>开通租户</b>，弹窗里除了租户标识与名称，还有一组 <b>「首个管理员」</b>（账号 / 显示名 / 初始口令 / 确认口令，口令至少 8 位）。</p>
+    <ul>
+      <li>开通的同时创建这个账号，<b>并自动授予「系统管理员」</b>——用它登录即可配置成员、品牌与策略，不需要"另外再设一个管理员"。</li>
+      <li>口令<b>只提交、不回存明文</b>，界面也不回显。开通成功后弹窗换成一张<b>交付清单</b>（系统地址 / 组织标识 / 管理员账号 / 口令说明），可一键复制直接发给客户。</li>
+      <li>提交按钮固定在弹窗底部，字段区可滚动；口令在字段区下方，记得往下滚——这是此前最容易漏填的一项。</li>
+      <li><b>开通时就把口令记录下来并当场转交</b>：这是唯一一次能看到"自己要交什么"的时刻。线上出过一次"账号在、权限在，但没人知道口令"，最后只能走 §11.6 的运维通道重置。</li>
+    </ul>
+    <p><b>客户还要再加管理员</b>（租户内操作，平台侧不做）：</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>场景</th><th>路径</th></tr></thead>
+        <tbody>
+          <tr><td class="nowrap">新建一个管理员</td><td>系统设置 → 用户管理 → 新建成员，<b>「初始角色」选「系统管理员」</b></td></tr>
+          <tr><td class="nowrap">把已有成员提升</td><td>成员行尾「更多操作」→「授予「系统管理员」」</td></tr>
+          <tr><td class="nowrap">撤销某人的管理员</td><td>点其「角色」列上的 <code>sysadmin ×</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note"><p><b>两条保护</b>（服务端强制，不是界面提示）：不能撤销、停用或删除<b>最后一个可登录的系统管理员</b>，避免一次误操作把租户永久锁在管理入口外。三权分立：审计管理员不能与系统/安全管理员并存。</p></div>
+    <div class="warn"><p>平台侧<b>不提供</b>"重置租户管理员口令"：那等于平台可以接管任何客户账号。客户忘掉唯一管理员的密码时，先走客户方其他管理员重置；一家都没有时属于运维介入（见 §11 的数据库操作），并应留下书面记录。</p></div>
+
+    <h3 id="entitlements" data-nav="10.1 能力授权：单租户加购/收回">10.1 能力授权：给一个租户单独加购或收回</h3>
+    <p>入口：平台运营台 → <b>能力授权</b> → 选一个租户（地址形如 <code>/platform/entitlements/&lt;租户标识&gt;</code>）。这一页存在的理由：客户可以<b>只买一项</b>，不必整档升级。</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>层</th><th>在哪改</th><th>回答的问题</th></tr></thead>
+        <tbody>
+          <tr><td>档位（基础/专业/旗舰）</td><td>「租户」页签 → 改档位</td><td>这家客户买了哪一档</td></tr>
+          <tr><td><b>授权覆盖</b></td><td>「能力授权」页签</td><td>这一项<b>单独</b>给他开 / 关（加购、试用、合规下线）</td></tr>
+          <tr><td>灰度开关</td><td>「灰度开关」页签</td><td>这个功能<b>全平台</b>放不放（与客户买没买无关）</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>生效判断是三者同时成立：<code>授权 ∧ 租户开关 ∧ 资源就绪</code>。所以"运营开了但用户用不了"，按「授权 → 租户开关 → 资源就绪」的顺序查。</p>
+
+    <p><b>表格怎么读</b>：基础/专业/旗舰三列是档位默认值（<b>只读</b>，要改默认值请改档位定义）；「当前」显示 跟随档位（含/不含）、已开通、已关闭、平台强制关闭，过期会标「（已过期）」；「到期」显示剩余天数，15 天内标黄，
+    <b>开通时若不填到期日，默认 90 天</b>（避免"忘了设到期"变成永久白送）。</p>
+
+    <p><b>三条操作纪律</b></p>
+    <ol>
+      <li><b>「跟随档位」= 删掉覆盖</b>，立刻回到档位默认。收回临时开通时用它，不要用「关闭」——关闭会留下一条 <code>off</code> 覆盖，客户以后升级档位也拿不到这一项。</li>
+      <li><b>「关闭」是显式拒绝</b>，优先级高于档位。用于"这个客户不该有"的场景。</li>
+      <li>每次变更都进<b>平台审计</b>（<code>platform.entitlement.set</code>），带改前/改后；客户问"为什么没了"，按审计时间能对上。</li>
+    </ol>
+
+    <p><b>常见误解</b>：①「灰度开关里开了，为什么这家还不能用」——灰度是全局放量，授权是单客户购买，两回事；
+    ②「档位里有这项，为什么还要授权」——档位是默认值，授权用来做"基础版单买一项"或"旗舰版临时收回某项"；
+    ③「过期了是不是自动停」——是，过期覆盖按"没有覆盖"处理，回落到档位默认。</p>
+
+    <h3 id="flags" data-nav="10.2 能力开关：三级求值">10.2 能力开关：全局、放量、租户覆盖（三级）</h3>
     <p>这是一处<b>最容易互相误解</b>的配置。2026-11 有过一次真实事故：平台把 <code>share.external</code> 的放量从 100 调到 0（总开关仍是"开启"），运营台显示"已开启"，而所有租户创建外链都收到"未开启对外分享能力，请联系平台运营"——运营进去看，每个开关都是开启的，找不到任何关闭动作。</p>
 
     <div class="flow" data-flow="flags"></div>
@@ -793,7 +1055,7 @@ go run ./cmd/smscheck</code></pre>
     <h4>档位差异（影响可配置范围）</h4>
     <div class="tablewrap">
       <table>
-        <thead><tr><th>项</th><th>基础版</th><th>专业版</th><th>商业版</th></tr></thead>
+        <thead><tr><th>项</th><th>基础版</th><th>专业版</th><th>旗舰版</th></tr></thead>
         <tbody>
           <tr><td>密级</td><td>仅 0</td><td>0 / 3 / 4</td><td>全部 0–6</td></tr>
           <tr><td>域账号（AD）</td><td>—</td><td>✓</td><td>✓</td></tr>
@@ -808,15 +1070,54 @@ go run ./cmd/smscheck</code></pre>
     </div>
     <p><b>到期与宽限</b>：到期后进入 30 天宽限期（能力保持），宽限期结束后降为基础版，但界面仍显示"原为专业版"，避免用户以为数据丢了。</p>
 
+    <h3 id="tenant-detail" data-nav="10.3 租户详情：一次看完一家客户">10.3 租户详情：一次看完一家客户</h3>
+    <p>入口：平台运营台 → <b>租户</b> → 点租户名称（地址 <code>/platform/tenants/&lt;租户标识&gt;</code>）。详情是<b>一整页</b>，不是弹窗：左边是能改的东西，右边是只能看的信息。</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>位置</th><th>内容</th><th>能不能改</th></tr></thead>
+        <tbody>
+          <tr><td>主列</td><td>档位与到期、配额、自有域名与证书、按租户覆盖的功能开关</td><td>可改（只读角色除外）</td></tr>
+          <tr><td>侧列</td><td>概览、实时规模、租户最近操作、近 30 天用量</td><td>只读</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p><b>① 「导出对账单」导出的是本月 CSV</b>，含"口径"列区分「当月累计」与「月末快照」。直接双击用 Excel 打开不会乱码（文件带 BOM）。</p>
+
+    <p><b>② 「租户最近操作」不会自动加载。</b>平台每读一次，都会在<b>客户自己的审计链</b>里留一条「平台方读取过」的记录——这是刻意的可核查性设计：客户有权知道谁看过他的审计。所以只在排障时点一下「读取」；页面显示最近 20 条，要看全量请让客户在自己的「管理 → 日志」里查。</p>
+
+    <p><b>③ 域名证书有两条路</b>：租户可在自己的「管理台 → 域名与证书」上传或自动签发；运营也可在这里代为上传（适合客户把证书发给你、但不会操作）。<b>未验证归属的域名不能上传证书</b>——先让客户配好 TXT 记录并点「验证归属」。</p>
+
+    <p><b>④ 「设为只读」不是"温和的停用"</b>：成员<b>仍能登录、仍能下载</b>，但所有写入（上传、新建、改权限）会被服务端拒绝。客户很可能把这当成故障来报，操作前请先告知。</p>
+
+    <p><b>⑤ 改档与改配额都会立即生效</b>，不需要客户重新登录。到期日留空表示不限期；降档时若存量数据无法被目标档位表达（例如有高档位密级），服务端会拒绝并返回受影响清单，不会"先降后报错"。</p>
+
+    <h3 id="ops-admin-class" data-nav="10.4 调整系统管理员密级">10.4 调整系统管理员密级（V1.7.0）</h3>
+    <p><b>为什么放在运营台</b>：密级有"不能授出高于自己"的硬规则，而开通、升档、或客户把管理员降到 0 级之后，租户里可能<b>没有任何人</b>能把管理员提回去。没有这个入口，只剩运维改库——不可审计、不可追责。</p>
+    <p><b>位置</b>：租户详情页 → 「系统管理员密级」卡片。下拉只列<b>本档位允许</b>的密级（基础版只有 0；专业版 0/3/4；旗舰版 0–6），选好后点「保存密级」，可填一行调整原因。</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>能做</th><th>不能做</th></tr></thead>
+        <tbody>
+          <tr><td>改<b>系统管理员</b>的密级</td><td>改普通成员的密级（那是租户管理员的事）</td></tr>
+          <tr><td>在档位允许范围内升降</td><td>超出档位（基础版设 3 级会被拒 <code>FEATURE_NOT_ENABLED</code>）</td></tr>
+          <tr><td>留调整原因，平台与租户两侧都写审计</td><td>重置口令、改角色、看客户文件（平台没有租户数据通道）</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note"><p><b>审计</b>：平台侧记 <code>platform.admin.classification</code>，租户侧记 <code>admin.member.classification</code>（含改前 / 改后、操作者、原因）。客户在自己的审计里能看到"平台在什么时候把谁提到了几级"。</p></div>
+    <div class="warn"><p><b>建议</b>：只在上面的死锁场景使用；客户能自己解决时不要代劳——平台每次介入都会在客户审计里留痕。</p></div>
+
     <h2 id="ops" data-nav="11 · 运维：备份、升级、回滚"><span class="num">11</span>运维：备份、升级、回滚</h2>
 
-    <h3 id="ops-backup" data-nav="11.1 发布前必做">10.1 发布前必做</h3>
+    <h3 id="ops-backup" data-nav="11.1 发布前必做">11.1 发布前必做</h3>
     <pre><code># 1) 备份数据库
 docker exec docvault-postgres sh -c \
   'pg_dump -U docvault -d docvault -Fc -f /tmp/ndms-$(date +%Y%m%d).dump'
 docker cp docvault-postgres:/tmp/ndms-$(date +%Y%m%d).dump docker/data/backup/</code></pre>
 
-    <h3 id="ops-release" data-nav="11.2 发布">10.2 发布</h3>
+    <h3 id="ops-release" data-nav="11.2 发布">11.2 发布</h3>
     <pre><code>docker compose build server &amp;&amp; docker compose up -d server</code></pre>
     <p>启动时自动执行迁移，并做两项自检：</p>
     <ul>
@@ -824,7 +1125,7 @@ docker cp docvault-postgres:/tmp/ndms-$(date +%Y%m%d).dump docker/data/backup/</
       <li><b>权限模型告警</b>：连接角色是超级用户时提示"请求路径不得直接使用连接池"。</li>
     </ul>
 
-    <h3 id="ops-iron" data-nav="11.3 铁律：镜像与迁移同批">10.3 铁律：镜像与迁移必须同批</h3>
+    <h3 id="ops-iron" data-nav="11.3 铁律：镜像与迁移同批">11.3 铁律：镜像与迁移必须同批</h3>
     <ul>
       <li>旧镜像 + 新库：可能因新增列 / 函数缺失而报错；</li>
       <li>新镜像 + 旧库：启动时自动迁移，正常；</li>
@@ -832,7 +1133,7 @@ docker cp docvault-postgres:/tmp/ndms-$(date +%Y%m%d).dump docker/data/backup/</
     </ul>
     <p>迁移文件的纪律：已有函数改签名要 <code>DROP + CREATE</code>，返回列只在末尾追加。这样旧镜像回滚到新库时仍能跑。</p>
 
-    <h3 id="ops-tasks" data-nav="11.4 后台任务">10.4 后台任务</h3>
+    <h3 id="ops-tasks" data-nav="11.4 后台任务">11.4 后台任务</h3>
     <div class="tablewrap">
       <table>
         <thead><tr><th>任务</th><th>频率</th><th>做什么</th></tr></thead>
@@ -845,12 +1146,54 @@ docker cp docvault-postgres:/tmp/ndms-$(date +%Y%m%d).dump docker/data/backup/</
       </table>
     </div>
 
-    <h3 id="ops-rollback" data-nav="11.5 回滚">10.5 回滚</h3>
+    <h3 id="ops-rollback" data-nav="11.5 回滚">11.5 回滚</h3>
     <pre><code>docker compose down server
 # 恢复上一版镜像 tag
 docker compose up -d server
 # 若该版本对应的迁移不可逆，再恢复数据库备份
 docker exec -i docvault-postgres pg_restore -U docvault -d docvault --clean &lt; backup.dump</code></pre>
+
+    <h3 id="ops-passwd" data-nav="11.6 唯一管理员口令丢失">11.6 唯一管理员口令丢失（运维救援通道）</h3>
+    <p><b>什么时候会用到</b>：某家租户唯一的系统管理员口令丢了；该账号又没登记邮箱/手机，登录页的「忘记口令」走不通；平台运营台<b>刻意不提供</b>重置客户口令的能力（那等于平台可以接管任何客户账号）。此时只能由运维在服务器上处理。</p>
+    <p>工具：<code>cmd/tenantpass</code>（不进镜像，用源码或单独编译的二进制运行）。</p>
+    <pre><code>cd /path/to/NeuroDMS
+set -a; . docker/.env; set +a
+export DOCVAULT_DB_DSN="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:55433/${POSTGRES_DB}?sslmode=disable"
+
+# 1) 先看这家租户有哪些管理员（默认 dry-run，不改任何数据）
+go run ./cmd/tenantpass -slug &lt;租户标识&gt;
+
+# 2) 确认无误后再重置（生成 20 位随机口令，只显示这一次）
+go run ./cmd/tenantpass -slug &lt;租户标识&gt; -apply -reason "工单 TCK-1234"
+
+# 有多个可登录管理员时，必须用 -user 指定
+go run ./cmd/tenantpass -slug &lt;租户标识&gt; -user admin -apply
+
+# 改密级（V1.6.0）：升档后没人能提密级、或降档前清理成员密级
+go run ./cmd/tenantpass -slug &lt;租户标识&gt; -user admin -setclass 6 -apply -reason "工单 TCK-1234"</code></pre>
+    <p>它做了什么：改口令 + <code>session_epoch</code> 自增 + <b>吊销该账号全部会话</b>，并在<b>同一事务</b>里写审计 <code>admin.member.password</code>（<code>detail.source=tenantpass</code>，可带 <code>reason</code>）。任一步失败整体回滚，不会出现"改了口令没留痕"。</p>
+    <div class="warn"><p><b>三条纪律</b>：① 口令只出现在屏幕上（不写文件、不进日志、不进审计），执行前确认没有录屏/共享终端；② 执行后立刻把"登录地址 + 组织标识 + 口令"转交客户，并要求客户登录后在「账号与安全」立即修改；③ 保留输出作为书面记录，用 <code>-reason</code> 写工单号，便于与审计对上。</p></div>
+    <p><code>-setclass N</code> 把指定账号的密级改为 N（0–6），同时把 <code>ceiling</code> 抬到不低于 N，并在同一事务里写审计 <code>admin.member.classification</code>（含改前/改后）。<b>优先用运营台的「系统管理员密级」卡片</b>（§10.4），命令行只作为服务器侧兜底。</p>
+    <p>它<b>不做</b>的事：不创建账号（租户里一个管理员都不存在时，需要开发按现场数据补齐）；不解除停用/过期状态（账号不可登录时先恢复账号，工具会明确拒绝）。</p>
+
+    <h3 id="ops-hardening" data-nav="11.7 部署加固基线">11.7 部署加固基线</h3>
+    <p>安全审查（<code>docs/57</code>）后固定下来的运行配置，<b>改动前请先读这一节</b>：</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>项</th><th>值</th><th>为什么</th></tr></thead>
+        <tbody>
+          <tr><td class="nowrap">容器用户</td><td><code>docvault</code>（非 root）</td><td>容器内进程被拿下也拿不到 root</td></tr>
+          <tr><td class="nowrap"><code>no-new-privileges</code></td><td><code>true</code></td><td>阻断 setuid 提权</td></tr>
+          <tr><td class="nowrap"><code>cap_drop</code></td><td><code>ALL</code></td><td>服务不需要任何 Linux capability</td></tr>
+          <tr><td class="nowrap">根文件系统</td><td><code>read_only: true</code></td><td>后门无法在镜像层持久化</td></tr>
+          <tr><td class="nowrap">可写目录</td><td><code>/tmp</code>(512m)、<code>/data/rawcache</code>(1g) tmpfs；其余为数据卷</td><td>只读根下必须显式声明写路径</td></tr>
+          <tr><td class="nowrap">端口绑定</td><td>全部 <code>127.0.0.1</code></td><td>公网入口只有 Cloudflare Tunnel</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="warn"><p><b>只读根的两个坑</b>：① 新增任何"会写文件"的功能，必须同时给卷或 tmpfs，否则启动日志里只有一句 <code>read-only file system</code> 并把该功能<b>静默降级</b>（RAW 预览就是这样消失的）；② 需要保留的文件不能放 tmpfs（重启即清空），只能放数据卷。</p></div>
+    <p><b>HSTS 依赖 <code>X-Forwarded-Proto</code></b>：TLS 在 Cloudflare 终止，应用收到的永远是 http。若换成不经代理的直连部署，这条头会自然停发（浏览器本就忽略 http 响应里的 HSTS），不需要改代码。</p>
+    <p><b>探测路径返回 404</b>：<code>/.env</code>、<code>/.git/config</code> 这类带点或带扩展名的路径不再回退首页。SPA 路由约定是无扩展名的纯标识段（<code>/files/&lt;uuid&gt;</code>、<code>/s/&lt;token&gt;</code>），新增路由请遵守。</p>
 
     <h2 id="trouble" data-nav="12 · 故障排查"><span class="num">12</span>故障排查</h2>
 
@@ -906,8 +1249,8 @@ docker exec -i docvault-postgres pg_restore -U docvault -d docvault --clean &lt;
 </div>
 
 <footer class="foot">
-  <span>NeuroDMS · 管理员手册 · 租户与系统配置 V1.2.0</span>
-  <span>网页版 v1.6.0 · 源文件 docs/31-管理员手册-租户与系统配置-v1.9.0.md</span>
+  <span>NeuroDMS · 管理员手册 · 租户与系统配置 V1.13.0</span>
+  <span>网页版 v1.8.0 · 源文件 docs/31-管理员手册-租户与系统配置-v1.8.0.md</span>
 </footer>
 
 <button class="totop" type="button" aria-label="回到顶部">

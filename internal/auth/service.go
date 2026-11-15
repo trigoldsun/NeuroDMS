@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"docvault/internal/db"
+	"docvault/internal/entitlement"
+	"docvault/internal/password"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,7 +22,7 @@ var (
 	ErrAccountLocked      = errors.New("账号已锁定，请稍后再试")
 	ErrAccountDisabled    = errors.New("账号不可用")
 	ErrSessionInvalid     = errors.New("会话已失效，请重新登录")
-	ErrWeakPassword       = errors.New("口令不满足强度要求")
+	ErrWeakPassword       = errors.New("口令长度不足")
 )
 
 // Config 是认证策略，全部来自系统设置（不允许写死在代码里）。
@@ -35,11 +37,12 @@ type Config struct {
 // DefaultConfig 给出保守默认值，生产由设置表覆盖。
 func DefaultConfig() Config {
 	return Config{
-		AccessTTL:      15 * time.Minute,
-		RefreshTTL:     30 * 24 * time.Hour,
-		MaxFailed:      5,
-		LockDuration:   30 * time.Minute,
-		MinPasswordLen: 12,
+		AccessTTL:    15 * time.Minute,
+		RefreshTTL:   30 * 24 * time.Hour,
+		MaxFailed:    5,
+		LockDuration: 30 * time.Minute,
+		// 与 password.MinLength 同源：配置项保留，是为了将来按租户放开到更长。
+		MinPasswordLen: password.MinLength,
 	}
 }
 
@@ -55,8 +58,24 @@ type Service struct {
 	dir    DirectoryAuthenticator
 	// sms 是"短信认证服务"通道；nil 表示未配置，短信登录 fail-closed。
 	sms SMSProvider
+	// ents 是能力授权；nil 表示未装配，凡依赖授权的能力一律按未开通处理。
+	ents *entitlement.Service
 	// rate 是短信入口的频控参数（号码 / IP / 失败冷却）。
 	rate SMSRate
+}
+
+// providerNamer 是可选能力：短信通道能报出"当前用的是哪家"。
+// 用可选接口而不是改 SMSProvider，是为了让测试替身（Mock）不必实现它。
+type providerNamer interface {
+	ProviderCode(ctx context.Context, tenantID string) string
+}
+
+// smsProviderName 取当前通道编码，取不到返回空串。
+func (s *Service) smsProviderName(ctx context.Context, tenantID string) string {
+	if n, ok := s.sms.(providerNamer); ok {
+		return n.ProviderCode(ctx, tenantID)
+	}
+	return ""
 }
 
 // DirectoryAuthenticator 是"域账号认证"的最小接口。
@@ -69,6 +88,9 @@ type DirectoryAuthenticator interface {
 
 // SetDirectory 注入目录认证。未注入时，source=ldap 的账号被拒登（fail-closed）。
 func (s *Service) SetDirectory(d DirectoryAuthenticator) { s.dir = d }
+
+// SetEntitlements 注入能力授权。未注入时短信登录按未开通处理（fail-closed）。
+func (s *Service) SetEntitlements(e *entitlement.Service) { s.ents = e }
 
 // CodeSender 负责把验证码送到外部通道（邮件/短信）。
 // 定义成接口而不是直接依赖 notify：认证包不该知道"用 SMTP 还是 Graph"。
@@ -184,6 +206,12 @@ func (s *Service) loginScoped(ctx context.Context, tenantSlug, username, passwor
 		// 即使有也会与目录不同步（改密后本地的旧散列仍然"正确"，这是安全隐患）
 		if s.dir == nil {
 			return Tokens{}, ErrDirectoryNotConfigured
+		}
+		// 能力判定放在"有没有配目录"之后：两个错误要分开——
+		// 没配是部署问题（去查配置），配了但不该用是档位问题（去查合同）。
+		// 不能因为"目录配置还在"就让域账号继续登录，那样降档只改了报价单。
+		if !s.dirAuthAllowed(ctx, tenantID) {
+			return Tokens{}, ErrDirectoryNotEntitled
 		}
 		extID, disabled, derr := s.dir.Authenticate(ctx, tenantID, username, password)
 		switch {
@@ -330,6 +358,11 @@ func (s *Service) findLoginUser(ctx context.Context, tenantID, username string, 
 // 反过来（先查库、查不到就回"没同步"）等于给攻击者一个免费的
 // "该账号在 AD 中存在"接口。
 func (s *Service) explainMissingDomainUser(ctx context.Context, tenantID, username, password string) error {
+	// 同一条能力判定：否则"库里没有这条域账号"会变成绕过档位限制的旁路
+	// （拿任意域账号试口令，能从错误码里读到"这个人在 AD 中存在"）。
+	if !s.dirAuthAllowed(ctx, tenantID) {
+		return ErrDirectoryNotEntitled
+	}
 	if s.dir == nil {
 		BurnTime(password)
 		return ErrDirectoryNotConfigured
@@ -542,8 +575,10 @@ func (s *Service) ChangePassword(ctx context.Context, access, oldPassword, newPa
 	if err != nil {
 		return ErrSessionInvalid
 	}
-	if len(newPassword) < s.cfg.MinPasswordLen {
-		return ErrWeakPassword
+	// 按字符数判（不是字节数），并带上具体位数：
+	// 只说"不满足强度要求"时，用户不知道该补到几位。
+	if password.Runes(newPassword) < s.cfg.MinPasswordLen {
+		return fmt.Errorf("%w：至少 %d 位", ErrWeakPassword, s.cfg.MinPasswordLen)
 	}
 
 	var pwHash *string

@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"docvault/internal/db"
-	"docvault/internal/edition"
+	"docvault/internal/entitlement"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -68,19 +68,22 @@ func (s *Service) smsLoginAllowed(ctx context.Context, tenantID string) bool {
 	if s.sms == nil || tenantID == "" {
 		return false
 	}
-	var (
-		declared, status string
-		expires          *time.Time
-	)
-	if err := s.pool.QueryRow(ctx, `
-		SELECT edition, status, edition_expires_at FROM tenant
-		 WHERE id = $1 AND deleted_at IS NULL`, tenantID).Scan(&declared, &status, &expires); err != nil {
+	st, ok := s.entitlementState(ctx, tenantID)
+	if !ok {
 		return false
 	}
-	if status != "active" && status != "trial" && status != "readonly" {
-		return false
+	// 档位之外还要看授权（单项加购 / 平台强制关）。两处都要判：
+	// 只改档位的话，"给基础版单独开短信"永远开不了；
+	// 只判授权的话，平台合规下线时对老租户不生效。
+	allowed := st.Spec.SmsLogin
+	if s.ents != nil {
+		ok, eerr := s.ents.Entitled(ctx, tenantID, entitlement.SMSLogin, st.Edition)
+		if eerr != nil || !ok {
+			return false
+		}
+		allowed = ok
 	}
-	if !edition.Resolve(declared, expires, s.now()).Spec.SmsLogin {
+	if !allowed {
 		return false
 	}
 	var raw []byte
@@ -137,7 +140,7 @@ func (s *Service) SendLoginCode(ctx context.Context, account, ip string) (SMSCod
 		_ = s.logSMS(ctx, ref.TenantID, phone, ip, "rate_limited")
 		return SMSCodeResult{}, err
 	}
-	if err := s.sms.Send(ctx, phone); err != nil {
+	if err := s.sms.Send(ctx, ref.TenantID, phone); err != nil {
 		_ = s.logSMS(ctx, ref.TenantID, phone, ip, "provider_error")
 		return SMSCodeResult{}, mapSMSError(err)
 	}
@@ -174,7 +177,7 @@ func (s *Service) LoginWithSMS(ctx context.Context, account, code, ip, ua string
 			Reason: "验证码错误次数过多，请稍后再试"}
 	}
 
-	ok, err := s.sms.Check(ctx, phone, strings.TrimSpace(code))
+	ok, err := s.sms.Check(ctx, ref.TenantID, phone, strings.TrimSpace(code))
 	if err != nil {
 		return Tokens{}, mapSMSError(err)
 	}
@@ -277,9 +280,12 @@ func (s *Service) countSMSByIP(ctx context.Context, tenantID, ip string, window 
 }
 
 func (s *Service) logSMS(ctx context.Context, tenantID, phone, ip, result string) error {
+	// 通道编码在发日志时解析：让支持人员能回答"这条走的是哪家"。
+	// 解析失败只留空，不影响日志本身写入。
+	provider := s.smsProviderName(ctx, tenantID)
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO sms_send_log (tenant_id, phone_hash, ip, result)
-		VALUES ($1, $2, nullif($3,''), $4)`,
-		tenantID, s.phoneHash(phone), ip, result)
+		INSERT INTO sms_send_log (tenant_id, phone_hash, ip, result, provider)
+		VALUES ($1, $2, nullif($3,''), $4, $5)`,
+		tenantID, s.phoneHash(phone), ip, result, provider)
 	return err
 }

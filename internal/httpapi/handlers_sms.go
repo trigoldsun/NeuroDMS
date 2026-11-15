@@ -33,7 +33,17 @@ func (a *API) handleAuthMethods(w http.ResponseWriter, r *http.Request) {
 	// 任何错误都按"未开通"返回：登录页不需要知道是"租户不存在"还是"配置读失败"，
 	// 而把两者区分开正好给了外部一个探测组织标识是否存在的接口。
 	if m, err := a.Tenants.LoginMethodsBySlug(r.Context(), slug); err == nil {
-		out["sms"] = m.SMS && a.SMSConfigured && a.Auth != nil
+		// 通道就绪也要按租户判：A 租户自带腾讯云、B 租户没配，
+		// 登录页不能对两家显示同一个入口。
+		ready := a.SMSConfigured
+		if a.SMS != nil {
+			if id, e := a.Tenants.ResolveID(r.Context(), slug); e == nil {
+				ready = a.SMS.Configured(r.Context(), id)
+			} else {
+				ready = false
+			}
+		}
+		out["sms"] = m.SMS && ready && a.Auth != nil
 	}
 	writeOK(w, r, out)
 }

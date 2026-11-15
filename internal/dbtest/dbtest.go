@@ -9,6 +9,9 @@ import (
 	"context"
 	"testing"
 
+	"docvault/internal/db"
+	"docvault/migrations"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -21,6 +24,7 @@ var cleanupOrder = []string{
 	"usage_event",
 	"usage_daily",
 	"tenant_domain",
+	"tenant_entitlement", // 授权覆盖：引用 tenant 与 entitlement_def
 	"tenant_feature",
 	"tenant_quota",
 	"share_visit",
@@ -98,5 +102,18 @@ func CleanupTenant(t *testing.T, pool *pgxpool.Pool, tenantID string) {
 
 	if err := tx.Commit(ctx); err != nil {
 		t.Logf("提交清理事务失败: %v", err)
+	}
+}
+
+// EnsureSchema 确保测试库已应用全部迁移。
+//
+// 为什么需要它：`go test ./...` 会并行跑多个包，而"建表"只在 db 包的测试里做。
+// 先跑到的包如果自己没建表，就会得到 "relation tenant does not exist"——
+// 失败信息看起来像代码坏了，实际是执行顺序问题。迁移本身有 advisory lock，
+// 多个包同时调用也会串行执行，不会互相踩。
+func EnsureSchema(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	if _, err := db.Migrate(context.Background(), pool, migrations.Files); err != nil {
+		t.Fatalf("测试库迁移失败: %v", err)
 	}
 }

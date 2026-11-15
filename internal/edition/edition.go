@@ -95,7 +95,7 @@ var matrix = map[Edition]Spec{
 		MaxSeats:         0,
 	},
 	Business: {
-		Name:             "商业版",
+		Name:             "旗舰版",
 		Classification:   true,
 		ClassSelectable:  []int{0, 1, 2, 3, 4, 5, 6},
 		AD:               true,
@@ -134,6 +134,10 @@ func Normalize(s string) Edition {
 	case Professional:
 		return Professional
 	case Business:
+		return Business
+	// 客户与销售文档会写"旗舰版"，接口与导入脚本也照抄这个词。
+	// 认这个别名比让人记住"内部叫 business"便宜；枚举值与数据库都不动。
+	case "flagship":
 		return Business
 	default:
 		return Basic

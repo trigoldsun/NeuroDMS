@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"docvault/internal/entitlement"
 	"docvault/internal/feature"
 	"docvault/internal/platformauth"
 	"docvault/internal/tenant"
@@ -60,6 +61,9 @@ func (a *API) registerPlatformTenants(mux *http.ServeMux) {
 
 	// 平台审计
 	mux.HandleFunc("GET /v1/platform/audit", a.requirePlatform(a.handlePlatformAuditLog))
+
+	// 系统管理员的密级（见 handlers_platform_admins.go）
+	a.registerPlatformAdmins(mux)
 }
 
 // requirePlatform 校验平台身份，把 Principal 放进请求上下文。
@@ -502,6 +506,19 @@ func (a *API) handlePlatformDomainAdd(w http.ResponseWriter, r *http.Request) {
 			featureDenyMessage(fs, "自定义域名"))
 		return
 	}
+	// 第二层：这个租户买没买。开关是"全平台放不放"，授权是"这家客户有没有"；
+	// 只判开关会让基础版客户通过运营台直接绑上域名。
+	domOK, oerr := a.entitled(r.Context(), tenantID, entitlement.CustomDomain)
+	if oerr != nil {
+		writeErr(w, r, http.StatusServiceUnavailable, "ENTITLEMENT_UNAVAILABLE",
+			"无法读取能力授权，请稍后重试")
+		return
+	}
+	if !domOK {
+		writeErr(w, r, http.StatusForbidden, "FEATURE_NOT_ENABLED",
+			"当前档位或授权不含自定义域名，可升级或单独加购")
+		return
+	}
 
 	token, err := a.Tenants.AddDomain(r.Context(), tenantID, req.Host, req.Primary)
 	if err != nil {
@@ -562,7 +579,8 @@ func (a *API) handlePlatformDomainVerify(w http.ResponseWriter, r *http.Request)
 
 	records, lerr := a.lookupTXT(r.Context(), "_docvault-challenge."+host)
 	if lerr != nil {
-		writeErr(w, r, http.StatusBadGateway, "DNS_LOOKUP_FAILED",
+		// 502 会被 Cloudflare 换成 "error code: 502"，运维看不到原因（实测）。
+		writeErr(w, r, http.StatusServiceUnavailable, "DNS_LOOKUP_FAILED",
 			"DNS 查询失败："+lerr.Error())
 		return
 	}

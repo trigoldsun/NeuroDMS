@@ -1,7 +1,9 @@
 package tenant
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +15,7 @@ import (
 
 	"docvault/internal/db"
 	"docvault/internal/edition"
+	"docvault/internal/entitlement"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -51,6 +54,29 @@ func (b Branding) LogoSHA() string {
 	return fmt.Sprintf("%x", uint32(h))
 }
 
+// LogoURL 返回图标的公开地址（带内容指纹：换图后 URL 才会变，缓存才会失效）。
+//
+// 拼装放在这里而不是各 handler 各写一遍：登录页、分享页页眉、浏览器标签图标
+// 都用它，某一处少写了 v= 就会出现"侧栏有新图标、标签页还是旧的"——
+// 这种问题只有客户能发现，排查成本极高。
+func (b Branding) LogoURL(slug string) string {
+	if len(b.Logo) == 0 {
+		return ""
+	}
+	if slug == "" {
+		slug = b.Slug
+	}
+	return "/v1/tenant/branding/logo?slug=" + url.QueryEscape(slug) + "&v=" + b.LogoSHA()
+}
+
+// LogoMimeOr 返回图标的 MIME；老数据可能没存，按 PNG 兜底。
+func (b Branding) LogoMimeOr() string {
+	if b.LogoMime == "" {
+		return "image/png"
+	}
+	return b.LogoMime
+}
+
 // BrandingInput 是品牌更新请求。
 type BrandingInput struct {
 	ProductName  string `json:"productName"`
@@ -67,6 +93,13 @@ const (
 	maxLogoNames  = 256 << 10 // 256KB：与表约束一致
 	maxFooterLen  = 200
 	maxProductLen = 40
+
+	// 像素上限：品牌 Logo 会渲染到**登录页与分享页**（未登录可见），
+	// 也就是每一个访客都会解码它。256KB 的 JPEG 完全可以解成 8000×8000
+	// （≈256MB 位图），那是一次访问就能触发的内存放大。
+	// 界面上这个图标最大显示 30–40px，4096 已经远超任何合理需求。
+	maxLogoPixels = 4096
+	minLogoPixels = 16
 )
 
 // BrandingBySlug 读取品牌（公开，无租户上下文）。
@@ -161,24 +194,59 @@ func (s *Service) UpdateBranding(ctx context.Context, tenantID string, in Brandi
 		if in.LogoMime == "image/svg+xml" && containsScript(in.Logo) {
 			return fmt.Errorf("%w: SVG 含脚本，已拒绝", ErrInvalidInput)
 		}
+		// 位图再查像素：字节数挡不住"小文件解成大位图"。
+		// SVG 是矢量的，没有像素概念，跳过。
+		if in.LogoMime != "image/svg+xml" {
+			format, w, h, ok := imageProbe(in.Logo)
+			want := map[string]string{
+				"image/png": "png", "image/jpeg": "jpeg", "image/webp": "webp",
+			}[in.LogoMime]
+			if ok && want != "" && format != want {
+				return fmt.Errorf("%w: 图标内容与声明的格式不一致（声明 %s，实际 %s）",
+					ErrInvalidInput, want, format)
+			}
+			if ok {
+				if w < minLogoPixels || h < minLogoPixels {
+					return fmt.Errorf("%w: 图标至少 %d×%d 像素（当前 %d×%d），放大会模糊",
+						ErrInvalidInput, minLogoPixels, minLogoPixels, w, h)
+				}
+				if w > maxLogoPixels || h > maxLogoPixels {
+					return fmt.Errorf("%w: 图标最长边不能超过 %d 像素（当前 %d×%d）",
+						ErrInvalidInput, maxLogoPixels, w, h)
+				}
+			}
+		}
 	}
+
+	// 保留原值必须靠 SQL 自己算，不能用 EXCLUDED。
+	//
+	// 早期写法是 `logo = EXCLUDED.logo`，而"只改系统名称"的请求里 Logo 是 nil
+	// → EXCLUDED.logo 为 NULL → **改个名字就把图标清空了**。
+	// 三种意图必须分开表达：显式移除（removeLogo）、未提供（保留）、替换。
+	keepLogo := len(in.Logo) == 0 && !in.RemoveLogo
 
 	return db.WithTenant(ctx, s.pool, tenantID, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `
 			INSERT INTO tenant_config (tenant_id, product_name, primary_color, accent_color,
 			                           logo, logo_mime, footer_text, privacy_url, updated_at)
-			VALUES ($1, $2, $3, $4, $5, nullif($6,''), $7, $8, now())
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
 			ON CONFLICT (tenant_id) DO UPDATE SET
 				product_name  = EXCLUDED.product_name,
 				primary_color = EXCLUDED.primary_color,
 				accent_color  = EXCLUDED.accent_color,
-				logo          = EXCLUDED.logo,
-				logo_mime     = EXCLUDED.logo_mime,
+				logo          = CASE WHEN $9::bool THEN tenant_config.logo
+				                     ELSE EXCLUDED.logo END,
+				logo_mime     = CASE WHEN $9::bool THEN tenant_config.logo_mime
+				                     ELSE EXCLUDED.logo_mime END,
 				footer_text   = EXCLUDED.footer_text,
 				privacy_url   = EXCLUDED.privacy_url,
 				updated_at    = now()`,
+			// 参数编号必须连续且**每个都被 SQL 引用**：
+			// pgx 按最大 $N 发送参数，中间空号会得到
+			// "could not determine data type of parameter $N"（实测踩到）。
 			tenantID, in.ProductName, in.PrimaryColor, in.AccentColor,
-			in.Logo, in.LogoMime, in.FooterText, in.PrivacyURL)
+			nullableLogo(in.Logo), nullifEmpty(in.LogoMime),
+			in.FooterText, in.PrivacyURL, keepLogo)
 		return err
 	})
 }
@@ -490,7 +558,15 @@ func (s *Service) LoginMethodsBySlug(ctx context.Context, slug string) (LoginMet
 	if !Usable(status) {
 		return out, nil
 	}
-	if !edition.Resolve(declared, expires, time.Now()).Spec.SmsLogin {
+	st := edition.Resolve(declared, expires, time.Now())
+	// 授权层：档位默认之外还要看单项加购/强制关（docs/47 §4.1）。
+	// 未装配授权服务时按未开通处理——登录页多显示一个点不动的入口，
+	// 比"看起来能用、点进去 503"更糟。
+	if s.ents == nil {
+		return out, nil
+	}
+	ok, eerr := s.ents.Entitled(ctx, id, entitlement.SMSLogin, st.Edition)
+	if eerr != nil || !ok {
 		return out, nil
 	}
 	pol, err := s.GetPolicy(ctx, id)
@@ -529,4 +605,113 @@ func (s *Service) SlugOf(ctx context.Context, tenantID string) (string, error) {
 		return "", ErrNotFound
 	}
 	return slug, err
+}
+
+// ---------------- Logo 解码辅助 ----------------
+
+func nullableLogo(b []byte) []byte {
+	if len(b) == 0 {
+		return nil
+	}
+	return b
+}
+
+// nullifEmpty 返回 *string 而不是 any：
+// any 在 pgx 里是 unknown 类型，SQL 侧无法推断参数类型，会直接报
+// "could not determine data type of parameter"（实测踩到）。
+func nullifEmpty(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+// imageProbe 读位图头部拿「格式 + 宽高」，不做完整解码。
+//
+// 只支持 PNG / JPEG / WebP（与 mime 白名单一致）。解析不出来时 ok=false，
+// 调用方按"无法判定"放行——头部损坏的图浏览器也显示不出来，
+// 没必要为了一个读不到的尺寸把正常上传堵死。
+//
+// 同时返回 format：客户的 file.type 有时是空的或是错的（拖拽、改扩展名），
+// "上传成功但登录页破图"最难排查，所以顺手校验声明与内容是否一致。
+func imageProbe(b []byte) (format string, w, h int, ok bool) {
+	switch {
+	case len(b) >= 24 && bytes.Equal(b[:8], []byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}):
+		// IHDR：长度(4) 类型(4) 宽(4) 高(4)，大端
+		return "png", int(binary.BigEndian.Uint32(b[16:20])), int(binary.BigEndian.Uint32(b[20:24])), true
+	case len(b) >= 21 && bytes.Equal(b[:4], []byte{'R', 'I', 'F', 'F'}) &&
+		bytes.Equal(b[8:12], []byte{'W', 'E', 'B', 'P'}):
+		w, h, ok = webpSize(b)
+		return "webp", w, h, ok
+	case len(b) > 3 && b[0] == 0xFF && b[1] == 0xD8:
+		w, h, ok = jpegSize(b)
+		return "jpeg", w, h, ok
+	}
+	return "", 0, 0, false
+}
+
+// webpSize 支持 VP8X（扩展，带画布尺寸）、VP8（有损）、VP8L（无损）。
+func webpSize(b []byte) (int, int, bool) {
+	switch string(b[12:16]) {
+	case "VP8X":
+		// 画布宽高各 3 字节（小端，值 = 实际 - 1），偏移 24 与 27
+		if len(b) < 30 {
+			return 0, 0, false
+		}
+		w := int(uint32(b[24])|uint32(b[25])<<8|uint32(b[26])<<16) + 1
+		h := int(uint32(b[27])|uint32(b[28])<<8|uint32(b[29])<<16) + 1
+		return w, h, true
+	case "VP8 ":
+		if len(b) < 30 {
+			return 0, 0, false
+		}
+		// 帧头：3 字节起始码 9d 01 2a 之后是宽高（各 14 位，小端）
+		w := int(binary.LittleEndian.Uint16(b[26:28]) & 0x3FFF)
+		h := int(binary.LittleEndian.Uint16(b[28:30]) & 0x3FFF)
+		return w, h, w > 0 && h > 0
+	case "VP8L":
+		if len(b) < 25 {
+			return 0, 0, false
+		}
+		bits := binary.LittleEndian.Uint32(b[21:25])
+		w := int(bits&0x3FFF) + 1
+		h := int((bits>>14)&0x3FFF) + 1
+		return w, h, true
+	}
+	return 0, 0, false
+}
+
+// jpegSize 遍历段直到 SOFn（段标记 C0–CF，排除 C4/C8/CC）。
+func jpegSize(b []byte) (w, h int, ok bool) {
+	i := 2
+	for i+9 < len(b) {
+		if b[i] != 0xFF {
+			i++
+			continue
+		}
+		marker := b[i+1]
+		// 填充字节
+		if marker == 0xFF {
+			i++
+			continue
+		}
+		// 无长度字段的标记
+		if marker == 0xD8 || marker == 0xD9 || (marker >= 0xD0 && marker <= 0xD7) || marker == 0x01 {
+			i += 2
+			continue
+		}
+		segLen := int(binary.BigEndian.Uint16(b[i+2 : i+4]))
+		isSOF := marker >= 0xC0 && marker <= 0xCF &&
+			marker != 0xC4 && marker != 0xC8 && marker != 0xCC
+		if isSOF {
+			h = int(binary.BigEndian.Uint16(b[i+5 : i+7]))
+			w = int(binary.BigEndian.Uint16(b[i+7 : i+9]))
+			return w, h, w > 0 && h > 0
+		}
+		if segLen < 2 {
+			return 0, 0, false
+		}
+		i += 2 + segLen
+	}
+	return 0, 0, false
 }

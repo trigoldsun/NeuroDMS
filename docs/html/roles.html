@@ -37,7 +37,7 @@
     <h1>身份不是一个标签，是四层</h1>
     <p class="subtitle">同一句"我能不能做这件事"，答案可能来自四个不同的维度。先把它们拆开，再看能力矩阵。</p>
     <div class="meta">
-      <span class="chip v">V1.0.0</span>
+      <span class="chip v">V1.8.0</span>
       <span class="chip">适用 <b>最终用户 · 实施顾问 · 内审</b></span>
       <span class="chip">配套 <b>场景操作</b> · <b>管理员手册</b></span>
       <button class="chip" type="button" data-print style="cursor:pointer;font-family:inherit">打印 / 存为 PDF</button>
@@ -190,6 +190,8 @@
 
     <div class="note">
       <p>「审批外发链接」安全管理员标 ○：审批门槛是<b>对该对象有 <code>manage_acl</code></b>，而不是某个角色。安全管理员若不在该对象的授权链上，同样批不了。这是刻意的——审批人要真的对这份内容有处置权。</p>
+      <div class="note"><p><b>部门树归系统管理员</b>：新建/改名/移动/删除部门只对系统管理员开放。安全管理员可以<b>按部门授权</b>，但不能创建部门——否则等于可以凭空造一个部门把权限授过去。</p></div>
+      <div class="note"><p><b>密级天花板</b>：系统管理员建号/改号时，成员密级<b>不能高于他自己</b>；管理员也不能提升自己的密级。需要更高密级的账号，由同级或更高密级的管理员创建；租户内无人可达时，由平台运营在租户详情调整（见管理员手册 §4.1 / §10.4）。</p></div>
       <p>「移交」系统管理员标 ○：管理员可以代离职人员把空间转给第三方，但<b>转给自己时必须原所有者确认</b>。</p>
     </div>
 
@@ -454,7 +456,7 @@
 
 <footer class="foot">
   <span>NeuroDMS · 用户手册 · 角色能力 V1.0.0</span>
-  <span>网页版 v1.6.0 · 源文件 docs/30-用户手册-角色能力-v1.2.1.md</span>
+  <span>网页版 v1.8.0 · 源文件 docs/30-用户手册-角色能力-v1.8.0.md</span>
 </footer>
 
 <button class="totop" type="button" aria-label="回到顶部">

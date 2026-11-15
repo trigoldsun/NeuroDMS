@@ -1,0 +1,835 @@
+/* 平台运营控制台 · 桌面端布局与组件样式
+   ============================================================
+   为什么单独一个文件、为什么全部用 pf- 前缀：
+   运营台是**桌面数据密集**场景（宽表、并列信息、批量操作），与租户端的
+   "内容阅读"场景布局要求不同。此前它复用了 layout/sidebar/brand 这些类名，
+   但 styles.css 里从来没有这些类 —— 于是 .layout 是 block、.sidebar 宽 1600px，
+   整页变成从上到下的竖排列表，看起来像手机网页（实测：layoutDisplay=block、
+   sidebarWidth=1600px、pageScrollH=1836 > 视口 1000）。
+
+   这里不复用、不改写租户端骨架，只新增一套 pf- 命名空间：
+   运营台与租户端互不影响，也不再有"写了 class 却没有样式"的隐患。
+   色彩/字阶/圆角/阴影全部取自 styles.css 的设计令牌，不引入新颜色。 */
+
+/* ---------- 骨架：左侧固定导航 + 顶栏 + 内容区 ---------- */
+
+.pf-shell {
+  display: grid;
+  grid-template-columns: var(--w-side) minmax(0, 1fr);
+  height: 100vh;
+  overflow: hidden;
+  background: var(--paper);
+}
+
+/* 侧栏：纸绿底 + 细线，底部点阵为母题（沿用租户端的视觉语言） */
+.pf-side {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--side);
+  border-right: 1px solid var(--line);
+  overflow: hidden;
+}
+.pf-side::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 180px;
+  background-image: radial-gradient(rgba(10, 18, 14, .10) 1px, transparent 1px);
+  background-size: 18px 18px;
+  opacity: .45;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(to top, #000, transparent);
+  mask-image: linear-gradient(to top, #000, transparent);
+}
+html[data-theme='dark'] .pf-side::after {
+  background-image: radial-gradient(rgba(255, 255, 255, .07) 1px, transparent 1px);
+}
+
+.pf-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 16px 16px;
+  position: relative;
+  z-index: 1;
+}
+/* 品牌标记：森绿方块 + 芽绿对角，是"直角阶梯"母题的最小表达。
+   此前用的是空 span（background: none），等于什么都没有。 */
+.pf-brand-mark {
+  width: 24px; height: 24px;
+  flex: 0 0 24px;
+  border-radius: 6px;
+  background:
+    linear-gradient(135deg, var(--sprout) 0 45%, transparent 45%),
+    var(--forest);
+  box-shadow: inset 0 0 0 1px rgba(8, 52, 31, .18);
+}
+.pf-brand-text { min-width: 0; }
+.pf-brand-text b {
+  display: block;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  color: var(--ink);
+  line-height: 1.2;
+}
+.pf-brand-text span {
+  display: block;
+  font-size: 11px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--slate);
+  margin-top: 2px;
+}
+
+.pf-nav {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pf-nav-label {
+  font-size: 10.5px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--mist);
+  padding: 10px 8px 6px;
+}
+.pf-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 13px;
+  text-align: left;
+  width: 100%;
+  position: relative;
+  justify-content: flex-start;
+}
+.pf-nav-item:hover:not(.on) { background: rgba(15, 92, 64, .07); }
+.pf-nav-item.on {
+  background: var(--surface);
+  color: var(--forest-d);
+  font-weight: 500;
+  box-shadow: var(--shadow-1);
+}
+/* 激活态的左侧竖条：3px 直角，不用圆角胶囊 */
+.pf-nav-item.on::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 7px; bottom: 7px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--forest);
+}
+.pf-nav-item .pf-nav-count {
+  margin-left: auto;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--slate);
+}
+
+.pf-side-foot {
+  position: relative;
+  z-index: 1;
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--line-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pf-who {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.pf-avatar {
+  width: 28px; height: 28px;
+  flex: 0 0 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--forest);
+  color: #F2F8F1;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.pf-who-text { min-width: 0; flex: 1; }
+.pf-who-text b {
+  display: block;
+  font-size: 12.5px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.pf-who-text span {
+  display: block;
+  font-size: 11px;
+  color: var(--slate);
+}
+
+/* ---------- 顶栏 ---------- */
+
+.pf-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--paper);
+}
+.pf-appbar {
+  height: var(--h-top);
+  flex: 0 0 var(--h-top);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 22px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.pf-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--slate);
+}
+.pf-crumbs b { color: var(--ink); font-weight: 600; font-size: 14px; }
+.pf-crumbs .sep { color: var(--mist); }
+.pf-crumbs a, .pf-crumbs button.pf-link {
+  color: var(--slate);
+  border: none;
+  background: none;
+  padding: 0;
+  height: auto;
+  font-size: 13px;
+}
+.pf-crumbs a:hover, .pf-crumbs button.pf-link:hover {
+  color: var(--forest);
+  text-decoration: none;
+  background: none;
+}
+.pf-appbar .pf-grow { flex: 1; }
+.pf-appbar-actions { display: flex; align-items: center; gap: 8px; }
+
+/* 内容区：限宽居中。运营台宽表多，但无限拉宽会让眼球来回扫，
+   1520 是"27 寸屏两屏不重叠、表格列不挤压"的折中。 */
+.pf-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 22px;
+  scroll-behavior: smooth;
+}
+.pf-inner { max-width: 1520px; margin: 0 auto; }
+
+/* ---------- 页头 ---------- */
+
+.pf-pagehead {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.pf-pagehead .pf-titles { min-width: 0; }
+.pf-pagehead h1 {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  color: var(--ink);
+  line-height: 1.2;
+}
+.pf-pagehead p {
+  margin: 5px 0 0;
+  font-size: 12.5px;
+  color: var(--slate);
+  line-height: 1.6;
+  max-width: 78ch;
+}
+.pf-pagehead .pf-head-acts {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ---------- 统计条 ---------- */
+
+.pf-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.pf-stat {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 13px 15px 14px;
+  box-shadow: var(--shadow-1);
+  min-width: 0;
+}
+.pf-stat .k {
+  font-size: 10.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--slate);
+}
+.pf-stat .v {
+  font-size: 25px;
+  font-weight: 600;
+  letter-spacing: -.025em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  margin-top: 4px;
+  line-height: 1.1;
+}
+.pf-stat .s { font-size: 11.5px; color: var(--mist); margin-top: 3px; }
+.pf-stat.alert { border-color: var(--warn-line); background: var(--warn-weak); }
+
+/* ---------- 面板 ---------- */
+
+.pf-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-1);
+  min-width: 0;
+  overflow: hidden;
+}
+.pf-panel + .pf-panel { margin-top: 14px; }
+.pf-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line-soft);
+  min-height: 46px;
+}
+.pf-panel-head h2, .pf-panel-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -.01em;
+}
+.pf-panel-head .pf-grow { flex: 1; }
+.pf-panel-head .hint { font-size: 11.5px; }
+.pf-panel-body { padding: 16px; }
+.pf-panel-body.tight { padding: 0; }
+.pf-panel-foot {
+  padding: 11px 16px;
+  border-top: 1px solid var(--line-soft);
+  background: var(--surface-2);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---------- 数据表格（桌面增强） ---------- */
+
+.pf-tablewrap {
+  overflow: auto;
+  max-height: none;
+}
+.pf-tablewrap > table { min-width: 860px; }
+.pf-panel .pf-tablewrap > table > thead > tr > th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--slate);
+  padding: 9px 12px;
+  white-space: nowrap;
+}
+.pf-panel .pf-tablewrap > table > tbody > tr > td { padding: 11px 12px; }
+.pf-panel .pf-tablewrap > table > tbody > tr:hover > td { background: var(--surface-2); }
+.pf-panel .pf-tablewrap > table > tbody > tr.is-active > td { background: #F3F9EE; }
+.pf-panel .pf-tablewrap > table > tbody > tr.is-active > td:first-child {
+  box-shadow: inset 3px 0 0 var(--forest);
+}
+.pf-panel .pf-tablewrap > table > thead > tr > th.pf-r,
+.pf-panel .pf-tablewrap > table > tbody > tr > td.pf-r { text-align: right; }
+/* 操作列固定在右侧：宽表横向滚动时仍能点到按钮。
+   没有它，运营必须先把表拖到最右才能点"停用"，容易点错行。 */
+.pf-panel .pf-tablewrap > table > thead > tr > th.pf-sticky,
+.pf-panel .pf-tablewrap > table > tbody > tr > td.pf-sticky {
+  position: sticky;
+  right: 0;
+  background: var(--surface);
+  box-shadow: -8px 0 12px -10px rgba(10, 18, 14, .22);
+  white-space: nowrap;
+}
+.pf-panel .pf-tablewrap > table > thead > tr > th.pf-sticky { background: var(--surface-2); z-index: 3; }
+.pf-panel .pf-tablewrap > table > tbody > tr:hover > td.pf-sticky { background: var(--surface-2); }
+.pf-panel .pf-tablewrap > table > tbody > tr.is-active > td.pf-sticky { background: #F3F9EE; }
+
+.pf-toolrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface);
+}
+.pf-search {
+  position: relative;
+  flex: 0 1 300px;
+  min-width: 180px;
+}
+.pf-search input { width: 100%; padding-left: 30px; height: 32px; font-size: 13px; }
+.pf-search svg {
+  position: absolute;
+  left: 9px; top: 50%;
+  transform: translateY(-50%);
+  width: 14px; height: 14px;
+  stroke: var(--mist);
+  fill: none;
+  stroke-width: 1.55;
+  pointer-events: none;
+}
+
+/* ---------- 详情页：两列网格（替代遮罩抽屉） ---------- */
+
+.pf-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 14px;
+  align-items: start;
+}
+.pf-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.pf-col > .pf-panel + .pf-panel { margin-top: 0; }
+
+/* 定义列表：标签在上、值在下，避免"标签:值"长句在窄列里折行断句 */
+.pf-dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+}
+.pf-dl > div { min-width: 0; }
+.pf-dl dt {
+  font-size: 10.5px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--slate);
+  margin-bottom: 3px;
+}
+.pf-dl dd {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.pf-dl dd.mono { font-family: var(--mono); font-size: 12px; }
+
+/* ---------- 行内列表项（开关、域名、用量） ---------- */
+
+.pf-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line-soft);
+  min-height: 48px;
+}
+.pf-row:last-child { border-bottom: none; }
+.pf-row:hover { background: var(--surface-2); }
+.pf-row-main { flex: 1; min-width: 0; }
+.pf-row-main .t { font-size: 13px; color: var(--ink-2); }
+.pf-row-main .s {
+  font-size: 11.5px;
+  color: var(--slate);
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.pf-row-acts { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+
+/* ---------- 表单网格 ---------- */
+
+.pf-grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.pf-grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.pf-form { display: grid; gap: 12px; }
+/* 表单分组标题：弹窗内容被滚动截断时，让人知道"下面还有一组必填项" */
+.pf-section { display: grid; gap: 3px; padding-top: 2px; }
+.pf-section b { font-size: 13px; color: var(--ink); }
+.pf-section span { font-size: 12px; color: var(--slate); line-height: 1.55; }
+.pf-form .pf-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+/* 单选卡片：档位选择用。比原生 radio 更能承载"这一档换了什么"的副文案 */
+.pf-choice {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pf-choice > label {
+  flex: 1 1 150px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 9px 11px;
+  cursor: pointer;
+  background: var(--surface);
+  transition: border-color .14s, background .14s, box-shadow .14s;
+  font-size: 13px;
+  color: var(--ink-2);
+  font-weight: 400;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.pf-choice > label:hover { border-color: #C3D1C6; }
+.pf-choice > label.on {
+  border-color: var(--forest);
+  background: #F3F9EE;
+  box-shadow: var(--ring);
+  color: var(--forest-d);
+  font-weight: 500;
+}
+.pf-choice input { margin: 0; }
+
+/* ---------- 提示条 ---------- */
+
+.pf-note {
+  display: flex;
+  gap: 9px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  line-height: 1.6;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--slate);
+}
+.pf-note.warn { background: var(--warn-weak); border-color: var(--warn-line); color: var(--warn); }
+.pf-note.danger { background: var(--danger-weak); border-color: var(--danger-line); color: var(--danger); }
+.pf-note.ok { background: var(--ok-weak); border-color: #CBE1D4; color: var(--ok); }
+.pf-note b { color: inherit; font-weight: 600; }
+.pf-note code {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  background: rgba(10, 18, 14, .05);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+/* 错误条：可关闭。此前是常驻的 card，一个旧错误会跟着走到别的页签 */
+.pf-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 13px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--danger-line);
+  background: var(--danger-weak);
+  color: var(--danger);
+  font-size: 12.5px;
+  line-height: 1.6;
+  margin-bottom: 14px;
+}
+.pf-alert .pf-grow { flex: 1; min-width: 0; }
+.pf-alert button { color: inherit; border-color: transparent; background: transparent; height: 22px; }
+.pf-alert button:hover { background: rgba(169, 59, 44, .1); }
+
+/* ---------- 弹窗（桌面居中，宽度按内容给） ---------- */
+
+.pf-modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 18, 14, .34);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 8vh 20px 40px;
+  z-index: 400;
+  overflow: auto;
+}
+.pf-modal {
+  width: 100%;
+  max-width: 560px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-3);
+  overflow: hidden;
+}
+.pf-modal.narrow { max-width: 440px; }
+.pf-modal-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.pf-modal-head h2 { margin: 0; font-size: 15px; font-weight: 600; color: var(--ink); }
+.pf-modal-head .pf-grow { flex: 1; }
+/* 弹窗内容区：字段多时滚动，提交按钮固定在 .pf-modal-foot。
+ *
+ * 滚动条必须**常显**：Windows 上的 overlay 滚动条在鼠标不动时会淡出，
+ * 视觉上等于"表单到底了"。「开通租户」的「管理员初始口令」正好在折叠线以下，
+ * 曾因此被当成"没有设置管理员的地方"。
+ * 只写 ::-webkit-scrollbar 系（Chrome/Edge）；同时写 scrollbar-width 会让
+ * Chrome 改用原生 overlay 滚动条，这里的效果就没了。 */
+.pf-modal-body { padding: 16px 18px; max-height: 66vh; overflow: auto; overscroll-behavior: contain; }
+.pf-modal-body::-webkit-scrollbar { width: 11px; }
+.pf-modal-body::-webkit-scrollbar-track { background: var(--surface-2); border-radius: 999px; }
+.pf-modal-body::-webkit-scrollbar-thumb {
+  background: var(--slate, var(--line));
+  border-radius: 999px;
+  border: 3px solid var(--surface-2);
+  background-clip: padding-box;
+  opacity: .6;
+}
+.pf-modal-body::-webkit-scrollbar-thumb:hover { background: var(--forest); background-clip: padding-box; }
+.pf-modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 13px 18px;
+  border-top: 1px solid var(--line-soft);
+  background: var(--surface-2);
+}
+
+/* ---------- 空态 ---------- */
+
+.pf-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 46px 20px;
+  color: var(--mist);
+  font-size: 13px;
+  text-align: center;
+}
+.pf-empty svg { width: 30px; height: 30px; stroke: var(--mist); fill: none; stroke-width: 1.4; }
+.pf-empty b { color: var(--slate); font-weight: 500; }
+
+/* ---------- 提示气泡 ---------- */
+
+.pf-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 30px;
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: #F2F8F1;
+  padding: 9px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  box-shadow: var(--shadow-2);
+  z-index: 500;
+  max-width: 76vw;
+  animation: pf-rise .18s ease-out;
+}
+@keyframes pf-rise {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* ---------- 登录（桌面：左品牌右表单，与租户端同一语言） ---------- */
+
+.pf-login {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr 520px;
+  background: var(--paper);
+}
+.pf-login-aside {
+  position: relative;
+  overflow: hidden;
+  padding: 56px 60px;
+  display: flex;
+  flex-direction: column;
+  /* 主内容垂直居中，页脚靠 margin-top:auto 压在底部：
+     space-between 在"只有两段内容"时会把文字全顶到上半屏，中间留一大片空。 */
+  justify-content: center;
+  color: #EAF3EE;
+  background:
+    radial-gradient(88% 66% at 6% 2%, rgba(198, 238, 75, .16), transparent 56%),
+    radial-gradient(70% 60% at 96% 100%, rgba(15, 92, 64, .5), transparent 62%),
+    linear-gradient(158deg, #08120C 0%, #0A1A13 52%, #081310 100%);
+}
+.pf-login-aside::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, .09) 1px, transparent 1px);
+  background-size: 20px 20px;
+  opacity: .55;
+}
+.pf-login-aside > * { position: relative; z-index: 1; }
+.pf-login-aside h1 {
+  margin: 0 0 14px;
+  /* 必须显式给颜色：styles.css 里有全局 h1 { color: var(--ink) }，
+     在深绿底上等于近黑字压深绿，实测几乎不可读。 */
+  color: #F4F9F3;
+  font-size: 34px;
+  line-height: 1.2;
+  letter-spacing: -.03em;
+  font-weight: 700;
+  max-width: 16ch;
+}
+.pf-login-aside p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: #B6CBBE;
+  max-width: 42ch;
+}
+.pf-login-points {
+  list-style: none;
+  margin: 26px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+  font-size: 13px;
+  color: #CFE0D5;
+}
+.pf-login-points li { display: flex; gap: 9px; align-items: flex-start; }
+.pf-login-points li::before {
+  content: "";
+  width: 5px; height: 5px;
+  flex: 0 0 5px;
+  margin-top: 8px;
+  background: var(--sprout);
+  border-radius: 1px;
+}
+.pf-login-foot { margin-top: auto; padding-top: 40px; font-size: 11.5px; color: #86A091; letter-spacing: .04em; }
+
+/* 直角阶梯：品牌母题的最小表达。放在右下角，不与表单争视线 */
+.pf-login-deco {
+  position: absolute;
+  right: 54px;
+  bottom: 96px;
+  display: flex;
+  align-items: flex-end;
+  gap: 7px;
+  z-index: 1;
+  pointer-events: none;
+}
+.pf-login-deco i {
+  display: block;
+  width: 11px;
+  background: var(--sprout);
+  border-radius: 1px;
+}
+.pf-login-deco i:nth-child(1) { height: 26px; opacity: .28; }
+.pf-login-deco i:nth-child(2) { height: 44px; opacity: .42; }
+.pf-login-deco i:nth-child(3) { height: 62px; opacity: .58; }
+.pf-login-deco i:nth-child(4) { height: 80px; opacity: .78; }
+
+.pf-login-main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 44px;
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+}
+.pf-login-card { width: 100%; max-width: 372px; }
+.pf-login-card h2 {
+  margin: 18px 0 6px;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  color: var(--ink);
+}
+.pf-login-card .sub {
+  font-size: 12.5px;
+  color: var(--slate);
+  margin-bottom: 22px;
+  line-height: 1.6;
+}
+.pf-login-card .pf-brand-mark { width: 30px; height: 30px; flex-basis: 30px; }
+
+/* ---------- 响应式（桌面优先，窄屏仍可用） ---------- */
+
+@media (max-width: 1360px) {
+  .pf-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pf-detail { grid-template-columns: minmax(0, 1fr) 320px; }
+}
+
+@media (max-width: 1180px) {
+  .pf-detail { grid-template-columns: minmax(0, 1fr); }
+  .pf-login { grid-template-columns: 1fr; }
+  .pf-login-aside { display: none; }
+  .pf-login-main { border-left: none; }
+}
+
+/* 窄于 960 时侧栏转为顶部横向导航：
+   运营台在平板上也要能改开关，而 240px 侧栏会挤掉正文 */
+@media (max-width: 960px) {
+  .pf-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .pf-side { flex-direction: row; align-items: center; border-right: none; border-bottom: 1px solid var(--line); overflow-x: auto; }
+  .pf-side::after { display: none; }
+  .pf-brand { padding: 10px 14px 10px 12px; margin-right: 6px; border-right: 1px solid var(--line); }
+  .pf-brand-text span { display: none; }
+  .pf-nav { flex-direction: row; padding: 6px 4px; gap: 2px; overflow-x: auto; }
+  .pf-nav-label { display: none; }
+  .pf-nav-item { width: auto; white-space: nowrap; height: 32px; }
+  .pf-nav-item.on::before { display: none; }
+  .pf-nav-item.on { box-shadow: inset 0 -2px 0 var(--forest); border-radius: 6px; }
+  .pf-nav-item .pf-nav-count { display: none; }
+  .pf-side-foot { border-top: none; padding: 0 12px 0 0; flex-direction: row; align-items: center; }
+  .pf-who-text { display: none; }
+  .pf-content { padding: 14px; }
+  .pf-appbar { padding: 0 14px; }
+}
+
+@media (max-width: 720px) {
+  .pf-stats { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .pf-grid2, .pf-grid3, .pf-dl { grid-template-columns: minmax(0, 1fr); }
+  .pf-pagehead h1 { font-size: 18px; }
+  .pf-pagehead .pf-head-acts { margin-left: 0; width: 100%; }
+}
+
+/* ---------- 深色模式微调 ----------
+   浅色下靠"白卡片浮在纸绿上"表达选中；深色下 --surface 与 --side 太接近，
+   必须补一圈描边，否则完全看不出哪个页签是当前页。 */
+
+html[data-theme='dark'] .pf-nav-item.on {
+  background: #1E2A23;
+  color: #F2F6F1;
+  box-shadow: inset 0 0 0 1px #2C3A31;
+}
+html[data-theme='dark'] .pf-nav-item.on::before { background: var(--sprout); }
+html[data-theme='dark'] .pf-panel .pf-tablewrap > table > thead > tr > th.pf-sticky,
+html[data-theme='dark'] .pf-panel .pf-tablewrap > table > tbody > tr > td.pf-sticky {
+  box-shadow: -8px 0 12px -10px rgba(0, 0, 0, .8);
+}
+html[data-theme='dark'] .pf-panel .pf-tablewrap > table > tbody > tr:hover > td { background: var(--surface-2); }
+html[data-theme='dark'] .pf-modal-mask { background: rgba(0, 0, 0, .58); }
+html[data-theme='dark'] .pf-login-main { border-left-color: var(--line); }
+html[data-theme='dark'] .pf-brand-mark { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12); }

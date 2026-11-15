@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"docvault/internal/directory"
+	"docvault/internal/entitlement"
 	"docvault/internal/rbac"
 )
 
@@ -66,13 +67,17 @@ func (a *API) handlePutDirectory(w http.ResponseWriter, r *http.Request) {
 	}
 	// 目录认证是专业版及以上能力。拦在保存入口而不是只藏设置页：
 	// 否则基础版客户拿到接口地址就能把域口令写进去，形成"配置好了但不生效"的困惑。
-	if ed, eerr := a.editionState(r.Context(), c.TenantID); eerr != nil {
+	if _, eerr := a.editionState(r.Context(), c.TenantID); eerr != nil {
 		writeErr(w, r, http.StatusServiceUnavailable, "ENTITLEMENT_UNAVAILABLE",
 			"无法读取租户档位，请稍后重试")
 		return
-	} else if !ed.Spec.AD {
+	} else if ok, oerr := a.entitled(r.Context(), c.TenantID, entitlement.DirAuth); oerr != nil {
+		writeErr(w, r, http.StatusServiceUnavailable, "ENTITLEMENT_UNAVAILABLE",
+			"无法读取能力授权，请稍后重试")
+		return
+	} else if !ok {
 		writeErr(w, r, http.StatusForbidden, "FEATURE_NOT_ENABLED",
-			"当前档位（"+ed.Spec.Name+"）不支持目录认证，请升级后使用")
+			"当前档位或授权不含目录认证，请升级或联系运营单独开通")
 		return
 	}
 	if a.SecretBox == nil || !a.SecretBox.Available() {
@@ -189,13 +194,17 @@ func (a *API) handleSyncDirectory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// 同步与保存同属目录认证能力，不能只在保存处把关。
-	if ed, eerr := a.editionState(r.Context(), c.TenantID); eerr != nil {
+	if _, eerr := a.editionState(r.Context(), c.TenantID); eerr != nil {
 		writeErr(w, r, http.StatusServiceUnavailable, "ENTITLEMENT_UNAVAILABLE",
 			"无法读取租户档位，请稍后重试")
 		return
-	} else if !ed.Spec.AD {
+	} else if ok, oerr := a.entitled(r.Context(), c.TenantID, entitlement.DirAuth); oerr != nil {
+		writeErr(w, r, http.StatusServiceUnavailable, "ENTITLEMENT_UNAVAILABLE",
+			"无法读取能力授权，请稍后重试")
+		return
+	} else if !ok {
 		writeErr(w, r, http.StatusForbidden, "FEATURE_NOT_ENABLED",
-			"当前档位（"+ed.Spec.Name+"）不支持目录认证，请升级后使用")
+			"当前档位或授权不含目录认证，请升级或联系运营单独开通")
 		return
 	}
 	var req struct {

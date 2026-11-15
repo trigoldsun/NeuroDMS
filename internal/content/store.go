@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -68,14 +69,18 @@ func New(pool *pgxpool.Pool, root string) (*Store, error) {
 	return &Store{pool: pool, root: root}, nil
 }
 
+// SpaceKinds 是合法的空间类型。
+//
+// 导出而不是留在 switch 里：建空间失败时错误信息要能列出可选值，
+// 前端也要能据此渲染选择器。"只能去读代码才知道合法值"不是接口契约。
+var SpaceKinds = []string{"personal", "dept", "project", "knowledge", "archive"}
+
 // CreateSpace 创建空间，并给创建者授予所有者 ACE。
 func (s *Store) CreateSpace(ctx context.Context, tenantID, ownerID, kind, name string) (string, error) {
 	if name == "" || len([]rune(name)) > 100 {
 		return "", ErrBadInput
 	}
-	switch kind {
-	case "personal", "dept", "project", "knowledge", "archive":
-	default:
+	if !slices.Contains(SpaceKinds, kind) {
 		return "", ErrBadInput
 	}
 

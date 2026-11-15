@@ -21,6 +21,8 @@ import (
 	"docvault/internal/auth"
 	"docvault/internal/db"
 	"docvault/internal/edition"
+	"docvault/internal/entitlement"
+	"docvault/internal/password"
 	"docvault/internal/rbac"
 
 	"github.com/jackc/pgx/v5"
@@ -68,12 +70,18 @@ type Service struct {
 	pool *pgxpool.Pool
 	// now 便于测试注入
 	now func() time.Time
+	// ents 是能力授权（按租户判"买没买"）。nil 表示未装配，
+	// 此时所有"需要授权"的判定按未开通处理（fail-closed）。
+	ents *entitlement.Service
 }
 
 // New 构造服务。
 func New(pool *pgxpool.Pool) *Service {
 	return &Service{pool: pool, now: time.Now}
 }
+
+// SetEntitlements 注入能力授权服务（由 main 装配）。
+func (s *Service) SetEntitlements(e *entitlement.Service) { s.ents = e }
 
 // Tenant 是平台视角的租户视图（只含规模与状态，不含业务明细）。
 type Tenant struct {
@@ -132,7 +140,7 @@ type Created struct {
 	Status      string `json:"status"`
 }
 
-const minAdminPasswordLen = 12
+const minAdminPasswordLen = password.MinLength
 
 // Create 开通租户并创建首个系统管理员。
 //
@@ -193,6 +201,20 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (Created, error) {
 	}
 
 	var adminID string
+	// 首个管理员的密级 = 该档位允许写入的最高值（基础版没有密级功能 → 0）。
+	//
+	// 为什么不能写 0：`iam` 里有"定密不超自身"的规则（防止管理员造一个高密级账号、
+	// 再以它登录去读核心文件），升自己的密级同样受这条约束。首管理员若是 0 级，
+	// 就会出现"建不出任何有密级的账号、自己也升不上去"的死局，客户只能找运维改库。
+	//
+	// 开通是平台的**显式授权动作**（进审计），把这份信任一次性给足；
+	// 需要分级管控时，客户应当另建低密级管理员，而不是把唯一的首管理员压到 0。
+	firstClass := 0
+	for _, v := range edition.Resolve(ed, expires, time.Now()).SelectableClasses() {
+		if v > firstClass {
+			firstClass = v
+		}
+	}
 	err = db.WithTenant(ctx, s.pool, tenantID, func(tx pgx.Tx) error {
 		var deptID string
 		if e := tx.QueryRow(ctx, `
@@ -208,9 +230,10 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (Created, error) {
 		if e := tx.QueryRow(ctx, `
 			INSERT INTO app_user (id, tenant_id, username, display_name, password_hash,
 			                      email, dept_id, status, classification)
-			VALUES (gen_random_uuid(), $1, $2, $3, $4, nullif($5,''), $6, 'active', 1)
+			-- 密级取该档位允许的最高值（基础版为 0），理由见上面的 firstClass 注释。
+			VALUES (gen_random_uuid(), $1, $2, $3, $4, nullif($5,''), $6, 'active', $7)
 			RETURNING id::text`,
-			tenantID, in.AdminUsername, display, hash, in.AdminEmail, deptID).Scan(&adminID); e != nil {
+			tenantID, in.AdminUsername, display, hash, in.AdminEmail, deptID, firstClass).Scan(&adminID); e != nil {
 			return e
 		}
 		// 先把角色表补齐（Bootstrap 幂等），再显式授予 sysadmin。

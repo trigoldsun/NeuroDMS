@@ -5,11 +5,13 @@ import (
 	"crypto/rand"
 	"docvault/internal/dbtest"
 	"encoding/hex"
+	"errors"
 	"os"
 	"testing"
 	"time"
 
 	"docvault/internal/db"
+	"docvault/internal/password"
 	"docvault/migrations"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -83,7 +85,7 @@ func seedUser(t *testing.T, pool *pgxpool.Pool) (tenantSlug, username, tenantID,
 func newService(pool *pgxpool.Pool) *Service {
 	cfg := DefaultConfig()
 	cfg.MaxFailed = 3
-	cfg.MinPasswordLen = 12
+	cfg.MinPasswordLen = password.MinLength
 	return New(pool, []byte("0123456789abcdef0123456789abcdef"), cfg)
 }
 
@@ -195,7 +197,7 @@ func TestChangePasswordRejectsShortAndWrongOld(t *testing.T) {
 	slug, user, _, _ := seedUser(t, pool)
 
 	tk, _ := svc.Login(context.Background(), slug, user, testPassword, LoginLocal, "", "")
-	if err := svc.ChangePassword(context.Background(), tk.Access, testPassword, "short"); err != ErrWeakPassword {
+	if err := svc.ChangePassword(context.Background(), tk.Access, testPassword, "short"); !errors.Is(err, ErrWeakPassword) {
 		t.Fatalf("过短口令应拒绝，实际 %v", err)
 	}
 	if err := svc.ChangePassword(context.Background(), tk.Access, "wrong-old-one", "a-whole-new-passphrase"); err != ErrInvalidCredentials {

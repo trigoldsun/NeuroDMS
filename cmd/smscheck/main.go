@@ -30,13 +30,13 @@ import (
 )
 
 func main() {
-	p, err := sms.NewAliyun(sms.AliyunConfig{
-		AccessKeyID:     os.Getenv("DOCVAULT_SMS_ACCESS_KEY_ID"),
-		AccessKeySecret: os.Getenv("DOCVAULT_SMS_ACCESS_KEY_SECRET"),
-		SignName:        os.Getenv("DOCVAULT_SMS_SIGN_NAME"),
-		TemplateCode:    os.Getenv("DOCVAULT_SMS_TEMPLATE_CODE"),
-		SchemeName:      os.Getenv("DOCVAULT_SMS_SCHEME_NAME"),
-	})
+	p, err := sms.NewAliyun(
+		os.Getenv("DOCVAULT_SMS_ACCESS_KEY_ID"),
+		os.Getenv("DOCVAULT_SMS_ACCESS_KEY_SECRET"),
+		os.Getenv("DOCVAULT_SMS_SIGN_NAME"),
+		os.Getenv("DOCVAULT_SMS_TEMPLATE_CODE"),
+		os.Getenv("DOCVAULT_SMS_SCHEME_NAME"),
+	)
 	if err != nil {
 		fmt.Println("✗ 配置不完整:", err)
 		os.Exit(2)
@@ -60,7 +60,7 @@ func main() {
 			fmt.Println("✗ 需要 -verify <号码> -code <验证码>")
 			os.Exit(2)
 		}
-		ok, err := p.Check(ctx, norm, *verifyCode)
+		ok, err := p.Verify(ctx, norm, *verifyCode)
 		if err != nil {
 			fmt.Println("✗ 核验失败：", err)
 			os.Exit(1)
@@ -78,7 +78,7 @@ func main() {
 			fmt.Println("✗ 号码格式不正确（仅支持中国大陆 11 位）")
 			os.Exit(2)
 		}
-		if err := p.Send(ctx, norm); err != nil {
+		if err := p.Send(ctx, norm, ""); err != nil {
 			fmt.Println("✗ 发送失败：", err)
 			os.Exit(1)
 		}
@@ -87,7 +87,7 @@ func main() {
 		return
 	}
 
-	ok, err := p.Check(ctx, "+8613000000000", "000000")
+	ok, err := p.Verify(ctx, "+8613000000000", "000000")
 	switch {
 	case err == nil:
 		fmt.Printf("✓ 凭据可用（核验返回 ok=%v，属预期：该号码没有有效验证码）\n", ok)

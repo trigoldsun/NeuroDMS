@@ -8,18 +8,24 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
+	"docvault/internal/acmecert"
 	"docvault/internal/auth"
 	"docvault/internal/content"
 	"docvault/internal/db"
+	"docvault/internal/dept"
 	"docvault/internal/directory"
+	"docvault/internal/entitlement"
 	"docvault/internal/feature"
 	"docvault/internal/iam"
+	"docvault/internal/integrations"
+	"docvault/internal/license"
 	"docvault/internal/media"
 	"docvault/internal/metering"
 	"docvault/internal/netinfo"
@@ -31,6 +37,7 @@ import (
 	"docvault/internal/rbac"
 	"docvault/internal/scan"
 	"docvault/internal/secretbox"
+	"docvault/internal/sms"
 	"docvault/internal/tenant"
 	"docvault/internal/watermark"
 
@@ -64,16 +71,30 @@ type API struct {
 	Tenants *tenant.Service
 	// IAM 成员（账号）管理：建号、改资料、启停、重置口令、角色授予
 	IAM *iam.Service
+	// Depts 部门树：手工建/改名/移动/删除（目录同步走 directory 包，共用同一套路径规则）
+	Depts *dept.Service
 	// Metering 用量计量与配额判定
 	Metering *metering.Service
 	// Features 灰度开关
 	Features *feature.Service
+	// Entitlements 能力授权（档位默认 + 单租户特批 + 平台强制关）。
+	// nil 表示未装配：能力判定一律 fail-closed（见 handlers_entitlements.go）。
+	Entitlements *entitlement.Service
 	// PlatformAuth 平台运营账号与会话（与租户账号完全分离）
 	PlatformAuth *platformauth.Service
 	// SecretBox 用于加密落库的证书私钥与目录服务账号口令；nil 表示未配置密钥
 	SecretBox *secretbox.Box
-	// SMSConfigured 表示短信通道（阿里云短信认证服务 / 本地 mock）已就绪。
-	// 只用于 capabilities 与设置页提示；真正的调用在 auth.Service 内。
+	// License 是本地版许可证（云端版为 nil，视为"无需许可证"）。
+	License *license.Manager
+	// Acme 是自动签发服务；nil 表示未装配（视为 off）。
+	Acme *acmecert.Service
+	// Integrations 是凭证中心：第三方服务的租户级配置（只写不读密钥）。
+	Integrations *integrations.Store
+	// SMS 是短信通道服务：按租户解析（租户自带厂商账号优先，否则平台默认）。
+	// nil 时回落到 SMSConfigured 这个静态布尔（测试装配用）。
+	SMS *sms.Service
+	// SMSConfigured 表示**平台侧**环境变量通道是否就绪。
+	// 保留它是因为登录页在没有租户上下文时也要判断；租户级就绪以 SMS 为准。
 	SMSConfigured bool
 
 	// 目录认证（LDAP/AD）：Store 管配置，Resolver 供登录按租户取连接，
@@ -152,8 +173,12 @@ func (a *API) Register(mux *http.ServeMux) {
 	a.registerACL(mux)
 	a.registerGovernance(mux)
 	a.registerAdmin(mux)
+	a.registerDomain(mux)
+	a.registerLicense(mux)
+	a.registerIntegrations(mux)
 	a.registerPlatform(mux)
 	a.registerPlatformTenants(mux)
+	a.registerPlatformEntitlements(mux)
 	a.registerPlatformUsers(mux)
 	a.registerBranding(mux)
 	// 租户档位能力查询：前端据此隐藏按钮，不承担安全职责
@@ -163,6 +188,7 @@ func (a *API) Register(mux *http.ServeMux) {
 	// 未启用预览时同样要能返回清单（只是能力全为不可预览）。
 	mux.HandleFunc("GET /v1/meta/formats", a.requireAuth(a.handleFormatCatalog))
 	a.registerMembers(mux)
+	a.registerDepts(mux)
 	a.registerClassification(mux)
 	a.registerBatch(mux)
 	a.registerUpload(mux)
@@ -496,9 +522,27 @@ func (a *API) emit(r *http.Request, tenantID string, ev AuditEntry) error {
 	if a.OnAudit == nil || tenantID == "" {
 		return nil
 	}
+	// object_id 在库里是 uuid 列。传域名、provider 编码、许可证号这类字符串
+	// 会让 INSERT 报类型错误——而调用方普遍写成 `_ = a.emit(...)`，
+	// 结果是**审计静默丢失**（本轮实测踩到：域名增删一条都没记上）。
+	// 在这里挡住并明确报错，比等数据库报一句 invalid input syntax 更好定位。
+	if ev.ObjectID != "" && !isUUID(ev.ObjectID) {
+		return fmt.Errorf("审计 object_id 必须是 uuid（当前 %q）："+
+			"非 uuid 的标识请放进 Detail", ev.ObjectID)
+	}
 	ev.IP = clientIP(r)
 	ev.RequestID = httpmw.RequestIDFrom(r.Context())
 	return a.OnAudit(r.Context(), tenantID, ev)
+}
+
+// emitLogged 写审计并在失败时记日志。
+//
+// 用在"审计是唯一追责凭据"的地方：配置变更、授权、凭证、证书、许可证。
+// 这类事件写不进去必须留痕，不能像普通读操作那样直接丢弃。
+func (a *API) emitLogged(r *http.Request, tenantID string, ev AuditEntry) {
+	if err := a.emit(r, tenantID, ev); err != nil {
+		a.logErr("审计写入失败", "action", ev.Action, "err", err)
+	}
 }
 
 func (a *API) auditLogin(r *http.Request, tenantID, username string, err error) {
@@ -559,7 +603,9 @@ func writeErrHint(w http.ResponseWriter, r *http.Request, status int, code, msg,
 func writeJSON(w http.ResponseWriter, r *http.Request, status int, body any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(body)
+	// nonNullLists：空列表统一编码成 []（见 jsonlist.go 的说明）。
+	// 放在唯一的出口上，新增接口不会因为"忘了 make"又漏出 null。
+	_ = json.NewEncoder(w).Encode(nonNullLists(body))
 }
 
 func writeAuthErr(w http.ResponseWriter, r *http.Request, err error) {
@@ -594,6 +640,9 @@ func writeAuthErr(w http.ResponseWriter, r *http.Request, err error) {
 		write(http.StatusConflict, "DOMAIN_ACCOUNT_NOT_SYNCED")
 	case errors.Is(err, auth.ErrDirectoryNotConfigured):
 		write(http.StatusConflict, "DIRECTORY_NOT_CONFIGURED")
+	case errors.Is(err, auth.ErrDirectoryNotEntitled):
+		// 403 而不是 409：这不是"状态没对齐"，是"这项能力当前没有"
+		write(http.StatusForbidden, "FEATURE_NOT_ENABLED")
 	case errors.Is(err, auth.ErrDomainUnavailable):
 		write(http.StatusServiceUnavailable, "DIRECTORY_UNAVAILABLE")
 	case errors.Is(err, auth.ErrDomainLocked):

@@ -147,20 +147,20 @@ func (a *API) handleSetClass(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 档位允许写入的密级：与上传入口同一套判定，避免"上传被拒、改密级却能成功"。
-	ed, eerr := a.editionState(r.Context(), c.TenantID)
+	levels, ed, eerr := a.classLevels(r.Context(), c.TenantID)
 	if eerr != nil {
 		writeErr(w, r, http.StatusServiceUnavailable, "ENTITLEMENT_UNAVAILABLE",
 			"无法读取租户档位，请稍后重试")
 		return
 	}
-	if req.Level != nil && !ed.CanWriteClass(*req.Level) {
+	if req.Level != nil && !levelAllowed(levels, *req.Level) {
 		_ = a.emit(r, c.TenantID, AuditEntry{
 			ActorID: c.Subject, Action: "classification.set", ObjectID: nodeID, Result: "denied",
 			Detail: map[string]any{"reason": "edition_classification", "requested": *req.Level,
 				"edition": string(ed.Edition)},
 		})
 		writeErr(w, r, http.StatusForbidden, "FEATURE_NOT_ENABLED",
-			"当前档位（"+ed.Spec.Name+"）不支持该密级")
+			"当前档位或授权不支持该密级（"+ed.Spec.Name+"）")
 		return
 	}
 
@@ -285,6 +285,28 @@ func (a *API) handleRequestDown(w http.ResponseWriter, r *http.Request) {
 //
 // ownerApproval 是"该密级外发是否需要空间所有者二次确认"，可逐级配置。
 // 不传（null）表示保持原值——老版本前端与脚本不会带这个字段。
+// requireClassified 校验"该租户此刻是否具备密级能力"，返回 true 表示可以继续。
+//
+// 用途：密级定义与标签策略的**写入口**。没有能力时不允许改——
+// 客户能改的每一项都应当真的生效，否则基础版会看到一套 7 档密级名称与策略，
+// 以为买了密级管控（这正是"默认停用但界面照旧"的典型）。
+//
+// 注意与 guardMemberClass 的返回语义相反：这里 true=放行，那里 true=已拒绝。
+func (a *API) requireClassified(w http.ResponseWriter, r *http.Request, tenantID string) bool {
+	levels, st, err := a.classLevels(r.Context(), tenantID)
+	if err != nil {
+		writeErr(w, r, http.StatusServiceUnavailable, "ENTITLEMENT_UNAVAILABLE",
+			"无法读取租户档位，请稍后重试")
+		return false
+	}
+	if len(levels) == 0 {
+		writeErr(w, r, http.StatusForbidden, "FEATURE_NOT_ENABLED",
+			"当前档位或授权不含密级功能（"+st.Spec.Name+"）")
+		return false
+	}
+	return true
+}
+
 func (a *API) handleSetClassLabel(w http.ResponseWriter, r *http.Request) {
 	c, _ := claimsFrom(r.Context())
 	level, err := strconv.Atoi(r.PathValue("level"))
@@ -296,6 +318,9 @@ func (a *API) handleSetClassLabel(w http.ResponseWriter, r *http.Request) {
 		Name          string `json:"name"`
 		Description   string `json:"description"`
 		OwnerApproval *bool  `json:"ownerApproval"`
+	}
+	if !a.requireClassified(w, r, c.TenantID) {
+		return
 	}
 	if !decode(w, r, &req) {
 		return
@@ -457,6 +482,9 @@ func (a *API) handleSetLabelPolicy(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		MinLevel int `json:"minLevel"`
+	}
+	if !a.requireClassified(w, r, c.TenantID) {
+		return
 	}
 	if !decode(w, r, &req) {
 		return

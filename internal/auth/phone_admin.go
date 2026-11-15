@@ -61,7 +61,7 @@ func (s *Service) RequestPhoneVerifyFor(ctx context.Context, tenantID, userID, i
 	if err := s.checkSendRate(ctx, tenantID, phone, ip); err != nil {
 		return "", err
 	}
-	if err := s.sms.Send(ctx, phone); err != nil {
+	if err := s.sms.Send(ctx, tenantID, phone); err != nil {
 		// 失败也要落一条：否则频控会把"一直失败"当成没发过，
 		// 管理员连点十次就打了十次上游接口。
 		_ = s.logSMS(ctx, tenantID, phone, ip, "failed")
@@ -86,7 +86,7 @@ func (s *Service) ConfirmPhoneVerifyFor(ctx context.Context, tenantID, userID, c
 	if strings.TrimSpace(code) == "" {
 		return "", ErrCodeInvalid
 	}
-	ok, err := s.sms.Check(ctx, phone, code)
+	ok, err := s.sms.Check(ctx, tenantID, phone, code)
 	if err != nil {
 		return "", ErrSMSUnavailable
 	}

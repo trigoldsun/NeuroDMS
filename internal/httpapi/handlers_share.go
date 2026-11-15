@@ -16,6 +16,7 @@ import (
 	"docvault/internal/authz"
 	"docvault/internal/content"
 	"docvault/internal/db"
+	"docvault/internal/entitlement"
 	"docvault/internal/feature"
 	"docvault/internal/preview"
 	"docvault/internal/share"
@@ -195,13 +196,19 @@ func (a *API) handleCreateShare(w http.ResponseWriter, r *http.Request) {
 				"无法读取租户档位，请稍后重试")
 			return
 		}
-		if !ed.Spec.ShareMail {
+		mailOK, oerr := a.entitled(r.Context(), c.TenantID, entitlement.MailOutbound)
+		if oerr != nil {
+			writeErr(w, r, http.StatusServiceUnavailable, "ENTITLEMENT_UNAVAILABLE",
+				"无法读取能力授权，请稍后重试")
+			return
+		}
+		if !mailOK {
 			_ = a.emit(r, c.TenantID, AuditEntry{
 				ActorID: c.Subject, Action: "share.create", ObjectID: nodeID, Result: "denied",
-				Detail: map[string]any{"reason": "edition_share_mail", "edition": string(ed.Edition)},
+				Detail: map[string]any{"reason": "entitlement_mail_outbound", "edition": string(ed.Edition)},
 			})
 			writeErr(w, r, http.StatusForbidden, "FEATURE_NOT_ENABLED",
-				"当前档位（"+ed.Spec.Name+"）不支持邮件外发，请改用链接分享")
+				"当前档位或授权不含邮件外发，请改用链接分享，或联系运营单独开通")
 			return
 		}
 	}
@@ -721,6 +728,8 @@ func (a *API) handleRedeem(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusInternalServerError, "AUDIT_FAILED", "审计写入失败，操作已拒绝")
 		return
 	}
+	brandName := a.brandName(r.Context(), res.TenantID)
+	logoURL, logoMime := a.brandLogo(r.Context(), res.TenantID)
 	writeOK(w, r, map[string]any{
 		"shareId":       res.ShareID,
 		"objectType":    res.ObjectType,
@@ -730,11 +739,15 @@ func (a *API) handleRedeem(w http.ResponseWriter, r *http.Request) {
 		"allowPrint":    res.AllowPrint,
 		// 分享页页眉要显示租户自己的系统名称（与邮件主题保持一致），
 		// 否则访客收到【森莘】的邮件、点开却是 NeuroDMS，可信度立刻打折。
-		"productName": a.brandName(r.Context(), res.TenantID),
-		"watermark":   res.Watermark,
-		"oneTime":     res.IsOneTime,
-		"ticket":      ticket,
-		"expiresIn":   int(time.Until(expires).Seconds()),
+		"productName": brandName,
+		// 图标同理：访客第一眼看到的组织标识。这里给的是可缓存的公开地址，
+		// 不内联图片字节——分享页每次打开都要拿一次这段元信息。
+		"logoUrl":   logoURL,
+		"logoMime":  logoMime,
+		"watermark": res.Watermark,
+		"oneTime":   res.IsOneTime,
+		"ticket":    ticket,
+		"expiresIn": int(time.Until(expires).Seconds()),
 	})
 }
 
@@ -745,7 +758,11 @@ func (a *API) redeemError(w http.ResponseWriter, r *http.Request, err error) {
 		// 不存在 / 已用尽 / 已过期 / 已撤销 统一表现，避免枚举
 		writeErr(w, r, http.StatusGone, "SHARE_UNAVAILABLE", "链接不可用")
 	case errors.Is(err, share.ErrPasswordRequired):
-		writeErr(w, r, 411, "PASSWORD_REQUIRED", "该链接需要访问口令")
+		// 428 而不是 411（E2E 验收 F-05）：411 的本意是"缺少 Content-Length"，
+		// 网关与监控会把它当畸形请求；428「需要先满足前置条件」才是这里的意思，
+		// 与下面的 VERIFY_REQUIRED 用同一档。
+		// 错误码 PASSWORD_REQUIRED 保持不变——客户端按 code 判断，不认状态码。
+		writeErr(w, r, http.StatusPreconditionRequired, "PASSWORD_REQUIRED", "该链接需要访问口令")
 	case errors.Is(err, share.ErrVerifyRequired):
 		// 428 而不是 403：这是"还差一步"，不是"你没资格"。
 		// 前端据此切到邮箱验证表单，而不是显示"无权访问"。
