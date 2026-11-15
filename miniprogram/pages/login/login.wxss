@@ -1,0 +1,54 @@
+/* 登录页：三种方式并列，字段随方式切换，不做三个独立表单 */
+.login { min-height: 100vh; padding: 48rpx 40rpx 60rpx; }
+
+.brand { display: flex; flex-direction: column; align-items: center; margin-bottom: 32rpx; }
+.logo {
+  width: 100rpx; height: 100rpx; border-radius: 28rpx; background: #0f5c40;
+  color: #fff; font-size: 44rpx; font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+}
+.brand-name { margin-top: 18rpx; font-size: 36rpx; font-weight: 600; letter-spacing: -.4rpx; }
+.brand-sub { margin-top: 4rpx; font-size: 23rpx; color: #8a93a0; }
+
+.seg {
+  display: flex; gap: 6rpx; padding: 6rpx; margin-bottom: 18rpx;
+  background: #eaeFE9; border-radius: 14rpx;
+}
+.seg-item {
+  flex: 1; height: 62rpx; border-radius: 10rpx;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24rpx; color: #5b6862;
+}
+.seg-item.on { background: #fff; color: #0f5c40; font-weight: 600; box-shadow: 0 1rpx 3rpx rgba(16,32,24,.06); }
+
+.form { padding: 10rpx 26rpx 26rpx; }
+.field {
+  display: flex; align-items: center; min-height: 100rpx;
+  border-bottom: 1rpx solid #eef1ee;
+}
+.label { width: 112rpx; flex: none; font-size: 27rpx; color: #40484f; }
+.input { flex: 1; min-width: 0; height: 56rpx; font-size: 29rpx; color: #1f2329; }
+.ph { color: #b3bcc5; font-size: 26rpx; }
+.code-row .input { width: 140rpx; flex: 1; }
+.send {
+  flex: none; height: 56rpx; padding: 0 16rpx; border-radius: 10rpx;
+  background: #eaf4ee; color: #0f5c40; font-size: 23rpx;
+  display: flex; align-items: center;
+}
+.send.off { background: #f2f4f2; color: #a9b5ae; }
+.sent { margin-top: 12rpx; font-size: 22rpx; color: #8a93a0; }
+
+.err {
+  margin-top: 16rpx; padding: 14rpx 18rpx; border-radius: 12rpx;
+  background: #fdeeeb; color: #a93b2c; font-size: 24rpx; line-height: 1.5;
+}
+.err-hint { margin-top: 6rpx; color: #8a4a3c; font-size: 22rpx; }
+
+.form .btn { margin-top: 24rpx; }
+.foot { margin-top: 28rpx; padding: 0 8rpx; font-size: 22rpx; line-height: 1.75; color: #a9b5ae; }
+
+/* 二次验证 */
+.mfa-title { margin: 18rpx 0 8rpx; font-size: 30rpx; font-weight: 600; color: #1f2329; }
+.mfa-desc { font-size: 24rpx; color: #6b7684; line-height: 1.7; }
+.mfa-desc .mono { color: #1f2329; }
+.mfa-back { margin-top: 18rpx; text-align: center; font-size: 24rpx; color: #0f5c40; }

@@ -1,0 +1,59 @@
+/* 预览页：头部元信息 + 按类型分流的查看区 */
+.page { padding: 20rpx 24rpx 40rpx; }
+
+.card + .card { margin-top: 18rpx; }
+.head { padding: 26rpx; }
+.name { font-size: 32rpx; font-weight: 600; line-height: 1.45; word-break: break-all; }
+.meta { margin-top: 8rpx; font-size: 22rpx; color: #8a93a0; }
+.dot { margin: 0 8rpx; color: #c4ccc8; }
+.tags { display: flex; gap: 8rpx; flex-wrap: wrap; margin-top: 14rpx; }
+.tag {
+  height: 36rpx; line-height: 36rpx; padding: 0 12rpx; border-radius: 8rpx;
+  font-size: 20rpx; border: 1rpx solid transparent;
+}
+.tag-c0 { color: #2f6b4f; background: #eaf4ee; border-color: #d3e7db; }
+.tag-c1 { color: #2b5a77; background: #eaf2f8; border-color: #d3e3ee; }
+.tag-c2 { color: #7a5a12; background: #fbf4e2; border-color: #eee0bd; }
+.tag-c3 { color: #8a4a12; background: #fdf0e4; border-color: #f0d8bd; }
+.tag-c4 { color: #a93b2c; background: #fdeeeb; border-color: #f0cfc7; }
+.tag-c5 { color: #fff; background: #a93b2c; border-color: #a93b2c; }
+.tag-c6 { color: #fff; background: #5b1f17; border-color: #5b1f17; }
+.tag-plain { color: #6b7684; background: #f4f6f4; border-color: #e8ece8; }
+
+.viewer { padding: 22rpx 22rpx 18rpx; }
+.img { width: 100%; border-radius: 12rpx; }
+.text-scroll { max-height: 60vh; background: #fafbf9; border-radius: 12rpx; padding: 18rpx; }
+.text-body { font-size: 26rpx; line-height: 1.85; color: #2b3330; white-space: pre-wrap; }
+.viewer-tip { margin-top: 14rpx; font-size: 21rpx; color: #a9b5ae; line-height: 1.6; }
+
+.doc { display: flex; justify-content: center; padding: 24rpx 0 28rpx; }
+.doc-sheet {
+  width: 200rpx; height: 260rpx; border-radius: 12rpx; background: #f4f7f4;
+  border: 1rpx solid #e3e9e4; padding: 24rpx 20rpx;
+}
+.doc-ext { font-size: 30rpx; font-weight: 700; color: #3f5a6b; }
+.doc-line { height: 10rpx; border-radius: 5rpx; background: #dfe6e1; margin-top: 18rpx; }
+.doc-line.short { width: 60%; }
+
+.block { padding: 80rpx 36rpx; text-align: center; }
+.block-icon {
+  width: 92rpx; height: 92rpx; border-radius: 26rpx; margin: 0 auto 20rpx;
+  background: #fdeeeb; color: #a93b2c; font-size: 42rpx; font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+}
+.block-icon.small { background: #f2f4f2; color: #8a93a0; }
+.block-title { font-size: 29rpx; color: #1f2329; font-weight: 500; }
+.block-desc { margin-top: 10rpx; font-size: 24rpx; color: #6b7684; line-height: 1.7; }
+.block-tip { margin-top: 16rpx; font-size: 21rpx; color: #a9b5ae; line-height: 1.7; }
+.block .btn { margin-top: 26rpx; }
+
+.state { padding: 140rpx 30rpx; text-align: center; color: #8a93a0; font-size: 25rpx; }
+.spin {
+  width: 44rpx; height: 44rpx; border-radius: 50%; margin: 0 auto 16rpx;
+  border: 4rpx solid #e3e8e3; border-top-color: #0f5c40;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-mini { padding: 60rpx; text-align: center; color: #a9b5ae; font-size: 24rpx; }
+
+.foot { margin-top: 24rpx; padding: 0 10rpx; font-size: 21rpx; color: #a9b5ae; line-height: 1.7; }

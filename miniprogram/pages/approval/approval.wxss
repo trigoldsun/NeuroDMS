@@ -1,0 +1,37 @@
+/* 审批详情 */
+.page { padding: 24rpx 24rpx 40rpx; }
+.card { padding: 28rpx; }
+.name { font-size: 32rpx; font-weight: 600; line-height: 1.45; word-break: break-all; }
+.meta { margin-top: 8rpx; font-size: 22rpx; color: #8a93a0; }
+.tags { display: flex; gap: 8rpx; margin-top: 14rpx; flex-wrap: wrap; }
+.tag {
+  height: 36rpx; line-height: 36rpx; padding: 0 12rpx; border-radius: 8rpx;
+  font-size: 20rpx; border: 1rpx solid transparent;
+}
+.tag-c0 { color: #2f6b4f; background: #eaf4ee; border-color: #d3e7db; }
+.tag-c1 { color: #2b5a77; background: #eaf2f8; border-color: #d3e3ee; }
+.tag-c2 { color: #7a5a12; background: #fbf4e2; border-color: #eee0bd; }
+.tag-c3 { color: #8a4a12; background: #fdf0e4; border-color: #f0d8bd; }
+.tag-c4 { color: #a93b2c; background: #fdeeeb; border-color: #f0cfc7; }
+.tag-c5 { color: #fff; background: #a93b2c; border-color: #a93b2c; }
+.tag-c6 { color: #fff; background: #5b1f17; border-color: #5b1f17; }
+.tag-plain { color: #6b7684; background: #f4f6f4; border-color: #e8ece8; }
+
+.rows { margin-top: 22rpx; border-top: 1rpx solid #eef1ee; }
+.row { display: flex; align-items: baseline; gap: 16rpx; padding: 16rpx 0; border-bottom: 1rpx solid #f4f6f4; }
+.row:last-child { border-bottom: 0; }
+.k { width: 150rpx; flex: none; font-size: 23rpx; color: #8a93a0; }
+.v { flex: 1; font-size: 25rpx; color: #40484f; }
+
+.note { margin-top: 18rpx; padding: 0 10rpx; font-size: 21rpx; color: #a9b5ae; line-height: 1.7; }
+.actions { display: flex; gap: 16rpx; margin-top: 30rpx; }
+.actions .btn { flex: 1; }
+
+.state { padding: 120rpx 30rpx; text-align: center; color: #8a93a0; font-size: 25rpx; }
+.state-title { color: #40484f; font-size: 27rpx; margin-bottom: 22rpx; }
+.spin {
+  width: 44rpx; height: 44rpx; border-radius: 50%; margin: 0 auto 16rpx;
+  border: 4rpx solid #e3e8e3; border-top-color: #0f5c40;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }

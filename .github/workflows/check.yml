@@ -1,0 +1,62 @@
+# 提交门禁：Go 测试 + 四项前端/文档门禁 + 小程序门禁。
+#
+# 为什么要有 CI：这些门禁原本只在本地脚本里，跑不跑取决于人。
+# 小程序与主项目漂移过一次（四处不一致，其中一处会让 MFA 账号登不进去），
+# 靠的就是"没人跑"。这里让"没跑"变成"红叉"。
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.6-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: docvault
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: gofmt
+        run: |
+          out=$(gofmt -l ./cmd ./internal)
+          if [ -n "$out" ]; then echo "以下文件未格式化："; echo "$out"; exit 1; fi
+      - name: go vet
+        run: go vet ./...
+      - name: go test（含真实 PG 集成测试）
+        env:
+          DOCVAULT_TEST_DSN: postgres://postgres:test@127.0.0.1:5432/docvault?sslmode=disable
+        run: go test ./... -count=1
+
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: 前后端接口一致性
+        run: node scripts/check-api-consistency.mjs
+      - name: 交互约定（状态必须进地址）
+        run: node scripts/check-ui-routes.mjs
+      - name: 文档版本一致性
+        run: node scripts/check-doc-versions.mjs
+      - name: 小程序门禁（版本/接口/密级/阶段/标题/自检）
+        run: node scripts/check-miniprogram.mjs
+      - name: AC 门禁（越权用例追溯）
+        run: bash scripts/ac-gate.sh

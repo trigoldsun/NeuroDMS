@@ -37,7 +37,7 @@
     <h1>身份不是一个标签，是四层</h1>
     <p class="subtitle">同一句"我能不能做这件事"，答案可能来自四个不同的维度。先把它们拆开，再看能力矩阵。</p>
     <div class="meta">
-      <span class="chip v">V1.8.0</span>
+      <span class="chip v">V1.9.0</span>
       <span class="chip">适用 <b>最终用户 · 实施顾问 · 内审</b></span>
       <span class="chip">配套 <b>场景操作</b> · <b>管理员手册</b></span>
       <button class="chip" type="button" data-print style="cursor:pointer;font-family:inherit">打印 / 存为 PDF</button>
@@ -438,10 +438,35 @@
       </table>
     </div>
 
+    <h2 id="mp" data-nav="9 · 小程序里的能力范围"><span class="num">9</span>小程序里的能力范围</h2>
+    <div class="meta">
+      <span class="chip">适用 <b>所有角色</b></span>
+      <span class="chip">原则 <b>能力是角色能力的子集，不会多给</b></span>
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>动作</th><th>小程序</th><th>需要的权限（与网页端同一套判定）</th></tr></thead>
+        <tbody>
+          <tr><td>浏览空间与目录</td><td>✅</td><td>Display</td></tr>
+          <tr><td>预览文件</td><td>✅</td><td>Preview（PDF 叠加溯源水印）</td></tr>
+          <tr><td>搜索文件名</td><td>✅</td><td>Display（服务端逐条判可见性）</td></tr>
+          <tr><td>看自己的最近访问</td><td>✅</td><td>本人活动日志</td></tr>
+          <tr><td>审批外发申请</td><td>✅</td><td>被指定为审批人 / 有 ManageACL</td></tr>
+          <tr><td>上传、新建、改名、移动、删除</td><td>❌</td><td>回网页端</td></tr>
+          <tr><td>发起外发、改策略、看审计</td><td>❌</td><td>回网页端</td></tr>
+          <tr><td>绑定 / 换绑手机号、改口令</td><td>❌</td><td>回网页端（换绑需口令 + 验证码）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note"><p>密级、角色、手机号在「我的」页只读；密级名称来自组织自定义的「密级定义」，
+    改过名就显示新名字。<b>审批提醒是一次性订阅</b>：授权一条发一条，与角色无关。</p></div>
+
     <div class="cards c2" style="margin-top:28px">
       <a class="card" href="scenarios.html" style="text-decoration:none;color:inherit;display:block">
         <span class="tag f">上一篇</span>
-        <h4>场景操作手册：八件事怎么做</h4>
+        <h4>场景操作手册：九件事怎么做</h4>
         <p>工作台、上传、检索、授权、编辑回退、外发审批、格式预览、账号交接。</p>
       </a>
       <a class="card" href="admin.html" style="text-decoration:none;color:inherit;display:block">
@@ -455,8 +480,8 @@
 </div>
 
 <footer class="foot">
-  <span>NeuroDMS · 用户手册 · 角色能力 V1.0.0</span>
-  <span>网页版 v1.8.0 · 源文件 docs/30-用户手册-角色能力-v1.8.0.md</span>
+  <span>NeuroDMS · 用户手册 · 角色能力 V1.9.0</span>
+  <span>网页版 v1.9.0 · 源文件 docs/30-用户手册-角色能力-v1.9.0.md</span>
 </footer>
 
 <button class="totop" type="button" aria-label="回到顶部">

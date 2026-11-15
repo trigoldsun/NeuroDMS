@@ -37,7 +37,7 @@
     <h1>把每一步交到对的人手上</h1>
     <p class="subtitle">七个高频场景，每个场景讲清三件事：谁做、怎么做、什么情况下会被拦下来。</p>
     <div class="meta">
-      <span class="chip v">V1.8.0</span>
+      <span class="chip v">V1.9.0</span>
       <span class="chip">适用 <b>所有登录用户（含外部协作者）</b></span>
       <span class="chip">配套 <b>角色能力</b> · <b>管理员手册</b></span>
       <button class="chip" type="button" data-print style="cursor:pointer;font-family:inherit">打印 / 存为 PDF</button>
@@ -538,12 +538,46 @@
     <div class="tip"><p><b>一次移交同时改三处</b>：空间归谁、空间里原属于他的文件归谁、谁能管理这个空间。
     只改前两处会出现"名字换了、权限没换"，所以三者在一笔事务里完成。</p></div>
 
-    <h2 id="faq" data-nav="8 · 常见问题速查"><span class="num">8</span>常见问题速查</h2>
+    <h2 id="s8" data-nav="场景 8 · 在手机上处理（小程序）"><span class="num">8</span>在手机上处理（小程序）</h2>
+    <div class="meta">
+      <span class="chip">适用 <b>所有已绑定手机号的账号</b></span>
+      <span class="chip">入口 <b>微信小程序（AppID 由实施方提供）</b></span>
+      <span class="chip">边界 <b>只读 + 审批：不写入</b></span>
+    </div>
+
+    <p>小程序解决的是"<b>只想看一眼 / 批一下</b>"：在客户现场、通勤路上、会议中间。
+    它能浏览、搜索、预览、放行外发申请；<b>上传、新建、发起外发仍回网页端</b>。</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>要做的事</th><th>在小程序里怎么做</th><th>注意</th></tr></thead>
+        <tbody>
+          <tr><td><b>登录</b></td><td>账号密码 / 手机号密码 / 手机号验证码</td><td>账号必须<b>已验证手机号</b>；多组织同名要写 <code>账号@组织标识</code></td></tr>
+          <tr><td><b>找文件</b></td><td>文件页顶部「搜索文件名」；或顶部「最近访问」横条</td><td>搜索只返回你有权查看的文件；太多会提示补充关键词</td></tr>
+          <tr><td><b>看文件</b></td><td>点文件名进预览：图片页内显示、文本原样、PDF/Office 交微信内置组件</td><td>预览走预览权限并叠加溯源水印，每次预览都写审计</td></tr>
+          <tr><td><b>批外发</b></td><td>「审批」页签 → 点申请 → 通过 / 驳回</td><td>审批人不能是发起人本人，这条由服务端保证</td></tr>
+          <tr><td><b>让手机叫你</b></td><td>审批页顶部「开启提醒」→ 微信授权</td><td><b>一次性订阅</b>：授权一条发一条，不是永久开启</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note"><p><b>开了二次验证的账号</b>：口令通过后会要求输入<b>邮箱验证码</b>（不是短信）。
+    这不是故障，是第二道门；收不到就让管理员核对账号邮箱。</p></div>
+
+    <div class="note"><p><b>真机上所有请求都失败、开发者工具里却正常</b>：微信公众平台没登记
+    <code>request</code> / <code>downloadFile</code> 合法域名。工具可以关校验，<b>真机不能</b>——
+    这是发布前置条件，不是客户端缺陷。</p></div>
+
+    <h2 id="faq" data-nav="9 · 常见问题速查"><span class="num">9</span>常见问题速查</h2>
 
     <div class="tablewrap">
       <table>
         <thead><tr><th>现象</th><th>最可能的原因</th><th>处理</th></tr></thead>
         <tbody>
+          <tr><td>小程序提示"需要先登记手机号"</td><td>小程序只对已验证手机号的账号开放</td><td>网页端 → 右上角账户 →「手机号」完成绑定</td></tr>
+          <tr><td>小程序提示"需要二次验证"</td><td>账号开了 MFA，验证码发到登记邮箱</td><td>去邮箱取 6 位码填进去；收不到让管理员核对邮箱</td></tr>
+          <tr><td>小程序收不到审批提醒</td><td>一次性订阅：没授权 / 额度用完 / 未配置通道</td><td>审批页点「开启提醒」授权一条；没通道时横幅不出现</td></tr>
+          <tr><td>真机所有请求失败、工具却正常</td><td>未登记 request / downloadFile 合法域名</td><td>让运维登记域名（工具能关校验，真机不能）</td></tr>
           <tr><td>点文件提示"不存在"</td><td>权限不足被当作不存在</td><td>用权限解释确认，找所有者授权</td></tr>
           <tr><td>上传进度长时间不动</td><td>慢速上行 + 1MB 分片，约 10 秒一格</td><td>看「x.x MB / n 片」是否在变；不变再重选文件续传</td></tr>
           <tr><td>大文件上传到 99% 卡住</td><td>正在合并与校验</td><td>等 1~2 分钟；中断后重选可续传</td></tr>
@@ -576,8 +610,8 @@
 </div>
 
 <footer class="foot">
-  <span>NeuroDMS · 用户手册 · 场景操作 V1.1.0</span>
-  <span>网页版 v1.8.0 · 源文件 docs/29-用户手册-场景操作-v1.8.0.md</span>
+  <span>NeuroDMS · 用户手册 · 场景操作 V1.9.0</span>
+  <span>网页版 v1.9.0 · 源文件 docs/29-用户手册-场景操作-v1.9.0.md</span>
 </footer>
 
 <button class="totop" type="button" aria-label="回到顶部">

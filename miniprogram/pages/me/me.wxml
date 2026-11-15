@@ -1,0 +1,52 @@
+<view class="page">
+  <view class="card id">
+    <view class="row">
+      <view class="avatar">{{initial}}</view>
+      <view class="grow">
+        <view class="name">{{me.displayName || me.username || '—'}}</view>
+        <view class="sub">{{me.tenantName || me.tenantSlug || '—'}} · {{me.username}}</view>
+        <view class="tags">
+          <text class="tag tag-{{classTone}}">{{classLabel}}</text>
+          <text class="tag tag-plain">{{rolesText}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="card rows">
+    <view class="item" bindtap="onPhoneHelp" hover-class="item-hover">
+      <text class="k">手机号</text>
+      <view class="v">
+        <text class="mono">{{phoneText}}</text>
+        <text class="pill {{phoneVerified ? 'ok' : 'warn'}}">{{phoneVerified ? '已验证' : '未验证'}}</text>
+      </view>
+      <text class="chev">›</text>
+    </view>
+    <view class="item">
+      <text class="k">组织</text>
+      <view class="v">{{me.tenantName || '—'}}<text class="dim" wx:if="{{me.tenantSlug}}">（{{me.tenantSlug}}）</text></view>
+    </view>
+    <view class="item">
+      <text class="k">账号</text>
+      <view class="v mono">{{me.username || '—'}}</view>
+    </view>
+    <view class="item">
+      <text class="k">密级</text>
+      <view class="v">{{classLabel}}</view>
+    </view>
+  </view>
+
+  <view class="card rows">
+    <view class="item" bindtap="onAbout" hover-class="item-hover">
+      <text class="k">关于</text>
+      <view class="v">版本 {{version}} · {{serverHost}}</view>
+      <text class="chev">›</text>
+    </view>
+  </view>
+
+  <button class="btn btn-danger logout" loading="{{busy}}" disabled="{{busy}}" bindtap="onLogout">退出登录</button>
+
+  <view class="foot">
+    小程序为只读 + 审批：可以浏览、预览与放行外发申请；上传、新建与创建外发链接请在网页端完成。
+  </view>
+</view>

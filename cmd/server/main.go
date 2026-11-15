@@ -38,6 +38,7 @@ import (
 	"docvault/internal/license"
 	"docvault/internal/media"
 	"docvault/internal/metering"
+	"docvault/internal/mpmsg"
 	"docvault/internal/netinfo"
 	"docvault/internal/notify"
 	"docvault/internal/onlyoffice"
@@ -582,20 +583,26 @@ func main() {
 				PlatformToken: cfg.PlatformToken,
 				Scanner:       scan.New(cfg.ClamAVAddr, time.Duration(cfg.ClamAVTimeout)*time.Second),
 				// 预览一律叠加溯源水印（AC-55）：这是"通过预览取回原件"的唯一防线
-				Watermark:     wm,
-				Tenants:       tenantSvc,
-				IAM:           iam.New(pool),
-				Depts:         dept.New(pool),
-				Metering:      meterSvc,
-				Features:      featureSvc,
-				Entitlements:  entSvc,
-				Acme:          acmeSvc,
-				License:       licMgr,
-				PlatformAuth:  platformAuth,
-				Outbox:        notifierOutbox,
-				Mail:          mailStore,
-				MailRouter:    mailRouter,
-				Geo:           geo,
+				Watermark:    wm,
+				Tenants:      tenantSvc,
+				IAM:          iam.New(pool),
+				Depts:        dept.New(pool),
+				Metering:     meterSvc,
+				Features:     featureSvc,
+				Entitlements: entSvc,
+				Acme:         acmeSvc,
+				License:      licMgr,
+				PlatformAuth: platformAuth,
+				Outbox:       notifierOutbox,
+				Mail:         mailStore,
+				MailRouter:   mailRouter,
+				Geo:          geo,
+				// 小程序订阅消息：三项配置缺一即整体关闭（Enabled()=false），
+				// 分享创建时只做一次"跳过"判断，不会产生外呼。
+				MP: mpmsg.New(mpmsg.Config{
+					AppID: cfg.WxAppID, AppSecret: cfg.WxAppSecret,
+					TodoTemplateID: cfg.WxTodoTemplateID,
+				}, pool),
 				SecretBox:     box,
 				SMS:           smsSvc,
 				SMSConfigured: platformSMS != nil,

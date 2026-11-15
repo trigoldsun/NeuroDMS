@@ -1,0 +1,100 @@
+<view class="login">
+  <view class="brand">
+    <view class="logo">{{brandInitial}}</view>
+    <view class="brand-name">{{brandName}}</view>
+    <view class="brand-sub">文件预览 · 分享审批</view>
+  </view>
+
+  <!-- 二次验证：口令已通过，等邮箱验证码。此时不再显示登录表单，
+       避免用户以为没登进去又输一遍口令（会撞账号锁定）。 -->
+  <view class="card form" wx:if="{{mfa}}">
+    <view class="mfa-title">需要二次验证</view>
+    <view class="mfa-desc">
+      口令已通过。验证码已发送至 <text class="mono">{{mfa.sentTo}}</text>，{{mfa.expiresIn}} 秒内有效。
+    </view>
+    <view class="field">
+      <text class="label">验证码</text>
+      <input class="input" type="number" maxlength="6" value="{{mfaCode}}" placeholder="6 位数字"
+        placeholder-class="ph" bindinput="onMfaCode" bindconfirm="onSubmitMfa" />
+    </view>
+    <view class="err" wx:if="{{err}}">
+      <view>{{err}}</view>
+      <view class="err-hint" wx:if="{{errHint}}">{{errHint}}</view>
+    </view>
+    <button class="btn btn-primary" loading="{{mfaBusy}}" disabled="{{mfaBusy}}" bindtap="onSubmitMfa">
+      {{mfaBusy ? '正在验证…' : '验证并登录'}}
+    </button>
+    <view class="mfa-back" bindtap="onCancelMfa">换一种方式登录</view>
+  </view>
+
+  <block wx:else>
+    <!-- 三种方式并列：先说清有哪几种，再去填字段 -->
+    <view class="seg">
+      <view
+        wx:for="{{modes}}"
+        wx:key="key"
+        class="seg-item {{mode === item.key ? 'on' : ''}}"
+        data-mode="{{item.key}}"
+        bindtap="onMode"
+      >{{item.label}}</view>
+    </view>
+
+    <view class="card form">
+      <block wx:if="{{mode === 'account'}}">
+        <view class="field">
+          <text class="label">账号</text>
+          <input class="input" value="{{account}}" placeholder="zhangsan 或 zhangsan@组织标识"
+            placeholder-class="ph" bindinput="onAccount" />
+        </view>
+        <view class="field">
+          <text class="label">口令</text>
+          <input class="input" password value="{{password}}" placeholder="登录口令"
+            placeholder-class="ph" bindinput="onPassword" bindconfirm="onSubmit" />
+        </view>
+      </block>
+
+      <block wx:elif="{{mode === 'phone'}}">
+        <view class="field">
+          <text class="label">手机号</text>
+          <input class="input" type="number" maxlength="11" value="{{phone}}" placeholder="11 位手机号"
+            placeholder-class="ph" bindinput="onPhone" />
+        </view>
+        <view class="field">
+          <text class="label">口令</text>
+          <input class="input" password value="{{password}}" placeholder="账号口令"
+            placeholder-class="ph" bindinput="onPassword" bindconfirm="onSubmit" />
+        </view>
+      </block>
+
+      <block wx:else>
+        <view class="field">
+          <text class="label">手机号</text>
+          <input class="input" type="number" maxlength="11" value="{{phone}}" placeholder="11 位手机号"
+            placeholder-class="ph" bindinput="onPhone" />
+        </view>
+        <view class="field code-row">
+          <text class="label">验证码</text>
+          <input class="input" type="number" maxlength="6" value="{{code}}" placeholder="6 位数字"
+            placeholder-class="ph" bindinput="onCode" />
+          <view class="send {{countdown > 0 || busy ? 'off' : ''}}" bindtap="onSendCode">
+            {{countdown > 0 ? countdown + 's 后重发' : '获取验证码'}}
+          </view>
+        </view>
+        <view class="sent" wx:if="{{sentTo}}">已发送至 {{sentTo}}，5 分钟内有效</view>
+      </block>
+
+      <view class="err" wx:if="{{err}}">
+        <view>{{err}}</view>
+        <view class="err-hint" wx:if="{{errHint}}">{{errHint}}</view>
+      </view>
+
+      <button class="btn btn-primary" loading="{{busy}}" disabled="{{busy}}" bindtap="onSubmit">
+        {{busy ? '正在登录…' : '登录'}}
+      </button>
+    </view>
+  </block>
+
+  <view class="foot">
+    小程序仅对已登记并验证手机号的账号开放。未绑定？先在网页端登录，右上角账户 →「手机号」完成绑定。
+  </view>
+</view>

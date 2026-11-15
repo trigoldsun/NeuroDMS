@@ -1,0 +1,33 @@
+{
+  "description": "NeuroDMS 小程序示例：文件预览与分享审批（原生）",
+  "packOptions": {
+    "ignore": [
+      {
+        "type": "folder",
+        "value": "scripts"
+      },
+      {
+        "type": "file",
+        "value": "README.md"
+      }
+    ],
+    "include": []
+  },
+  "setting": {
+    "bundle": false,
+    "es6": true,
+    "enhance": true,
+    "minified": true,
+    "postcss": true,
+    "urlCheck": true,
+    "coverView": true,
+    "lazyloadPlaceholderEnable": false,
+    "showShadowRootInWxmlPanel": true
+  },
+  "compileType": "miniprogram",
+  "appid": "wxdec20c98d9e34dec",
+  "projectname": "ndms-doc-miniprogram",
+  "miniprogramRoot": "./",
+  "libVersion": "3.5.5",
+  "condition": {}
+}

@@ -1,0 +1,94 @@
+/* 文件页：空间 → 目录 → 文件，单列列表 */
+.page { padding: 20rpx 24rpx 40rpx; }
+
+/* 搜索入口：看起来像输入框，点了才进搜索页。
+   直接放 input 会让首页多一个键盘焦点，回到列表时键盘不会自动收起。 */
+.searchbar {
+  display: flex; align-items: center; gap: 12rpx;
+  height: 74rpx; padding: 0 24rpx; margin-bottom: 16rpx;
+  background: #fff; border: 1rpx solid #e3e8e3; border-radius: 37rpx;
+}
+.searchbar-hover { background: #f7f9f6; }
+.searchbar-icon { color: #8a93a0; font-size: 32rpx; line-height: 1; }
+.searchbar-ph { color: #a9b5ae; font-size: 25rpx; }
+
+/* 最近访问：横向卡片，只在根目录出现 */
+.recent { margin-bottom: 16rpx; }
+.recent-head { font-size: 23rpx; color: #8a93a0; padding: 2rpx 6rpx 10rpx; }
+.recent-scroll { white-space: nowrap; }
+.recent-item {
+  display: inline-block; vertical-align: top; width: 300rpx;
+  padding: 18rpx 20rpx; margin-right: 12rpx;
+  background: #fff; border-radius: 16rpx; border: 1rpx solid #eef1ee;
+}
+.recent-hover { background: #f7f9f6; }
+.recent-name {
+  font-size: 25rpx; color: #1f2329; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.recent-meta { margin-top: 6rpx; font-size: 20rpx; color: #8a93a0; }
+
+.spaces { white-space: nowrap; margin-bottom: 14rpx; }
+.space {
+  display: inline-flex; align-items: center; height: 58rpx; padding: 0 22rpx;
+  margin-right: 10rpx; border-radius: 29rpx; background: #fff;
+  border: 1rpx solid #e3e8e3; color: #5b6862; font-size: 24rpx;
+}
+.space.on { background: #0f5c40; border-color: #0f5c40; color: #fff; }
+
+.crumb {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4rpx;
+  padding: 6rpx 8rpx 12rpx; font-size: 23rpx; color: #8a93a0;
+}
+.crumb-item { color: #0f5c40; max-width: 300rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crumb-sep { color: #c4ccc8; }
+
+.list { background: #fff; border-radius: 20rpx; overflow: hidden; box-shadow: 0 2rpx 8rpx rgba(16,32,24,.04); }
+.row {
+  display: flex; align-items: center; gap: 18rpx;
+  padding: 22rpx 22rpx; border-bottom: 1rpx solid #f4f6f4;
+}
+.row:last-child { border-bottom: 0; }
+.row-hover { background: #f7f9f6; }
+
+.badge {
+  width: 76rpx; height: 76rpx; flex: none; border-radius: 14rpx;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20rpx; font-weight: 600; letter-spacing: .4rpx;
+}
+.badge.dir { background: #eef4ee; color: #0f5c40; }
+.badge.file { background: #f1f4f7; color: #3f5a6b; }
+
+.main { flex: 1; min-width: 0; }
+.name { font-size: 27rpx; color: #1f2329; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meta { margin-top: 4rpx; font-size: 21rpx; color: #8a93a0; }
+
+.tag {
+  flex: none; height: 34rpx; line-height: 34rpx; padding: 0 10rpx;
+  border-radius: 8rpx; font-size: 19rpx; border: 1rpx solid transparent;
+}
+.tag-c0 { color: #2f6b4f; background: #eaf4ee; border-color: #d3e7db; }
+.tag-c1 { color: #2b5a77; background: #eaf2f8; border-color: #d3e3ee; }
+.tag-c2 { color: #7a5a12; background: #fbf4e2; border-color: #eee0bd; }
+.tag-c3 { color: #8a4a12; background: #fdf0e4; border-color: #f0d8bd; }
+.tag-c4 { color: #a93b2c; background: #fdeeeb; border-color: #f0cfc7; }
+.tag-c5 { color: #fff; background: #a93b2c; border-color: #a93b2c; }
+.tag-c6 { color: #fff; background: #5b1f17; border-color: #5b1f17; }
+.chev { color: #c4ccc8; font-size: 30rpx; width: 18rpx; text-align: right; }
+
+.state { padding: 120rpx 30rpx; text-align: center; color: #8a93a0; font-size: 25rpx; }
+.state-title { color: #40484f; font-size: 27rpx; }
+.state-desc { margin-top: 8rpx; font-size: 23rpx; }
+.state-act {
+  display: inline-flex; margin-top: 22rpx; height: 64rpx; padding: 0 28rpx;
+  align-items: center; border: 1rpx solid #dfe5e0; border-radius: 32rpx;
+  color: #0f5c40; background: #fff; font-size: 25rpx;
+}
+.spin {
+  width: 44rpx; height: 44rpx; border-radius: 50%; margin: 0 auto 16rpx;
+  border: 4rpx solid #e3e8e3; border-top-color: #0f5c40;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.foot { margin-top: 26rpx; padding: 0 10rpx; font-size: 21rpx; color: #a9b5ae; line-height: 1.7; }

@@ -1,0 +1,54 @@
+<view class="page">
+  <view class="head">
+    <text class="h2">待我审批</text>
+    <text class="sub">外发链接需要你确认才会生效</text>
+  </view>
+
+  <!-- 审批提醒：只有服务端配置了订阅消息通道才出现（enabled=false 时整块不渲染） -->
+  <view class="remind" wx:if="{{remind.enabled}}">
+    <view class="remind-main">
+      <view class="remind-title">审批提醒</view>
+      <view class="remind-desc">{{remind.remaining > 0 ? '剩余 ' + remind.remaining + ' 条额度，有新申请会通知你' : '开启后，有新的外发申请会通过微信通知你（每次授权一条）'}}</view>
+    </view>
+    <view class="remind-btn {{remindBusy ? 'off' : ''}}" bindtap="onEnableRemind">{{remind.remaining > 0 ? '再开一条' : '开启提醒'}}</view>
+  </view>
+
+  <view class="state" wx:if="{{state === 'loading'}}">
+    <view class="spin"></view>
+    <text>正在读取待办…</text>
+  </view>
+
+  <view class="state" wx:elif="{{state === 'error'}}">
+    <view class="state-title">{{errText}}</view>
+    <view class="state-act" bindtap="onRetry">重试</view>
+  </view>
+
+  <view class="state" wx:elif="{{state === 'empty'}}">
+    <view class="state-title">没有待你审批的申请</view>
+    <view class="state-desc">有人向你发起外发申请时会出现在这里</view>
+  </view>
+
+  <view class="list" wx:else>
+    <view
+      wx:for="{{items}}"
+      wx:key="id"
+      class="row"
+      data-id="{{item.id}}"
+      bindtap="onOpen"
+      hover-class="row-hover"
+    >
+      <view class="left">
+        <view class="name">{{item.name}}</view>
+        <view class="meta">{{item.creator}} 发起 · {{item.createdText}}</view>
+        <view class="badges">
+          <text class="tag tag-{{item.classTone}}">{{item.classLabel}}</text>
+          <text class="tag tag-plain">{{item.stageText}}</text>
+        </view>
+        <view class="expire" wx:if="{{item.expireText}}">申请 {{item.expireText}} 前有效</view>
+      </view>
+      <text class="chev">›</text>
+    </view>
+  </view>
+
+  <view class="foot">只读 + 审批：小程序可以查看与放行，创建外发链接请在网页端完成。</view>
+</view>

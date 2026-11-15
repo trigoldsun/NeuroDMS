@@ -37,15 +37,15 @@
     <h1>只写会被系统真正读取的参数</h1>
     <p class="subtitle">界面上存在但不生效的开关，一律不写——那属于缺陷，不是功能。这份手册按"改完会发生什么"来组织。</p>
     <div class="meta">
-      <span class="chip v">V1.8.0</span>
+      <span class="chip v">V1.9.0</span>
       <span class="chip">适用 <b>系统 / 安全 / 审计管理员 · 实施与运维</b></span>
       <span class="chip">管理台 <b><code>/admin/{tab}</code></b></span>
       <button class="chip" type="button" data-print style="cursor:pointer;font-family:inherit">打印 / 存为 PDF</button>
     </div>
 
     <div class="note">
-      <p><b>版本说明</b>：手册版本自 <b>V1.3.2</b> 起与产品版本一致（当前 V1.8.0）；下列"V1.10.0–V1.13.0"为手册自身编号的历史记录，仅用于追溯。　</p>
-      <p><b>修订记录</b>　<b>V1.8.0 新增 §2.1 部门树（手工建/改名/移动/删除，六条护栏）、接口层约定（列表永不为 null、口令关卡 428）</b>；<b>V1.7.1 §3.8 图标适用范围：登录页与分享页固定产品图标，仅登录后站内跟随租户，失效即回退</b>；<b>V1.7.0 新增 §10.4 调整系统管理员密级（运营台租户详情；受档位约束、只限管理员、平台与租户两侧审计）</b>；V1.0.0 首版；V1.1.0 新增 §9.1 三级开关求值（放量 0% 与总开关开启的组合此前在界面上显示为"已开启"，导致运营无法解释"功能全部不可用"）；V1.2.0 重写 §6 外发审批，补上管理台入口、审批人三条件、单人空间的死链风险；<b>V1.6.0 §4.1 管理员自身密级决定能建多高的账号（口令重置同规则、不能自提密级、开通即给档位最高值）</b>；<b>V1.5.1 §11.7 部署加固基线（容器最小权限与只读根、HSTS、探测路径 404）</b>；<b>V1.5.0 §4.1 档位决定密级可选范围（成员与文件同规则）、§5.1 AD 降档即停用、降档校验含成员</b>；<b>V1.4.4 §11.6 唯一管理员口令丢失的运维通道（tenantpass）、§10.0 交付清单当场记口令</b>；<b>V1.4.3 §10.0 开通租户交付清单（首个管理员）、弹窗提交按钮固定</b>；<b>V1.4.2 浏览器标签页图标跟随系统图标、分享页页眉图标修复</b>；<b>V1.4.1 §3.8 新增系统图标上传</b>；V1.4.0 运营台改为桌面后台布局、新增 §10.3 租户详情；V1.13.0 新增 §10.1 能力授权（单租户加购/收回）；V1.12.1 补短信模板变量与自动签发限流；V1.12.0 新增 §3.13 域名与证书、§3.14 许可证；V1.11.0 新增 §3.12 短信通道（集成与凭证）；V1.10.0 新增 §3.11 口令规则与二次输入（8 位、掩码、两次一致）；V1.3.0 新增 §6 空间台账与所有权移交（停用/删除前的强制校验、三种移交组合、管理员转自己需确认），外发审批补 /approvals 独立入口。</p>
+      <p><b>版本说明</b>：手册版本自 <b>V1.3.2</b> 起与产品版本一致（当前 V1.9.0）；下列"V1.10.0–V1.13.0"为手册自身编号的历史记录，仅用于追溯。　</p>
+      <p><b>修订记录</b>　<b>V1.9.0 新增 §2.1 部门树（手工建/改名/移动/删除，六条护栏）、接口层约定（列表永不为 null、口令关卡 428）</b>；<b>V1.7.1 §3.8 图标适用范围：登录页与分享页固定产品图标，仅登录后站内跟随租户，失效即回退</b>；<b>V1.7.0 新增 §10.4 调整系统管理员密级（运营台租户详情；受档位约束、只限管理员、平台与租户两侧审计）</b>；V1.0.0 首版；V1.1.0 新增 §9.1 三级开关求值（放量 0% 与总开关开启的组合此前在界面上显示为"已开启"，导致运营无法解释"功能全部不可用"）；V1.2.0 重写 §6 外发审批，补上管理台入口、审批人三条件、单人空间的死链风险；<b>V1.6.0 §4.1 管理员自身密级决定能建多高的账号（口令重置同规则、不能自提密级、开通即给档位最高值）</b>；<b>V1.5.1 §11.7 部署加固基线（容器最小权限与只读根、HSTS、探测路径 404）</b>；<b>V1.5.0 §4.1 档位决定密级可选范围（成员与文件同规则）、§5.1 AD 降档即停用、降档校验含成员</b>；<b>V1.4.4 §11.6 唯一管理员口令丢失的运维通道（tenantpass）、§10.0 交付清单当场记口令</b>；<b>V1.4.3 §10.0 开通租户交付清单（首个管理员）、弹窗提交按钮固定</b>；<b>V1.4.2 浏览器标签页图标跟随系统图标、分享页页眉图标修复</b>；<b>V1.4.1 §3.8 新增系统图标上传</b>；V1.4.0 运营台改为桌面后台布局、新增 §10.3 租户详情；V1.13.0 新增 §10.1 能力授权（单租户加购/收回）；V1.12.1 补短信模板变量与自动签发限流；V1.12.0 新增 §3.13 域名与证书、§3.14 许可证；V1.11.0 新增 §3.12 短信通道（集成与凭证）；V1.10.0 新增 §3.11 口令规则与二次输入（8 位、掩码、两次一致）；V1.3.0 新增 §6 空间台账与所有权移交（停用/删除前的强制校验、三种移交组合、管理员转自己需确认），外发审批补 /approvals 独立入口。</p>
     </div>
 
     <h2 id="roles" data-nav="1 · 三个管理角色的边界"><span class="num">1</span>开始之前：三个管理角色的边界</h2>
@@ -1232,6 +1232,55 @@ go run ./cmd/tenantpass -slug &lt;租户标识&gt; -user admin -setclass 6 -appl
       </table>
     </div>
 
+    <h2 id="mp" data-nav="14 · 小程序：发布前置与运维"><span class="num">14</span>小程序：发布前置与运维</h2>
+    <div class="meta">
+      <span class="chip">适用 <b>系统管理员 / 实施 / 运维</b></span>
+      <span class="chip">入口 <b>微信公众平台 + 服务端环境变量</b></span>
+    </div>
+
+    <p>小程序源码随主仓库发版（<code>miniprogram/</code>），调的是同一套接口。以下四项缺一项就有明确后果：</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>项</th><th>在哪配</th><th>不配的后果</th></tr></thead>
+        <tbody>
+          <tr><td><b>request / downloadFile 合法域名</b></td><td>微信公众平台 → 开发管理 → 服务器域名</td><td><b>真机所有请求被拒</b>（工具可关校验，真机不能）</td></tr>
+          <tr><td><code>DOCVAULT_WX_APPID</code> / <code>_APPSECRET</code></td><td>服务端环境变量</td><td>换不到 openid；<code>/v1/mp/config</code> 返回 <code>enabled=false</code></td></tr>
+          <tr><td><code>DOCVAULT_WX_TODO_TEMPLATE</code></td><td>同上（订阅消息模板 ID）</td><td>提醒入口整体不显示（不是"点了报错"）</td></tr>
+          <tr><td>订阅消息模板字段</td><td>微信公众平台 → 订阅消息</td><td>字段不匹配微信返回 47003，提醒发不出（业务不受影响）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>模板字段</th><th>含义</th><th>示例</th></tr></thead>
+        <tbody>
+          <tr><td><code>thing1</code></td><td>文件名称（≤20 字，超出截断）</td><td>2026 年度采购合同</td></tr>
+          <tr><td><code>thing2</code></td><td>申请人</td><td>张三</td></tr>
+          <tr><td><code>time3</code></td><td>申请时间</td><td>2026-11-15 10:00</td></tr>
+          <tr><td><code>phrase4</code></td><td>状态</td><td>待审批</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>数据</th><th>内容</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td><code>app_user.mp_openid</code></td><td>微信 openid 与绑定时间</td><td>只存 openid，不存 session_key（用不到，存了只是多一个泄漏后果）</td></tr>
+          <tr><td><code>mp_subscription.remaining</code></td><td>某账号某模板的提醒余额</td><td>一次性订阅：发一条减一；上限 10，防止当成长期授权</td></tr>
+          <tr><td>审计 <code>mp.bind</code> / <code>mp.subscribe</code></td><td>谁在什么时候绑了微信 / 授权了几条</td><td>openid 只在 detail 里留前 6 位</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note"><p><b>排障三步</b>：用该账号调 <code>GET /v1/mp/config</code>，看 <code>enabled</code> /
+    <code>openidBound</code> / <code>remaining</code> 三个值即可定位——没配置、没绑微信、还是额度用完。</p></div>
+
+    <div class="note"><p><b>通知失败不影响审批</b>：分享创建成功即落库，提醒在后台发送，失败只记日志
+    （<code>小程序审批提醒失败</code>）。不要因为提醒没发出去就重建分享。</p></div>
+
     <div class="cards c2" style="margin-top:28px">
       <a class="card" href="scenarios.html" style="text-decoration:none;color:inherit;display:block">
         <span class="tag f">给用户</span>
@@ -1249,8 +1298,8 @@ go run ./cmd/tenantpass -slug &lt;租户标识&gt; -user admin -setclass 6 -appl
 </div>
 
 <footer class="foot">
-  <span>NeuroDMS · 管理员手册 · 租户与系统配置 V1.13.0</span>
-  <span>网页版 v1.8.0 · 源文件 docs/31-管理员手册-租户与系统配置-v1.8.0.md</span>
+  <span>NeuroDMS · 管理员手册 · 租户与系统配置 V1.9.0</span>
+  <span>网页版 v1.9.0 · 源文件 docs/31-管理员手册-租户与系统配置-v1.9.0.md</span>
 </footer>
 
 <button class="totop" type="button" aria-label="回到顶部">

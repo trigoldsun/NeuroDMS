@@ -1,0 +1,51 @@
+/* 我的：账号信息集中在这里 */
+.page { padding: 24rpx 24rpx 40rpx; }
+
+.card { padding: 26rpx; }
+.card + .card { margin-top: 18rpx; }
+
+.id .row { display: flex; align-items: center; gap: 20rpx; }
+.avatar {
+  width: 96rpx; height: 96rpx; border-radius: 48rpx; flex: none;
+  background: #0f5c40; color: #fff; font-size: 34rpx;
+  display: flex; align-items: center; justify-content: center;
+}
+.grow { flex: 1; min-width: 0; }
+.name { font-size: 34rpx; font-weight: 600; }
+.sub { margin-top: 4rpx; font-size: 22rpx; color: #8a93a0; }
+.tags { display: flex; gap: 8rpx; margin-top: 12rpx; flex-wrap: wrap; }
+.tag {
+  height: 34rpx; line-height: 34rpx; padding: 0 10rpx; border-radius: 8rpx;
+  font-size: 19rpx; border: 1rpx solid transparent;
+}
+.tag-c0 { color: #2f6b4f; background: #eaf4ee; border-color: #d3e7db; }
+.tag-c1 { color: #2b5a77; background: #eaf2f8; border-color: #d3e3ee; }
+.tag-c2 { color: #7a5a12; background: #fbf4e2; border-color: #eee0bd; }
+.tag-c3 { color: #8a4a12; background: #fdf0e4; border-color: #f0d8bd; }
+.tag-c4 { color: #a93b2c; background: #fdeeeb; border-color: #f0cfc7; }
+.tag-c5 { color: #fff; background: #a93b2c; border-color: #a93b2c; }
+.tag-c6 { color: #fff; background: #5b1f17; border-color: #5b1f17; }
+.tag-plain { color: #6b7684; background: #f4f6f4; border-color: #e8ece8; }
+
+.rows { padding: 0 24rpx; }
+.item {
+  display: flex; align-items: center; gap: 16rpx;
+  padding: 24rpx 2rpx; border-bottom: 1rpx solid #f4f6f4;
+}
+.item:last-child { border-bottom: 0; }
+.item-hover { background: #f7f9f6; }
+.k { width: 120rpx; flex: none; font-size: 25rpx; color: #8a93a0; }
+.v { flex: 1; min-width: 0; font-size: 26rpx; color: #1f2329; word-break: break-all; }
+.dim { color: #a9b5ae; font-size: 22rpx; }
+.mono { font-family: "SF Mono", Menlo, Consolas, monospace; }
+.chev { color: #c4ccc8; font-size: 30rpx; }
+
+.pill {
+  display: inline-block; margin-left: 10rpx; height: 32rpx; line-height: 32rpx;
+  padding: 0 10rpx; border-radius: 8rpx; font-size: 19rpx;
+}
+.pill.ok { color: #13723d; background: #eaf4ee; }
+.pill.warn { color: #a93b2c; background: #fdeeeb; }
+
+.logout { margin-top: 34rpx; }
+.foot { margin-top: 24rpx; padding: 0 10rpx; font-size: 21rpx; color: #a9b5ae; line-height: 1.7; }

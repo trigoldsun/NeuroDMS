@@ -25,3 +25,7 @@ web/dist/
 web/tsconfig.tsbuildinfo
 # 手册产物：由 docs/html 在构建时同步（scripts/sync-manual.mjs），不重复入库
 web/public/manual/
+
+# 小程序的本地私有配置（开发者工具会把「不校验合法域名」等设置写这里）
+# 入库会让"关掉域名校验"变成团队默认，掩盖"合法域名没登记"这类真机故障。
+/miniprogram/project.private.config.json

@@ -28,6 +28,7 @@ import (
 	"docvault/internal/license"
 	"docvault/internal/media"
 	"docvault/internal/metering"
+	"docvault/internal/mpmsg"
 	"docvault/internal/netinfo"
 	"docvault/internal/notify"
 	"docvault/internal/onlyoffice"
@@ -116,6 +117,9 @@ type API struct {
 	MailRouter *notify.Router
 	// Geo 是 IP 归属地查询器；nil 表示未配置 IP 库（界面显示"未启用"）。
 	Geo *netinfo.Geo
+	// MP 是小程序订阅消息通道；nil 或未配置时 Enabled()=false，
+	// 提醒入口整体隐藏（不半开：只配一半会出现"有开关、永远收不到"）。
+	MP *mpmsg.Service
 	// printSeen 是打印上报的节流表（票据 -> 上次记录时间）。
 	printSeen sync.Map
 	// PublicBaseURL 是外发链接使用的对外地址（如 https://ndms.neurongene.cn）。
@@ -195,6 +199,10 @@ func (a *API) Register(mux *http.ServeMux) {
 	a.registerSearch(mux)
 	a.registerProfile(mux)
 	a.registerActivity(mux)
+	// 小程序专属：绑定 openid、登记订阅授权、读取提醒能力。
+	// 未配置微信通道时这些端点仍然存在（config 返回 enabled=false），
+	// 客户端据此隐藏入口，而不是靠"猜哪个版本支持"。
+	a.registerMP(mux)
 	a.registerLDAPAdmin(mux)
 	a.registerDirectory(mux)
 	a.registerMail(mux)

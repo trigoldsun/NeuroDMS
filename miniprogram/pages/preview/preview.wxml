@@ -1,0 +1,72 @@
+<view class="page">
+  <view class="state" wx:if="{{state === 'loading'}}">
+    <view class="spin"></view>
+    <text>正在读取文件…</text>
+  </view>
+
+  <view class="block" wx:elif="{{state === 'error'}}">
+    <view class="block-icon">!</view>
+    <view class="block-title">文件打不开</view>
+    <view class="block-desc">{{errText}}</view>
+    <view class="block-tip">若是密级不足，请联系文件所有者或管理员；网页端能看到更具体的原因。</view>
+    <button class="btn btn-ghost" bindtap="load">重试</button>
+  </view>
+
+  <block wx:else>
+    <view class="card head">
+      <view class="name">{{file.name}}</view>
+      <view class="meta">
+        <text>{{file.sizeText}}</text>
+        <text class="dot">·</text>
+        <text>{{file.updatedText}}</text>
+        <text class="dot">·</text>
+        <text>{{file.ownerName}}</text>
+      </view>
+      <view class="tags">
+        <text class="tag tag-{{file.classTone}}">{{file.classLabel}}</text>
+        <text class="tag tag-plain">{{file.ext}}</text>
+        <text class="tag tag-plain">v{{file.versionNo}}</text>
+      </view>
+    </view>
+
+    <view class="card viewer" wx:if="{{kind === 'image'}}">
+      <image wx:if="{{imagePath}}" class="img" src="{{imagePath}}" mode="widthFix" bindtap="onTapImage" />
+      <view class="loading-mini" wx:else>正在加载图片…</view>
+      <view class="viewer-tip">点按可全屏查看，双指缩放</view>
+    </view>
+
+    <view class="card viewer" wx:elif="{{kind === 'text'}}">
+      <scroll-view class="text-scroll" scroll-y>
+        <text class="text-body" user-select>{{textContent}}</text>
+      </scroll-view>
+      <view class="viewer-tip">纯文本按原样显示，可长按选择复制</view>
+    </view>
+
+    <view class="card viewer" wx:elif="{{kind === 'office'}}">
+      <view class="doc">
+        <view class="doc-sheet">
+          <text class="doc-ext">{{file.ext}}</text>
+          <view class="doc-line"></view>
+          <view class="doc-line short"></view>
+          <view class="doc-line"></view>
+        </view>
+      </view>
+      <button class="btn btn-primary btn-block" loading="{{opening}}" bindtap="onOpenDocument">
+        {{opening ? '正在打开…' : '打开文档'}}
+      </button>
+      <view class="viewer-tip">
+        文档由微信内置组件打开，会离开当前页面。这是平台限制，不是降级。
+      </view>
+    </view>
+
+    <view class="card viewer" wx:else>
+      <view class="block-icon small">?</view>
+      <view class="block-title">该格式不支持在线预览</view>
+      <view class="block-desc">
+        文件是 .{{file.ext}}，微信内没有对应的渲染组件。需要查看时请在网页端打开，或联系所有者下载。
+      </view>
+    </view>
+
+    <view class="foot">预览会写入审计（谁在什么时候看了哪份文件），这是可追溯性的一部分。</view>
+  </block>
+</view>

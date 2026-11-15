@@ -1,0 +1,133 @@
+/* 全局样式：配色与基础排版
+   主色沿用文档中心的森绿（#0F5C40），中性色偏暖白，避免长时间阅读刺眼。 */
+
+page {
+  min-height: 100%;
+  background: #f5f7f2;
+  color: #1f2329;
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", sans-serif;
+  font-size: 28rpx;
+  line-height: 1.55;
+}
+
+view,
+text,
+button,
+input,
+textarea {
+  box-sizing: border-box;
+}
+
+.page {
+  padding: 24rpx 24rpx 40rpx;
+}
+
+/* 卡片：全站唯一的容器形态，圆角 20rpx、阴影极轻 */
+.card {
+  background: #ffffff;
+  border-radius: 20rpx;
+  padding: 28rpx;
+  box-shadow: 0 2rpx 8rpx rgba(16, 32, 24, 0.04);
+}
+
+.card + .card {
+  margin-top: 20rpx;
+}
+
+/* 文本层级 */
+.h1 {
+  font-size: 40rpx;
+  font-weight: 600;
+  letter-spacing: -0.4rpx;
+}
+
+.h2 {
+  font-size: 30rpx;
+  font-weight: 600;
+}
+
+.sub {
+  color: #6b7684;
+  font-size: 24rpx;
+}
+
+.mono {
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* 按钮：小程序的 button 自带边框与背景，这里统一清掉再重画 */
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 88rpx;
+  padding: 0 32rpx;
+  border-radius: 16rpx;
+  font-size: 30rpx;
+  font-weight: 500;
+  line-height: 1;
+  margin: 0;
+  border: none;
+}
+
+.btn::after {
+  border: none;
+}
+
+.btn-primary {
+  background: #0f5c40;
+  color: #ffffff;
+}
+
+.btn-primary[disabled] {
+  background: #b7c6bf;
+  color: #ffffff;
+}
+
+.btn-ghost {
+  background: #ffffff;
+  color: #1f2329;
+  border: 1rpx solid #e0e5e1;
+}
+
+.btn-danger {
+  background: #fdeeeb;
+  color: #a93b2c;
+}
+
+.btn-block {
+  width: 100%;
+}
+
+/* 行与分隔 */
+.row {
+  display: flex;
+  align-items: center;
+}
+
+.row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.divider {
+  height: 1rpx;
+  background: #eef1ee;
+  margin: 24rpx 0;
+}
+
+.ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.safe-bottom {
+  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+}

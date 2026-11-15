@@ -155,6 +155,13 @@ type Config struct {
 	// 生产模式（DOCVAULT_MODE=production）下启用会拒绝启动。
 	SMSMock bool
 
+	// ---- 微信小程序订阅消息（审批提醒）----
+	// 三项齐全才启用：只配 AppID 换不到 openid，只配模板发不出消息。
+	// 缺任意一项时 /v1/mp/config 返回 enabled=false，客户端整体隐藏入口。
+	WxAppID          string
+	WxAppSecret      string
+	WxTodoTemplateID string
+
 	// LicensePublicKey 是许可证验签公钥（base64 编码的 32 字节 Ed25519）。
 	// 为空表示本实例是云端版，不接受许可证——这时界面只显示"云端版无需许可证"。
 	// 私钥绝不在这里：它只存在于厂商侧的离线签发工具里（cmd/licensegen）。
@@ -313,6 +320,11 @@ func Load(getenv Getenv) (Config, error) {
 		SMSTemplateCode:    strings.TrimSpace(getenv("DOCVAULT_SMS_TEMPLATE_CODE")),
 		SMSSchemeName:      strings.TrimSpace(getenv("DOCVAULT_SMS_SCHEME_NAME")),
 		SMSMock:            strings.TrimSpace(getenv("DOCVAULT_SMS_MOCK")) == "1",
+
+		// 微信小程序订阅消息（审批提醒）
+		WxAppID:          strings.TrimSpace(getenv("DOCVAULT_WX_APPID")),
+		WxAppSecret:      getenv("DOCVAULT_WX_APPSECRET"),
+		WxTodoTemplateID: strings.TrimSpace(getenv("DOCVAULT_WX_TODO_TEMPLATE")),
 
 		// 许可证验签公钥
 		LicensePublicKey: strings.TrimSpace(getenv("DOCVAULT_LICENSE_PUBKEY")),

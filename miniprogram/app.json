@@ -1,0 +1,47 @@
+{
+  "pages": [
+    "pages/files/files",
+    "pages/login/login",
+    "pages/approvals/approvals",
+    "pages/search/search",
+    "pages/approval/approval",
+    "pages/preview/preview",
+    "pages/me/me"
+  ],
+  "window": {
+    "navigationBarTitleText": "文档中心",
+    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f5f7f2",
+    "backgroundTextStyle": "dark"
+  },
+  "tabBar": {
+    "color": "#8A93A0",
+    "selectedColor": "#0F5C40",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/files/files",
+        "text": "文件",
+        "iconPath": "assets/tab/file.png",
+        "selectedIconPath": "assets/tab/file-on.png"
+      },
+      {
+        "pagePath": "pages/approvals/approvals",
+        "text": "审批",
+        "iconPath": "assets/tab/check.png",
+        "selectedIconPath": "assets/tab/check-on.png"
+      },
+      {
+        "pagePath": "pages/me/me",
+        "text": "我的",
+        "iconPath": "assets/tab/me.png",
+        "selectedIconPath": "assets/tab/me-on.png"
+      }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents"
+}

@@ -1,0 +1,37 @@
+<view class="page">
+  <view class="state" wx:if="{{state === 'loading'}}">
+    <view class="spin"></view>
+    <text>正在读取…</text>
+  </view>
+
+  <view class="state" wx:elif="{{state === 'error'}}">
+    <view class="state-title">{{errText}}</view>
+    <button class="btn btn-ghost" bindtap="load">重试</button>
+  </view>
+
+  <block wx:else>
+    <view class="card">
+      <view class="name">{{item.name}}</view>
+      <view class="meta">{{item.creator}} 发起 · {{item.createdText}}</view>
+      <view class="tags">
+        <text class="tag tag-{{item.classTone}}">{{item.classLabel}}</text>
+        <text class="tag tag-plain">{{item.stageText}}</text>
+      </view>
+      <view class="rows">
+        <view class="row"><text class="k">指定审批人</text><text class="v">{{item.approverName || '—'}}</text></view>
+        <view class="row" wx:if="{{item.ownerName}}"><text class="k">所有者确认</text><text class="v">{{item.ownerName}}</text></view>
+        <view class="row" wx:if="{{item.expireText}}"><text class="k">申请有效期</text><text class="v">{{item.expireText}} 前</text></view>
+      </view>
+    </view>
+
+    <view class="note">
+      通过后链接立即生效，访问记录可追溯；驳回后申请人需重新发起。
+      审批人不能是发起人本人，这条由服务端保证。
+    </view>
+
+    <view class="actions">
+      <button class="btn btn-danger" disabled="{{busy}}" bindtap="onReject">驳回</button>
+      <button class="btn btn-primary" loading="{{busy}}" disabled="{{busy}}" bindtap="onApprove">通过</button>
+    </view>
+  </block>
+</view>

@@ -1,0 +1,60 @@
+/* 审批列表 */
+.page { padding: 24rpx 24rpx 40rpx; }
+.head { padding: 4rpx 8rpx 18rpx; display: flex; align-items: baseline; gap: 12rpx; }
+.h2 { font-size: 34rpx; font-weight: 600; }
+.sub { font-size: 22rpx; color: #8a93a0; }
+
+.list { background: #fff; border-radius: 20rpx; overflow: hidden; box-shadow: 0 2rpx 8rpx rgba(16,32,24,.04); }
+.row { display: flex; align-items: center; padding: 24rpx; border-bottom: 1rpx solid #f4f6f4; }
+.row:last-child { border-bottom: 0; }
+.row-hover { background: #f7f9f6; }
+.left { flex: 1; min-width: 0; }
+.name { font-size: 28rpx; color: #1f2329; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meta { margin-top: 6rpx; font-size: 22rpx; color: #8a93a0; }
+.badges { display: flex; gap: 8rpx; margin-top: 10rpx; flex-wrap: wrap; }
+.tag {
+  height: 34rpx; line-height: 34rpx; padding: 0 10rpx; border-radius: 8rpx;
+  font-size: 19rpx; border: 1rpx solid transparent;
+}
+.tag-c0 { color: #2f6b4f; background: #eaf4ee; border-color: #d3e7db; }
+.tag-c1 { color: #2b5a77; background: #eaf2f8; border-color: #d3e3ee; }
+.tag-c2 { color: #7a5a12; background: #fbf4e2; border-color: #eee0bd; }
+.tag-c3 { color: #8a4a12; background: #fdf0e4; border-color: #f0d8bd; }
+.tag-c4 { color: #a93b2c; background: #fdeeeb; border-color: #f0cfc7; }
+.tag-c5 { color: #fff; background: #a93b2c; border-color: #a93b2c; }
+.tag-c6 { color: #fff; background: #5b1f17; border-color: #5b1f17; }
+.tag-plain { color: #6b7684; background: #f4f6f4; border-color: #e8ece8; }
+.expire { margin-top: 8rpx; font-size: 21rpx; color: #a9b5ae; }
+.chev { color: #c4ccc8; font-size: 32rpx; margin-left: 12rpx; }
+
+.state { padding: 120rpx 30rpx; text-align: center; color: #8a93a0; font-size: 25rpx; }
+.state-title { color: #40484f; font-size: 27rpx; }
+.state-desc { margin-top: 8rpx; font-size: 23rpx; }
+.state-act {
+  display: inline-flex; margin-top: 22rpx; height: 64rpx; padding: 0 28rpx;
+  align-items: center; border: 1rpx solid #dfe5e0; border-radius: 32rpx;
+  color: #0f5c40; background: #fff; font-size: 25rpx;
+}
+.spin {
+  width: 44rpx; height: 44rpx; border-radius: 50%; margin: 0 auto 16rpx;
+  border: 4rpx solid #e3e8e3; border-top-color: #0f5c40;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.foot { margin-top: 26rpx; padding: 0 10rpx; font-size: 21rpx; color: #a9b5ae; line-height: 1.7; }
+
+/* 审批提醒：一条横幅，不做独立页面 */
+.remind {
+  display: flex; align-items: center; gap: 16rpx;
+  padding: 20rpx 22rpx; margin-bottom: 16rpx;
+  background: #eef4ee; border: 1rpx solid #d9e7dd; border-radius: 16rpx;
+}
+.remind-main { flex: 1; min-width: 0; }
+.remind-title { font-size: 25rpx; color: #0f5c40; font-weight: 600; }
+.remind-desc { margin-top: 4rpx; font-size: 21rpx; color: #5b6862; line-height: 1.5; }
+.remind-btn {
+  flex: none; height: 56rpx; padding: 0 20rpx; border-radius: 28rpx;
+  background: #0f5c40; color: #fff; font-size: 22rpx;
+  display: flex; align-items: center;
+}
+.remind-btn.off { background: #9db3a6; }

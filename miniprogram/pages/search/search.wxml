@@ -1,0 +1,59 @@
+<view class="page">
+  <view class="bar">
+    <input
+      class="input"
+      value="{{q}}"
+      focus="{{focused}}"
+      placeholder="输入文件名关键词"
+      placeholder-class="ph"
+      confirm-type="search"
+      bindinput="onInput"
+      bindconfirm="onConfirm"
+    />
+    <view class="clear" wx:if="{{q}}" bindtap="onClear">✕</view>
+  </view>
+
+  <view class="state" wx:if="{{state === 'idle'}}">
+    <view class="state-title">按文件名搜索</view>
+    <view class="state-desc">只返回你有权查看的文件；关键词至少 1 个字符</view>
+  </view>
+
+  <view class="state" wx:elif="{{state === 'loading'}}">
+    <view class="spin"></view>
+    <text>正在搜索…</text>
+  </view>
+
+  <view class="state" wx:elif="{{state === 'error'}}">
+    <view class="state-title">{{errText}}</view>
+    <view class="state-act" bindtap="onConfirm">重试</view>
+  </view>
+
+  <view class="state" wx:elif="{{state === 'empty'}}">
+    <view class="state-title">没有匹配的文件</view>
+    <view class="state-desc">换个关键词试试；目录名也能搜到</view>
+  </view>
+
+  <block wx:else>
+    <view class="list">
+      <view
+        wx:for="{{items}}"
+        wx:key="id"
+        class="row"
+        data-id="{{item.id}}"
+        bindtap="onOpen"
+        hover-class="row-hover"
+      >
+        <view class="badge {{item.isFolder ? 'dir' : 'file'}}">{{item.extText}}</view>
+        <view class="main">
+          <view class="name">{{item.name}}</view>
+          <view class="meta">
+            <text wx:if="{{!item.isFolder}}">{{item.sizeText}} · </text>
+            <text>{{item.timeText}}</text>
+          </view>
+        </view>
+        <text class="chev">{{item.isFolder ? '›' : ''}}</text>
+      </view>
+    </view>
+    <view class="more" wx:if="{{truncated}}">结果较多，仅显示前 {{items.length}} 条，请补充关键词</view>
+  </block>
+</view>

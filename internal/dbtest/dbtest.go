@@ -54,6 +54,7 @@ var cleanupOrder = []string{
 	"group_member",
 	"user_group",
 	"otp_code",
+	"mp_subscription", // 订阅消息授权余额：引用 app_user，必须先删
 	"notification",
 	"directory_sync",
 	"audit_anchor",

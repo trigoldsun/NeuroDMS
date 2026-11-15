@@ -1,0 +1,87 @@
+<view class="page">
+  <!-- 搜索入口：手机上最高频的动作是"找一份文件"，
+       逐层点目录在 6 寸屏上是灾难。输入在搜索页，这里只做入口。 -->
+  <view class="searchbar" bindtap="goSearch" hover-class="searchbar-hover">
+    <text class="searchbar-icon">⌕</text>
+    <text class="searchbar-ph">搜索文件名</text>
+  </view>
+
+  <!-- 空间切换：横向滚动，不占用列表高度 -->
+  <scroll-view class="spaces" scroll-x wx:if="{{spaces.length > 1}}">
+    <view
+      wx:for="{{spaces}}"
+      wx:key="id"
+      class="space {{spaceId === item.id ? 'on' : ''}}"
+      data-id="{{item.id}}"
+      bindtap="onSpace"
+    >{{item.name}}</view>
+  </scroll-view>
+
+  <view class="crumb" wx:if="{{state !== 'empty' || path.length}}">
+    <text class="crumb-item" data-index="-1" bindtap="onCrumb">{{spaceName}}</text>
+    <block wx:for="{{path}}" wx:key="id">
+      <text class="crumb-sep">/</text>
+      <text class="crumb-item" data-index="{{index}}" bindtap="onCrumb">{{item.name}}</text>
+    </block>
+  </view>
+
+  <!-- 最近访问：只在根目录出现，有数据才占位置 -->
+  <view class="recent" wx:if="{{!path.length && recent.length}}">
+    <view class="recent-head">最近访问</view>
+    <scroll-view class="recent-scroll" scroll-x>
+      <view
+        wx:for="{{recent}}"
+        wx:key="id"
+        class="recent-item"
+        data-id="{{item.id}}"
+        bindtap="onRecent"
+        hover-class="recent-hover"
+      >
+        <view class="recent-name">{{item.name}}</view>
+        <view class="recent-meta">{{item.actionText}} · {{item.timeText}}</view>
+      </view>
+    </scroll-view>
+  </view>
+
+  <view class="state" wx:if="{{state === 'loading'}}">
+    <view class="spin"></view>
+    <text>正在读取…</text>
+  </view>
+
+  <view class="state" wx:elif="{{state === 'error'}}">
+    <view class="state-title">{{errText}}</view>
+    <view class="state-act" bindtap="onRetry">重试</view>
+  </view>
+
+  <view class="state" wx:elif="{{state === 'empty'}}">
+    <view class="state-title">{{spaces.length ? '这个目录是空的' : '还没有可见的空间'}}</view>
+    <view class="state-desc">{{spaces.length ? '换一个空间或目录看看' : '请联系管理员为你分配空间权限'}}</view>
+  </view>
+
+  <view class="list" wx:else>
+    <view
+      wx:for="{{nodes}}"
+      wx:key="id"
+      class="row"
+      data-id="{{item.id}}"
+      bindtap="onRow"
+      hover-class="row-hover"
+    >
+      <view class="badge {{item.isFolder ? 'dir' : 'file'}}">{{item.extText}}</view>
+      <view class="main">
+        <view class="name">{{item.name}}</view>
+        <view class="meta">
+          <text wx:if="{{!item.isFolder}}">{{item.sizeText}} · </text>
+          <text>{{item.timeText}}</text>
+          <text wx:if="{{item.ownerName}}"> · {{item.ownerName}}</text>
+        </view>
+      </view>
+      <text class="tag tag-{{item.classTone}}">{{item.classLabel}}</text>
+      <text class="chev">{{item.isFolder ? '›' : ''}}</text>
+    </view>
+  </view>
+
+  <view class="foot">
+    当前为只读浏览：可以查看与预览，上传与新建请在网页端完成。
+  </view>
+</view>

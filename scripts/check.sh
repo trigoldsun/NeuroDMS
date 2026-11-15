@@ -74,6 +74,13 @@ else
   echo "已跳过（未找到 node）：文档版本各写各的不会在这里被拦住"
 fi
 
+echo "== 小程序门禁 =="
+if command -v node >/dev/null 2>&1; then
+  if node scripts/check-miniprogram.mjs; then echo "OK"; else fail=1; fi
+else
+  echo "已跳过（未找到 node）：小程序与主项目漂移不会在这里被拦住"
+fi
+
 echo "== AC 门禁（越权用例追溯）=="
 if bash scripts/ac-gate.sh > /tmp/ac-gate-check.log 2>&1; then
   grep -E "^COUNT" /tmp/ac-gate-check.log

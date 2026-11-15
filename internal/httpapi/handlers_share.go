@@ -373,6 +373,14 @@ func (a *API) handleCreateShare(w http.ResponseWriter, r *http.Request) {
 				resp["ownerApprover"] = owner
 			}
 		}
+		// 小程序订阅消息：提醒**第一层**审批人。
+		// 第二层（所有者确认）在第一层通过后才轮到，而通过动作发生在另一台设备上，
+		// 这里提前提醒等于告诉错误的人"该你了"——宁可少提醒，也不给错信号。
+		if created.ApproverID != "" {
+			a.notifyApprovalAsync(c.TenantID, created.ApproverID, created.ID,
+				a.shareObjectName(r.Context(), c.TenantID, req.ObjectType, req.ObjectID),
+				a.senderDisplayName(r.Context(), c.TenantID, c.Subject))
+		}
 	}
 
 	// 邮件外发：分享已建好，投递失败不回滚（回滚会让用户白填一遍表单），
