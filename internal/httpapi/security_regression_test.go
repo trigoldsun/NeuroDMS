@@ -51,17 +51,37 @@ func TestShareApprovalCannotSelfApprove(t *testing.T) {
 	owner := login(t, srv.URL, slug)
 	_, nodeID := prepareFile(t, srv.URL, owner)
 
+	// 1) 单用户租户勾选"需要审批"：候选集合里只剩发起人自己，必须直接拒绝。
+	//    1.11.2 之前这里会建出一条 approval_status=pending 但 approver_id 为空的死链
+	//    （没人能批、链接打不开、提醒也发不出），现在改为创建阶段就失败。
 	resp, body := postJSON(t, srv.URL+"/v1/shares", owner, map[string]any{
 		"objectType": "node", "objectId": nodeID,
 		"requireApproval": true, "allowDownload": true,
 	})
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("无合格审批人时应 409，实际 %d: %v", resp.StatusCode, body)
+	}
+	if code, _ := body["code"].(string); code != "NO_ELIGIBLE_APPROVER" {
+		t.Fatalf("应返回 NO_ELIGIBLE_APPROVER，实际 %q", code)
+	}
+
+	// 2) 兜底：如果库里出现"待审批且审批人指向发起人本人"的数据（旧版本遗留或被篡改），
+	//    批准仍必须被拒。这里先用一条普通分享，再把状态改成那种历史形态。
+	resp, body = postJSON(t, srv.URL+"/v1/shares", owner, map[string]any{
+		"objectType": "node", "objectId": nodeID, "allowDownload": true,
+	})
 	if resp.StatusCode != 200 {
-		t.Fatalf("创建待审批分享失败 %d: %v", resp.StatusCode, body)
+		t.Fatalf("创建普通分享失败 %d: %v", resp.StatusCode, body)
 	}
 	d := dataMap(t, body)
 	shareID := d["shareId"].(string)
-	if d["approvalStatus"] != "pending" {
-		t.Fatalf("应进入待审批，实际 %v", d)
+
+	if _, err := pool.Exec(context.Background(), `
+		UPDATE share
+		   SET approval_status = 'pending', approval_stage = 'first',
+		       require_approval = true, approver_id = creator_id
+		 WHERE id = $1`, shareID); err != nil {
+		t.Fatalf("构造历史数据失败: %v", err)
 	}
 
 	// 同一账号自我审批：必须被拒
@@ -70,7 +90,6 @@ func TestShareApprovalCannotSelfApprove(t *testing.T) {
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("自批应 403，实际 %d: %v", resp.StatusCode, body)
 	}
-	// 错误响应没有 data 段，直接读顶层 code
 	if code, _ := body["code"].(string); code != "SELF_APPROVAL_DENIED" {
 		t.Fatalf("应返回 SELF_APPROVAL_DENIED，实际 %q", code)
 	}
@@ -86,10 +105,6 @@ func TestShareApprovalCannotSelfApprove(t *testing.T) {
 	}
 }
 
-// 撤销外链必须具备对该对象的处置权。
-//
-// 缺陷原状：Revoke 只按 tenant_id 过滤，任何同租户用户拿到 share id
-// 就能撤销别人的外链——既能让业务中断，也能用来掩盖外泄。
 func TestShareRevokeRequiresObjectPermission(t *testing.T) {
 	srv, pool, slug := setup(t)
 	owner := login(t, srv.URL, slug)
