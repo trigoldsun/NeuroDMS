@@ -161,6 +161,13 @@ type Config struct {
 	WxAppID          string
 	WxAppSecret      string
 	WxTodoTemplateID string
+	// WxTodoFields 声明「模板字段名=语义键」的映射（见 internal/mpmsg/fields.go）。
+	// 留空用默认 thing1/thing2/time3/phrase4。模板字段不一致时**必须**配，
+	// 否则微信返回 47003，表现为"授权成功、余额扣了、消息没到"。
+	WxTodoFields string
+	// WxMPState 是点击通知跳转的小程序版本：developer / trial / formal。
+	// 开发与体验阶段应分别配 developer / trial，否则点开的是线上正式版。
+	WxMPState string
 
 	// LicensePublicKey 是许可证验签公钥（base64 编码的 32 字节 Ed25519）。
 	// 为空表示本实例是云端版，不接受许可证——这时界面只显示"云端版无需许可证"。
@@ -325,6 +332,8 @@ func Load(getenv Getenv) (Config, error) {
 		WxAppID:          strings.TrimSpace(getenv("DOCVAULT_WX_APPID")),
 		WxAppSecret:      getenv("DOCVAULT_WX_APPSECRET"),
 		WxTodoTemplateID: strings.TrimSpace(getenv("DOCVAULT_WX_TODO_TEMPLATE")),
+		WxTodoFields:     strings.TrimSpace(getenv("DOCVAULT_WX_TODO_FIELDS")),
+		WxMPState:        strings.TrimSpace(getenv("DOCVAULT_WX_MP_STATE")),
 
 		// 许可证验签公钥
 		LicensePublicKey: strings.TrimSpace(getenv("DOCVAULT_LICENSE_PUBKEY")),

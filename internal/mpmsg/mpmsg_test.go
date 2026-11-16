@@ -235,3 +235,105 @@ func TestSendErrorPropagated(t *testing.T) {
 		t.Fatalf("错误里应带微信错误码，实际 %v", err)
 	}
 }
+
+// 字段映射是"配错了就永远收不到"的那类配置，必须在启动时就被拦住。
+func TestParseFields(t *testing.T) {
+	cases := []struct {
+		in  string
+		ok  bool
+		len int
+	}{
+		{"", true, 0},
+		{"thing1=name,thing2=requester,time3=time,phrase4=status", true, 4},
+		{"character_string1=name", true, 1},
+		{" thing1=name , phrase4=status ", true, 2},
+		{"thing1", false, 0},
+		{"thing1=", false, 0},
+		{"=name", false, 0},
+		{"thing1=title", false, 0},            // 未知语义键：会把文件名称塞错地方
+		{"thing1=name,thing2=name", false, 0}, // 重复语义：同一内容显示两次
+		{"th ing1=name", false, 0},            // 字段名带空白
+	}
+	for _, c := range cases {
+		got, err := ParseFields(c.in)
+		if c.ok && err != nil {
+			t.Fatalf("%q 应通过，实际报错 %v", c.in, err)
+		}
+		if !c.ok {
+			if err == nil {
+				t.Fatalf("%q 应报错，实际通过（%v）", c.in, got)
+			}
+			continue
+		}
+		if len(got) != c.len {
+			t.Fatalf("%q 解析出 %d 项，期望 %d", c.in, len(got), c.len)
+		}
+	}
+}
+
+func TestParseMPState(t *testing.T) {
+	for _, s := range []string{"developer", "trial", "formal"} {
+		if got, err := ParseMPState(s); err != nil || got != s {
+			t.Fatalf("%q 应通过，实际 %q %v", s, got, err)
+		}
+	}
+	if got, err := ParseMPState(""); err != nil || got != StateFormal {
+		t.Fatalf("空值应回落 formal，实际 %q %v", got, err)
+	}
+	if _, err := ParseMPState("production"); err == nil {
+		t.Fatal("非法值应报错（静默回落会让'配了 developer 却跳正式版'变成偶发问题）")
+	}
+}
+
+func TestClipByField(t *testing.T) {
+	long := "这是一份非常非常长的合同文件名称需要按字段类型截断"
+	if n := len([]rune(clipByField("thing1", long))); n != 20 {
+		t.Fatalf("thing 应截到 20 字，实际 %d", n)
+	}
+	if n := len([]rune(clipByField("phrase4", "待审批处理中"))); n != 5 {
+		t.Fatalf("phrase 应截到 5 字，实际 %d", n)
+	}
+	if n := len([]rune(clipByField("name2", "张三丰李四王五赵六周七吴八"))); n != 10 {
+		t.Fatalf("name 应截到 10 字，实际 %d", n)
+	}
+	if got := clipByField("time3", "2026-11-15 10:00"); got != "2026-11-15 10:00" {
+		t.Fatalf("时间不应被截断，实际 %q", got)
+	}
+}
+
+// 客户端选到的模板字段名与默认不同时，报文必须跟着变，而不是继续发 thing1。
+func TestCustomFieldMapping(t *testing.T) {
+	_, svc, fw, tenantID, userID := setup(t)
+	svc.cfg.Fields = map[string]string{
+		"character_string1": SemName,
+		"name2":             SemRequester,
+		"time3":             SemTime,
+		"phrase4":           SemStatus,
+	}
+	ctx := context.Background()
+	if _, err := svc.Bind(ctx, tenantID, userID, "good-code"); err != nil {
+		t.Fatalf("绑定失败: %v", err)
+	}
+	if _, err := svc.Grant(ctx, tenantID, userID, "", 1); err != nil {
+		t.Fatalf("授权失败: %v", err)
+	}
+	todo := Todo{FileName: "2026 年度采购合同（终稿）.pdf", Requester: "张三", ShareID: "s-1", CreatedAt: time.Now()}
+	if err := svc.NotifyApproval(ctx, tenantID, userID, todo); err != nil {
+		t.Fatalf("发送失败: %v", err)
+	}
+	data, _ := fw.payload["data"].(map[string]any)
+	for _, k := range []string{"character_string1", "name2", "time3", "phrase4"} {
+		if _, ok := data[k]; !ok {
+			t.Fatalf("缺少自定义字段 %s：%v", k, data)
+		}
+	}
+	if _, ok := data["thing1"]; ok {
+		t.Fatal("不应再发送默认字段 thing1（多一个字段微信会 47003）")
+	}
+	if got := data["phrase4"].(map[string]any)["value"].(string); got != "待审批" {
+		t.Fatalf("状态值应为待审批，实际 %q", got)
+	}
+	if fw.payload["miniprogram_state"] != "formal" {
+		t.Fatalf("默认跳转版本应为 formal，实际 %v", fw.payload["miniprogram_state"])
+	}
+}

@@ -41,6 +41,11 @@ type Config struct {
 	AppID          string
 	AppSecret      string
 	TodoTemplateID string
+	// Fields 是「模板字段名 → 语义键」的映射；nil 表示用 DefaultFields。
+	// 由公众平台上实际选用的模板决定，见 fields.go。
+	Fields map[string]string
+	// MPState 是点击通知后跳转的小程序版本：developer / trial / formal。
+	MPState string
 	// BaseURL 可指向测试服务器（默认 https://api.weixin.qq.com）
 	BaseURL string
 	// Page 是点击消息后跳转的小程序页面（不带前导斜杠）
@@ -73,6 +78,12 @@ func New(cfg Config, pool *pgxpool.Pool) *Service {
 	}
 	if cfg.Now == nil {
 		cfg.Now = time.Now
+	}
+	if cfg.MPState == "" {
+		cfg.MPState = StateFormal
+	}
+	if len(cfg.Fields) == 0 {
+		cfg.Fields = DefaultFields
 	}
 	return &Service{cfg: cfg, pool: pool}
 }
@@ -318,19 +329,18 @@ func (s *Service) NotifyApproval(ctx context.Context, tenantID, approverID strin
 	if err != nil {
 		return err
 	}
+	// data 必须与公众平台上那个模板的字段逐字对应：多一个、少一个、
+	// 类型不对都会被微信拒绝（47003/47004）。字段名因此来自配置，不写死。
+	data := make(map[string]any, len(s.cfg.Fields))
+	for field, semantic := range s.cfg.Fields {
+		data[field] = map[string]string{"value": clipByField(field, valueOf(semantic, t))}
+	}
 	payload := map[string]any{
-		"touser":      *openid,
-		"template_id": s.cfg.TodoTemplateID,
-		"page":        s.cfg.Page + "?id=" + url.QueryEscape(t.ShareID),
-		// 字段名由公众平台的模板决定，这里按文档约定的四个字段填写。
-		// 模板不匹配时微信返回 47003，会作为错误返回给调用方记日志。
-		"data": map[string]any{
-			"thing1":  map[string]string{"value": clip(t.FileName, 20)},
-			"thing2":  map[string]string{"value": clip(t.Requester, 20)},
-			"time3":   map[string]string{"value": t.CreatedAt.Format("2006-01-02 15:04")},
-			"phrase4": map[string]string{"value": "待审批"},
-		},
-		"miniprogram_state": "formal",
+		"touser":            *openid,
+		"template_id":       s.cfg.TodoTemplateID,
+		"page":              s.cfg.Page + "?id=" + url.QueryEscape(t.ShareID),
+		"data":              data,
+		"miniprogram_state": s.cfg.MPState,
 		"lang":              "zh_CN",
 	}
 	body, _ := json.Marshal(payload)

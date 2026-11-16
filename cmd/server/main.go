@@ -571,6 +571,30 @@ func main() {
 				log.Warn("域身份单点登录未生效", "reason", ssoSettings.Reason)
 			}
 
+			// 小程序订阅消息：字段映射与跳转版本先校验再装配。
+			// 配错必须在**启动时**失败——跑到线上才报 47003，
+			// 现象是"用户授权成功、余额扣了、消息永远不到"，最难查。
+			mpFields, ferr := mpmsg.ParseFields(cfg.WxTodoFields)
+			if ferr != nil {
+				log.Error("DOCVAULT_WX_TODO_FIELDS 配置非法，拒绝启动", "err", ferr.Error())
+				os.Exit(2)
+			}
+			mpState, serr := mpmsg.ParseMPState(cfg.WxMPState)
+			if serr != nil {
+				log.Error("DOCVAULT_WX_MP_STATE 配置非法，拒绝启动", "err", serr.Error())
+				os.Exit(2)
+			}
+			mpSvc := mpmsg.New(mpmsg.Config{
+				AppID: cfg.WxAppID, AppSecret: cfg.WxAppSecret,
+				TodoTemplateID: cfg.WxTodoTemplateID,
+				Fields:         mpFields, MPState: mpState,
+			}, pool)
+			if mpSvc.Enabled() {
+				log.Info("小程序审批提醒已启用", "template", cfg.WxTodoTemplateID, "state", mpState)
+			} else {
+				log.Info("小程序审批提醒未启用（缺 DOCVAULT_WX_APPID/_APPSECRET/_TODO_TEMPLATE）")
+			}
+
 			api := &httpapi.API{
 				Pool:          pool,
 				Auth:          authSvc,
@@ -597,12 +621,9 @@ func main() {
 				Mail:         mailStore,
 				MailRouter:   mailRouter,
 				Geo:          geo,
-				// 小程序订阅消息：三项配置缺一即整体关闭（Enabled()=false），
+				// 小程序订阅消息：三项微信配置缺一即整体关闭（Enabled()=false），
 				// 分享创建时只做一次"跳过"判断，不会产生外呼。
-				MP: mpmsg.New(mpmsg.Config{
-					AppID: cfg.WxAppID, AppSecret: cfg.WxAppSecret,
-					TodoTemplateID: cfg.WxTodoTemplateID,
-				}, pool),
+				MP:            mpSvc,
 				SecretBox:     box,
 				SMS:           smsSvc,
 				SMSConfigured: platformSMS != nil,
