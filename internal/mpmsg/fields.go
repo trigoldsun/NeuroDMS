@@ -12,6 +12,7 @@ package mpmsg
 //   requester  申请人
 //   time       申请时间
 //   status     状态（当前固定"待审批"）
+//   summary    申请人 + 状态（"张三 · 待审批"）——模板只有一个自由文本字段时用它
 //
 // 配置写法（DOCVAULT_WX_TODO_FIELDS）：
 //   thing1=name,thing2=requester,time3=time,phrase4=status
@@ -29,9 +30,17 @@ const (
 	SemRequester = "requester"
 	SemTime      = "time"
 	SemStatus    = "status"
+	// SemSummary 把"谁发起 + 什么状态"压进一个字段。
+	//
+	// 为什么需要它：公共模板库里的「业务审批通知」只有两个字段
+	// （thing1 名称、thing2 温馨提示）。只放申请人会丢状态，只放状态会丢人，
+	// 而 thing 类型限 20 字，组合起来才够用。
+	SemSummary = "summary"
 )
 
-var semanticKeys = map[string]bool{SemName: true, SemRequester: true, SemTime: true, SemStatus: true}
+var semanticKeys = map[string]bool{
+	SemName: true, SemRequester: true, SemTime: true, SemStatus: true, SemSummary: true,
+}
 
 // DefaultFields 是"未声明映射"时的默认字段（按文档约定）。
 var DefaultFields = map[string]string{
@@ -126,6 +135,12 @@ func valueOf(semantic string, t Todo) string {
 		return t.CreatedAt.Format("2006-01-02 15:04")
 	case SemStatus:
 		return "待审批"
+	case SemSummary:
+		who := strings.TrimSpace(t.Requester)
+		if who == "" {
+			return "待审批"
+		}
+		return who + " · 待审批"
 	default:
 		return ""
 	}

@@ -146,6 +146,16 @@ services:
       DOCVAULT_SMS_SCHEME_NAME: ${DOCVAULT_SMS_SCHEME_NAME:-}
       # 仅开发/测试：固定验证码、不联网；production 模式下启用会拒绝启动
       DOCVAULT_SMS_MOCK: ${DOCVAULT_SMS_MOCK:-0}
+      # ---- 微信小程序订阅消息（审批提醒）----
+      # 三项（APPID/APPSECRET/TODO_TEMPLATE）任一为空即整体关闭，
+      # /v1/mp/config 返回 enabled=false，小程序不显示提醒入口。
+      # FIELDS 与 MP_STATE 只在启用后有意义：前者是「模板字段名=语义键」，
+      # 后者决定点通知跳到哪个版本（developer/trial/formal）。
+      DOCVAULT_WX_APPID: ${DOCVAULT_WX_APPID:-}
+      DOCVAULT_WX_APPSECRET: ${DOCVAULT_WX_APPSECRET:-}
+      DOCVAULT_WX_TODO_TEMPLATE: ${DOCVAULT_WX_TODO_TEMPLATE:-}
+      DOCVAULT_WX_TODO_FIELDS: ${DOCVAULT_WX_TODO_FIELDS:-}
+      DOCVAULT_WX_MP_STATE: ${DOCVAULT_WX_MP_STATE:-}
       # ---- 病毒扫描与限流 ----
       DOCVAULT_CLAMAV_ADDR: ${DOCVAULT_CLAMAV_ADDR:-}
       DOCVAULT_CLAMAV_TIMEOUT: ${DOCVAULT_CLAMAV_TIMEOUT:-30}

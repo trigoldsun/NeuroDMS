@@ -337,3 +337,54 @@ func TestCustomFieldMapping(t *testing.T) {
 		t.Fatalf("默认跳转版本应为 formal，实际 %v", fw.payload["miniprogram_state"])
 	}
 }
+
+// 真实场景回归：公共模板库的「业务审批通知」只有两个字段
+// （thing1 月度计划名称 / thing2 温馨提示），必须能把"谁 + 什么状态"压进 thing2。
+func TestTwoFieldTemplate(t *testing.T) {
+	spec := "thing1=name,thing2=summary"
+	fields, err := ParseFields(spec)
+	if err != nil {
+		t.Fatalf("两字段映射应通过，实际 %v", err)
+	}
+	if len(fields) != 2 {
+		t.Fatalf("应解析出 2 个字段，实际 %d", len(fields))
+	}
+
+	// 组合值：有申请人时带人名，没申请人时退化为状态
+	if got := valueOf(SemSummary, Todo{Requester: "张三"}); got != "张三 · 待审批" {
+		t.Fatalf("summary 应为「张三 · 待审批」，实际 %q", got)
+	}
+	if got := valueOf(SemSummary, Todo{}); got != "待审批" {
+		t.Fatalf("无申请人时 summary 应退化为「待审批」，实际 %q", got)
+	}
+	// thing 类型限 20 字：组合值不能超长，否则微信 47003
+	long := valueOf(SemSummary, Todo{Requester: "欧阳建国李四王五赵六周七吴八郑九"})
+	if n := len([]rune(clipByField("thing2", long))); n != 20 {
+		t.Fatalf("thing2 应截到 20 字，实际 %d", n)
+	}
+
+	// 端到端报文：只允许出现模板里的两个字段
+	_, svc, fw, tenantID, userID := setup(t)
+	svc.cfg.Fields = fields
+	ctx := context.Background()
+	if _, err := svc.Bind(ctx, tenantID, userID, "good-code"); err != nil {
+		t.Fatalf("绑定失败: %v", err)
+	}
+	if _, err := svc.Grant(ctx, tenantID, userID, "", 1); err != nil {
+		t.Fatalf("授权失败: %v", err)
+	}
+	todo := Todo{FileName: "2026 年度采购合同（终稿）.pdf", Requester: "张三", ShareID: "s-2", CreatedAt: time.Now()}
+	if err := svc.NotifyApproval(ctx, tenantID, userID, todo); err != nil {
+		t.Fatalf("发送失败: %v", err)
+	}
+	data, _ := fw.payload["data"].(map[string]any)
+	if len(data) != 2 {
+		t.Fatalf("报文应只有 2 个字段（多一个微信会拒绝），实际 %d：%v", len(data), data)
+	}
+	if got := data["thing1"].(map[string]any)["value"].(string); got == "" {
+		t.Fatal("thing1 不应为空")
+	}
+	if got := data["thing2"].(map[string]any)["value"].(string); got != "张三 · 待审批" {
+		t.Fatalf("thing2 应为「张三 · 待审批」，实际 %q", got)
+	}
+}
