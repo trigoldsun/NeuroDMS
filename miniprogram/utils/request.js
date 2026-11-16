@@ -72,8 +72,17 @@ function refreshTokens() {
         clearTokens()
         reject(new ApiError(body.code || 'SESSION_INVALID', body.message || '登录已过期', res.statusCode))
       },
-      fail: function () {
-        reject(new ApiError('NETWORK', '网络不可用，请检查网络后重试', 0))
+      fail: function (e) {
+        // fail 的原因必须带出去。
+        //
+        // 微信在这里只给一句 errMsg，但三类原因的处理方式完全不同：
+        //   - "url not in domain list" → 后台没登记合法域名（管理员改配置）
+        //   - "timeout" / "ERR_CONNECTION" → 手机网络或服务不可达
+        //   - "SSL" / "certificate" → 证书问题
+        // 以前统一成"网络不可用"，用户唯一能做的就是重试，而重试永远不会好。
+        const err = new ApiError('NETWORK', '网络不可用，请检查网络后重试', 0)
+        err.detail = (e && (e.errMsg || e.errmsg)) || ''
+        reject(err)
       },
       complete: function () { refreshing = null }
     })
@@ -127,8 +136,17 @@ function request(opts) {
         const ra = Number(res.header && (res.header['Retry-After'] || res.header['retry-after']))
         reject(new ApiError(body.code, body.message, res.statusCode, body.hint, isNaN(ra) ? 0 : ra))
       },
-      fail: function () {
-        reject(new ApiError('NETWORK', '网络不可用，请检查网络后重试', 0))
+      fail: function (e) {
+        // fail 的原因必须带出去。
+        //
+        // 微信在这里只给一句 errMsg，但三类原因的处理方式完全不同：
+        //   - "url not in domain list" → 后台没登记合法域名（管理员改配置）
+        //   - "timeout" / "ERR_CONNECTION" → 手机网络或服务不可达
+        //   - "SSL" / "certificate" → 证书问题
+        // 以前统一成"网络不可用"，用户唯一能做的就是重试，而重试永远不会好。
+        const err = new ApiError('NETWORK', '网络不可用，请检查网络后重试', 0)
+        err.detail = (e && (e.errMsg || e.errmsg)) || ''
+        reject(err)
       }
     })
   })
@@ -159,8 +177,10 @@ function download(path, retried) {
         if (res.statusCode === 401) clearTokens()
         reject(new ApiError('DOWNLOAD_FAILED', '文件打开失败（' + res.statusCode + '）', res.statusCode))
       },
-      fail: function () {
-        reject(new ApiError('NETWORK', '网络不可用，无法读取文件', 0))
+      fail: function (e) {
+        const err = new ApiError('NETWORK', '网络不可用，无法读取文件', 0)
+        err.detail = (e && (e.errMsg || e.errmsg)) || ''
+        reject(err)
       }
     })
   })

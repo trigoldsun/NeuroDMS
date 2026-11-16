@@ -26,7 +26,12 @@ globalThis.wx = {
   getStorageSync: (k) => (k in storage ? storage[k] : ''),
   setStorageSync: (k, v) => { storage[k] = v },
   removeStorageSync: (k) => { delete storage[k] },
-  request: (opt) => { setTimeout(() => opt.success(nextResponse), 0) },
+  request: (opt) => {
+    setTimeout(() => {
+      if (nextResponse && nextResponse.fail) opt.fail({ errMsg: nextResponse.fail })
+      else opt.success(nextResponse)
+    }, 0)
+  },
   downloadFile: (opt) => { setTimeout(() => opt.success({ statusCode: 200, tempFilePath: '/tmp/x' }), 0) },
   setNavigationBarTitle: () => {},
 }
@@ -34,6 +39,7 @@ globalThis.wx = {
 const fmt = require('../utils/format')
 const cls = require('../utils/classify')
 const { request } = require('../utils/request')
+const netmsg = require('../utils/netmsg')
 
 /* ---------- 2. 展示格式化 ---------- */
 eq(fmt.size(0), '0 B', 'size 0')
@@ -61,6 +67,30 @@ eq(cls.stageLabel('none'), '无需审批', 'none = 无需审批')
 eq(cls.stageLabel('approver'), '—', '不存在的 approver 不给假文案')
 
 /* ---------- 5. 202 不是成功 ---------- */
+/* ---------- 6. 网络失败原因必须可判读 ---------- */
+async function testNetwork() {
+  const cases = [
+    { msg: 'request:fail url not in domain list', text: '服务地址未加入小程序合法域名' },
+    { msg: 'request:fail timeout', text: '请求超时' },
+    { msg: 'request:fail ssl hand shake error', text: '服务器证书校验失败' },
+    { msg: 'request:fail ERR_CONNECTION_RESET', text: '无法连接到服务器' },
+  ]
+  for (const c of cases) {
+    nextResponse = { fail: c.msg }
+    let err = null
+    try { await request({ path: '/v1/me' }) } catch (e) { err = e }
+    eq(err && err.code, 'NETWORK', 'fail 映射为 NETWORK：' + c.msg)
+    ok(String(err && err.detail).indexOf(c.msg) >= 0, '  fail 原文要带出（否则无法判读）：' + c.msg)
+    const n = netmsg.describe(err, 'https://ndms.neurongene.cn')
+    eq(n && n.text, c.text, '  文案细分：' + c.msg)
+    if (c.text.indexOf('合法域名') >= 0) {
+      ok(String(n.hint).indexOf('ndms.neurongene.cn') >= 0, '  未登记域名时提示里要带出具体域名')
+    }
+  }
+  // 非网络错误不接管
+  eq(netmsg.describe({ code: 'PHONE_NOT_REGISTERED' }, ''), null, '非网络错误不由 netmsg 接管')
+}
+
 async function testMfa() {
   nextResponse = {
     statusCode: 202,
@@ -86,7 +116,7 @@ async function testMfa() {
   eq(e2 && e2.status, 403, 'HTTP 状态保留')
 }
 
-testMfa().then(() => {
+testNetwork().then(testMfa).then(() => {
   console.log(bad === 0 ? '\n全部通过' : '\n有 ' + bad + ' 个问题')
   process.exitCode = bad ? 1 : 0
 })

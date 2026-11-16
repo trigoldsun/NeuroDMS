@@ -7,6 +7,8 @@ const content = require('../../services/content')
 const meta = require('../../services/meta')
 const fmt = require('../../utils/format')
 const cls = require('../../utils/classify')
+const netmsg = require('../../utils/netmsg')
+const cfg = require('../../utils/config')
 
 const SPACE_KEY = 'dv_mp_space'
 
@@ -136,6 +138,8 @@ Page({
 
   errText(err) {
     if (!err) return '读取失败'
+    const n = netmsg.describe(err, cfg.BASE_URL)
+    if (n) return n.text
     if (err.status === 403) return err.message || '没有查看这个空间的权限'
     if (err.status === 404) return '空间或目录不存在'
     return err.message || '读取失败，请稍后重试'

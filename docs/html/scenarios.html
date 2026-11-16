@@ -37,7 +37,7 @@
     <h1>把每一步交到对的人手上</h1>
     <p class="subtitle">七个高频场景，每个场景讲清三件事：谁做、怎么做、什么情况下会被拦下来。</p>
     <div class="meta">
-      <span class="chip v">V1.11.0</span>
+      <span class="chip v">V1.11.1</span>
       <span class="chip">适用 <b>所有登录用户（含外部协作者）</b></span>
       <span class="chip">配套 <b>角色能力</b> · <b>管理员手册</b></span>
       <button class="chip" type="button" data-print style="cursor:pointer;font-family:inherit">打印 / 存为 PDF</button>
@@ -574,6 +574,7 @@
       <table>
         <thead><tr><th>现象</th><th>最可能的原因</th><th>处理</th></tr></thead>
         <tbody>
+          <tr><td>真机提示「服务地址未加入小程序合法域名」</td><td>微信后台未登记 request / downloadFile 合法域名</td><td>让管理员在公众平台登记域名；工具能关校验，真机不能（1.11.1 起提示会直接指出）</td></tr>
           <tr><td>小程序提示"需要先登记手机号"</td><td>小程序只对已验证手机号的账号开放</td><td>网页端 → 右上角账户 →「手机号」完成绑定</td></tr>
           <tr><td>小程序提示"需要二次验证"</td><td>账号开了 MFA，验证码发到登记邮箱</td><td>去邮箱取 6 位码填进去；收不到让管理员核对邮箱</td></tr>
           <tr><td>小程序收不到审批提醒</td><td>一次性订阅：没授权 / 额度用完 / 未配置通道</td><td>审批页点「开启提醒」授权一条；没通道时横幅不出现</td></tr>
@@ -610,8 +611,8 @@
 </div>
 
 <footer class="foot">
-  <span>NeuroDMS · 用户手册 · 场景操作 V1.11.0</span>
-  <span>网页版 v1.11.0 · 源文件 docs/29-用户手册-场景操作-v1.11.0.md</span>
+  <span>NeuroDMS · 用户手册 · 场景操作 V1.11.1</span>
+  <span>网页版 v1.11.1 · 源文件 docs/29-用户手册-场景操作-v1.11.1.md</span>
 </footer>
 
 <button class="totop" type="button" aria-label="回到顶部">

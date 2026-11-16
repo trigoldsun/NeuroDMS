@@ -13,6 +13,7 @@ const auth = require('../../services/auth')
 const meta = require('../../services/meta')
 const mp = require('../../services/mp')
 const cfg = require('../../utils/config')
+const netmsg = require('../../utils/netmsg')
 
 const MODES = [
   { key: 'account', label: '账号密码' },
@@ -225,7 +226,9 @@ Page({
       return
     }
     if (code === 'NETWORK') {
-      this.setData({ err: '网络不可用，请检查网络后重试' })
+      // 细分原因：域名未登记 / 超时 / 证书 / 断网，处理方式各不相同
+      const n = netmsg.describe(err, cfg.BASE_URL)
+      this.setData({ err: n.text, errHint: n.hint })
       return
     }
     this.setData({ err: (err && err.message) || '登录失败，请重试' })
