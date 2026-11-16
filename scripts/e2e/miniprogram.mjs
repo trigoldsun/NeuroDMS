@@ -287,6 +287,22 @@ await step('MP12', '待办：他人发起、指定我为审批人', async () => 
   assert(sh.status === 200, `建申请失败 HTTP ${sh.status}: ${sh.text.slice(0, 200)}`)
   ctx.shareId = sh.json?.data?.shareId
   assert(ctx.shareId, '未返回 shareId')
+  // 手动勾选"需要审批"时，服务端必须采纳指定审批人并落库；
+  // 落空就是一条 pending 却无人可批的死链（1.11.2 修复前正是如此）。
+  assert(sh.json?.data?.approver?.id === ctx.adminId,
+    '响应应回显审批人，实际 ' + JSON.stringify(sh.json?.data?.approver || null))
+})
+
+await step('MP12b', '勾选需要审批但未指定审批人：必须 400，不得生成死链', async () => {
+  const login = ok(await withRetry(() => req('POST', '/v1/auth/login', {
+    body: { tenantSlug: ctx.slug, username: 'mprequester', password: 'mp-req-pass-1' },
+  })))
+  const r = await req('POST', '/v1/shares', {
+    token: login.accessToken,
+    body: { kind: 'link', objectType: 'node', objectId: ctx.fileId, requireApproval: true, expiresInHours: 24 },
+  })
+  assert(r.status === 400, '缺审批人应 400，实际 ' + r.status + ' ' + r.text.slice(0, 120))
+  assert(r.json?.code === 'APPROVER_REQUIRED', '错误码应为 APPROVER_REQUIRED，实际 ' + r.json?.code)
 })
 
 if (PREPARE) {
@@ -317,6 +333,7 @@ await step('MP13', '审批页：待办列表字段齐全（stage 枚举必须是
   assert(typeof item.classification === 'number', 'classification 缺失')
   assert(['none', 'first', 'owner', 'done'].includes(item.stage), `stage 非法：${item.stage}`)
   assert(!!item.createdAt, 'createdAt 缺失')
+  assert(!!item.approverName, 'approverName 不能为空（空值说明这条 pending 无人可批）')
   ctx.stage = item.stage
   log(`  stage=${item.stage} classification=${item.classification} creator=${item.creator}`)
 })
@@ -360,15 +377,26 @@ await step('MP17', '伪造 MFA 挑战不能换令牌', async () => {
   assert(!r.json?.data?.accessToken, '失败不应签发令牌')
 })
 
-await step('MP18', '小程序提醒能力：未配置微信通道时 enabled=false，绑定接口 501 而不是静默成功', async () => {
+await step('MP18', '提醒能力随配置翻转：未配置时隐藏入口，已配置时下发模板且伪造 code 被拒', async () => {
   const tk = (await loginAsAdmin()).accessToken
   const d = ok(await req('GET', '/v1/mp/config', { token: tk }))
-  assert(d.enabled === false, `本部署未配置 DOCVAULT_WX_*，enabled 应为 false，实际 ${d.enabled}`)
-  assert(d.todoSubscribeTemplateId === '', `未配置时不应返回模板，实际 ${d.todoSubscribeTemplateId}`)
-  assert(d.openidBound === false, 'openidBound 应为 false')
-  const b = await req('POST', '/v1/mp/bind', { token: tk, body: { code: 'x' } })
-  assert(b.status === 501, `未配置时绑定应 501 NOT_CONFIGURED，实际 ${b.status}`)
-  assert(b.json?.code === 'NOT_CONFIGURED', `错误码应为 NOT_CONFIGURED，实际 ${b.json?.code}`)
+  assert(typeof d.enabled === 'boolean', 'enabled 必须是布尔，实际 ' + typeof d.enabled)
+  assert(d.openidBound === false, '新租户账号不应已绑定 openid')
+
+  if (!d.enabled) {
+    // 未配置 DOCVAULT_WX_*：入口整体隐藏，绑定接口必须 501 而不是静默成功
+    assert(d.todoSubscribeTemplateId === '', '未启用时不应下发模板，实际 ' + d.todoSubscribeTemplateId)
+    const b = await req('POST', '/v1/mp/bind', { token: tk, body: { code: 'x' } })
+    assert(b.status === 501, '未配置时绑定应 501 NOT_CONFIGURED，实际 ' + b.status)
+    assert(b.json?.code === 'NOT_CONFIGURED', '错误码应为 NOT_CONFIGURED，实际 ' + b.json?.code)
+  } else {
+    // 已配置：必须下发模板 ID；伪造 code 会被微信拒绝（证明真的在调微信）
+    assert(String(d.todoSubscribeTemplateId).length > 10, '启用时必须下发模板 ID，实际 ' + d.todoSubscribeTemplateId)
+    log('  模板=' + d.todoSubscribeTemplateId)
+    const b = await req('POST', '/v1/mp/bind', { token: tk, body: { code: 'fake-code-for-e2e' } })
+    assert(b.status === 400, '伪造 code 应 400，实际 ' + b.status)
+    assert(b.json?.code === 'MP_BIND_FAILED', '错误码应为 MP_BIND_FAILED，实际 ' + b.json?.code)
+  }
 })
 
 async function loginAsAdmin() {

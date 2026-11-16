@@ -266,9 +266,16 @@ func (a *API) handleCreateShare(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusInternalServerError, "INTERNAL", "读取审批人失败")
 		return
 	}
-	if plan.RequireApproval {
+	// 需要审批有两个来源，取并集：密级策略（plan）与发起人显式勾选（req）。
+	//
+	// 只判 plan 会漏掉"手动勾选需要审批"这条路：此时 opt.RequireApproval 已为 true，
+	// share.Create 会把 approval_status 置为 pending，但 approver_id 因为这里没赋值
+	// 而落成 NULL —— 结果是**一条待审批却无人可批的死链**，而且提醒也发不出去
+	// （通知只发给 created.ApproverID）。手动勾选必须与密级触发走同一套校验。
+	if plan.RequireApproval || req.RequireApproval {
 		// 这次外发按创建时的密级策略是否需要所有者确认，一并快照到 share 行上。
 		// 之后管理员改「密级定义」不会影响这一条（老分享老政策）。
+		// 手动勾选不改变第二层语义：TwoLayer 只由密级策略决定，不因勾选而凭空加一层。
 		opt.OwnerLayer = plan.TwoLayer
 		if len(plan.Approvers) == 0 {
 			_ = a.emit(r, c.TenantID, AuditEntry{
