@@ -1011,6 +1011,14 @@ export function getShareVisits(id: string): Promise<ShareVisits> {
   return api<ShareVisits>(`/v1/shares/${encodeURIComponent(id)}/visits`)
 }
 
+// revokeShare 撤销一条自己创建的外链：链接立即失效，已签发的票据同时吊销。
+//
+// 为什么必须有这个入口：链接发错了（发给了错的人、带错了文件）过去只能等过期，
+// 而外链默认是长期有效。撤销接口一直在，缺的是界面入口。
+export async function revokeShare(id: string): Promise<void> {
+  await api<unknown>(`/v1/shares/${encodeURIComponent(id)}/revoke`, { method: 'POST' })
+}
+
 // ---------------- 品牌与名称 ----------------
 //
 // 系统名称用在：外发邮件的主题【xxxx】、发件人显示名【xxxx文档管理系统】、

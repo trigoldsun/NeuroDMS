@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useSyncExternalStore, useState } from 'react'
 import {
-  api, applyTheme, cycleTheme, fetchMe, getMyShares, getShareVisits,
+  api, applyTheme, cycleTheme, fetchMe, getMyShares, getShareVisits, revokeShare,
   HttpError, type Me, type MyShare, type ShareVisits,
 } from '../api'
 import { Shell, type SpaceLite } from '../components/Shell'
@@ -49,6 +49,9 @@ export default function MyShares() {
   const [loading, setLoading] = useState(true)
   const [detailLoading, setDetailLoading] = useState(false)
   const [err, setErr] = useState('')
+  // 撤销是破坏性动作（链接立即失效），逐行 busy 防止连点
+  const [revoking, setRevoking] = useState('')
+  const [ok, setOk] = useState('')
   const [accountOpen, setAccountOpen] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
 
@@ -72,6 +75,25 @@ export default function MyShares() {
       setLoading(false)
     }
   }, [])
+
+  // 撤销：二次确认 + 成功后刷新列表（状态列会变成"已撤销"）。
+  // 不做"撤销后自动收起访问记录"：历史访问记录仍是有价值的证据。
+  async function onRevoke(s: MyShare) {
+    const name = s.name || '这条外链'
+    if (!window.confirm(`确定撤销「${name}」的外链？\n\n撤销后链接立即失效，已经拿到链接的人也会打不开；访问记录会保留。`)) return
+    setRevoking(s.id)
+    setErr('')
+    setOk('')
+    try {
+      await revokeShare(s.id)
+      setOk(`已撤销「${name}」，链接立即失效`)
+      await load()
+    } catch (e) {
+      setErr(e instanceof HttpError ? e.message : '撤销失败，请稍后重试')
+    } finally {
+      setRevoking('')
+    }
+  }
 
   useEffect(() => { void load() }, [load])
 
@@ -118,6 +140,7 @@ export default function MyShares() {
       </div>
 
       {err && <div className="card empty error" style={{ margin: 12 }}>{err}</div>}
+      {ok && <div className="card empty" style={{ margin: 12 }}>{ok}</div>}
 
       <div className="card" style={{ margin: 12, padding: 0 }}>
         {loading ? (
@@ -160,9 +183,21 @@ export default function MyShares() {
                     <td>{s.distinctIps}</td>
                     <td>{fmtTime(s.lastSeenAt)}</td>
                     <td>
-                      <button className="sm" onClick={(e) => { e.stopPropagation(); navigate('/shares?share=' + s.id) }}>
-                        访问记录
-                      </button>
+                      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                        <button className="sm" onClick={(e) => { e.stopPropagation(); navigate('/shares?share=' + s.id) }}>
+                          访问记录
+                        </button>
+                        {!s.revokedAt && s.approvalStatus !== 'rejected' && (
+                          <button
+                            className="danger sm"
+                            disabled={revoking === s.id}
+                            title="撤销后链接立即失效，已发出去的链接会打不开"
+                            onClick={(e) => { e.stopPropagation(); void onRevoke(s) }}
+                          >
+                            {revoking === s.id ? '撤销中…' : '撤销'}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 )
