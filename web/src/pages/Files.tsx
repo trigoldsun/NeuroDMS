@@ -1244,9 +1244,10 @@ export default function Files({ spaceId, folderId }: { spaceId: string; folderId
                                 className="link"
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  if (n.kind === 'folder') navigate(filesPath(activeSpace, n.id))
-                                  else if (isPlayable(n.mime, n.name)) setMediaTarget(n)
-                                  else window.open(previewPath(n.id), '_blank', 'noopener')
+                                  // 统一走 openNode：这里曾经自己再写一份"文件夹/播放/预览"分支，
+                                  // 结果是能力分流只加在 openNode 上、主入口（点文件名）绕过了它 ——
+                                  // 与审计 IP 归一化那次是同一种失误：同一逻辑两处实现，只改一处。
+                                  openNode(n)
                                 }}
                               >
                                 {n.name}
