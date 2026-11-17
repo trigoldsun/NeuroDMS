@@ -372,3 +372,45 @@ func Update(ctx context.Context, tx pgx.Tx, aceID string, preset authz.Preset,
 		 WHERE id = $1`, aceID, int64(preset.Bits()), string(preset), expiresAt, grantedBy)
 	return err
 }
+
+// GrantDeny 给某主体追加"显式拒绝"动作（deny_bits）。
+//
+// 为什么不复用 Grant：两者的校验口径不同。
+//   - 授权要判"能不能授出这么高的档位"（ceiling）；
+//   - 拒绝不涉及授出能力，只要求调用方有 manage_acl，但**可拒绝的动作集合必须收窄**
+//     （白名单在 httpapi 层：只允许内容侧动作，不允许 display/manage_acl——
+//     前者等于"看不见"，后者会让管理员把自己锁死）。
+//
+// 同一主体在同一对象上只有一条 ACE（唯一约束含 COALESCE 表达式），
+// 所以这里用 ON CONFLICT 追加 deny_bits 而不是插入新行：这样
+// "授予 owner 档 + 追加禁止下载"可以共存，语义是"能管、能看、不能下载"。
+func GrantDeny(ctx context.Context, tx pgx.Tx, tenantID, objectType, objectID,
+	subjectType, subjectID string, denyBits int64, grantedBy string, expiresAt *time.Time) (string, error) {
+
+	if denyBits == 0 {
+		return "", errors.New("拒绝位不能为空")
+	}
+	if subjectType == "anonymous" {
+		return "", errors.New("匿名主体不能手工授权，只能通过分享生成")
+	}
+	if subjectType != "user" && subjectType != "group" && subjectType != "dept" && subjectType != "role" {
+		return "", errors.New("未知主体类型")
+	}
+
+	var id string
+	err := tx.QueryRow(ctx, `
+		INSERT INTO ace (id, tenant_id, object_type, object_id, subject_type, subject_id,
+		                 allow_bits, deny_bits, granted_by, expires_at)
+		VALUES (gen_random_uuid(), $1, $2, $3, $4, nullif($5,'')::uuid, 0, $6, $7, $8)
+		ON CONFLICT (tenant_id, object_type, object_id, subject_type,
+		             COALESCE(subject_id, '00000000-0000-0000-0000-000000000000'::uuid))
+		DO UPDATE SET deny_bits = ace.deny_bits | EXCLUDED.deny_bits,
+		              granted_by = EXCLUDED.granted_by,
+		              updated_at = now()
+		RETURNING id`,
+		tenantID, objectType, objectID, subjectType, subjectID, denyBits, grantedBy, expiresAt).Scan(&id)
+	if err != nil {
+		return "", err
+	}
+	return id, nil
+}

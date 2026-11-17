@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"docvault/internal/ace"
@@ -18,11 +19,136 @@ import (
 // registerACL 注册授权管理路由。
 func (a *API) registerACL(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/acl", a.requireAuth(a.handleGrant))
+	// 追加"显式拒绝"：判定早已支持（authz 里 EXPLICIT_DENY 优先于档位），
+	// 但一直没有写入入口，导致 ace.deny_bits 只能是"判定有、配置无"。
+	mux.HandleFunc("POST /v1/acl/deny", a.requireAuth(a.handleDeny))
 	mux.HandleFunc("GET /v1/acl", a.requireAuth(a.handleListACL))
 	// 摘要接口：给详情面板用。只回计数与前几条主体名，不回 allow/deny 位图，
 	// 避免"能用摘要接口还原出完整 ACL"。
 	mux.HandleFunc("GET /v1/acl/summary", a.requireAuth(a.handleACLSummary))
 	mux.HandleFunc("DELETE /v1/acl/{id}", a.requireAuth(a.handleRevokeACL))
+}
+
+// denyableActions 是允许被"显式拒绝"的动作白名单。
+//
+// 刻意不含 display/preview：拒绝可见性等于"这个人看不到这个文件"，
+// 那应该用"不授权"表达，而不是造一条看不见的拒绝——后者会让
+// "为什么他明明有 owner 档却打不开"变成无法自查的工单。
+// 也不含 manage_acl：拒绝管理权限会把配置者自己锁死在门外。
+var denyableActions = authz.Download | authz.Print | authz.Copy |
+	authz.ShareInternal | authz.ShareExternal
+
+// handleDeny 给某主体追加显式拒绝（deny_bits）。
+//
+// 与授权共用 manage_acl 门槛，但不做 ceiling 比较：拒绝不增加任何能力，
+// 不需要"能不能授出这么高"的判断。
+func (a *API) handleDeny(w http.ResponseWriter, r *http.Request) {
+	c, _ := claimsFrom(r.Context())
+	var req struct {
+		ObjectType     string   `json:"objectType"`
+		ObjectID       string   `json:"objectId"`
+		SubjectType    string   `json:"subjectType"`
+		SubjectID      string   `json:"subjectId"`
+		Actions        []string `json:"actions"`
+		ExpiresInHours int      `json:"expiresInHours"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	if req.ObjectType != "node" && req.ObjectType != "space" {
+		writeErr(w, r, http.StatusBadRequest, "INVALID_ARGUMENT", "objectType 仅支持 node 或 space")
+		return
+	}
+	if len(req.Actions) == 0 {
+		writeErr(w, r, http.StatusBadRequest, "INVALID_ARGUMENT", "actions 必填")
+		return
+	}
+	// 白名单校验必须按**用户写的动作名**做，而不是按解析后的位图。
+	//
+	// 原因：authz.ParseBits 末尾会 Normalize，而 Normalize 会补齐依赖位
+	// （能下载必然要能看，于是 download 会带上 display）。若拿位图去比白名单，
+	// 每一次合法的 "download" 都会被自己判成违规——实现第一版就踩了这个坑。
+	allowedByName := map[string]bool{}
+	for _, n := range denyableActions.Names() {
+		allowedByName[n] = true
+	}
+	for _, a := range req.Actions {
+		name := strings.TrimSpace(a)
+		if !allowedByName[name] {
+			writeErr(w, r, http.StatusBadRequest, "INVALID_ARGUMENT",
+				"只能拒绝这些动作："+strings.Join(denyableActions.Names(), "、")+"（可见性用不授权表达，管理权限不可拒绝）")
+			return
+		}
+	}
+	parsed, perr := authz.ParseBits(joinActions(req.Actions))
+	if perr != nil {
+		writeErr(w, r, http.StatusBadRequest, "INVALID_ARGUMENT", "不支持的动作："+perr.Error())
+		return
+	}
+	// 再与白名单求交：把 Normalize 补出来的 display 等位剔掉，
+	// 保证 deny_bits 里不会出现"看不见"这类副作用位。
+	bits := parsed & denyableActions
+	if bits == 0 {
+		writeErr(w, r, http.StatusBadRequest, "INVALID_ARGUMENT", "没有可生效的拒绝动作")
+		return
+	}
+
+	spaceID, nodeID, terr := a.aclTarget(r.Context(), c, req.ObjectType, req.ObjectID)
+	if terr != nil {
+		writeErr(w, r, http.StatusNotFound, "NOT_FOUND", "对象不存在")
+		return
+	}
+	d, derr := a.check(r.Context(), c, spaceID, nodeID, authz.ManageACL)
+	if derr != nil {
+		writeErr(w, r, http.StatusInternalServerError, "INTERNAL", "权限判定失败")
+		return
+	}
+	if a.denyUnless(w, r, d) {
+		return
+	}
+
+	var expires *time.Time
+	if req.ExpiresInHours > 0 {
+		t := time.Now().Add(time.Duration(req.ExpiresInHours) * time.Hour)
+		expires = &t
+	}
+
+	var aceID string
+	err := db.WithTenant(r.Context(), a.Pool, c.TenantID, func(tx pgx.Tx) error {
+		id, e := ace.GrantDeny(r.Context(), tx, c.TenantID, req.ObjectType, req.ObjectID,
+			req.SubjectType, req.SubjectID, int64(bits), c.Subject, expires)
+		aceID = id
+		return e
+	})
+	if err != nil {
+		a.logErr("写拒绝条目失败", "err", err)
+		writeErr(w, r, http.StatusBadRequest, "INVALID_ARGUMENT", err.Error())
+		return
+	}
+
+	if err := a.emit(r, c.TenantID, AuditEntry{
+		ActorID: c.Subject, Action: "acl.deny", ObjectID: req.ObjectID, Result: "ok",
+		Detail: map[string]any{
+			"objectType": req.ObjectType, "subjectType": req.SubjectType,
+			"subjectId": req.SubjectID, "actions": bits.Names(), "aceId": aceID,
+		},
+	}); err != nil {
+		writeErr(w, r, http.StatusInternalServerError, "AUDIT_FAILED", "审计写入失败，操作已拒绝")
+		return
+	}
+	writeOK(w, r, map[string]any{"aceId": aceID, "deny": bits.Names()})
+}
+
+// joinActions 把前端传来的动作数组转成 ParseBits 需要的逗号串。
+func joinActions(actions []string) string {
+	out := ""
+	for i, a := range actions {
+		if i > 0 {
+			out += ","
+		}
+		out += a
+	}
+	return out
 }
 
 // aclTarget 解析对象并返回 (spaceID, nodeID)，供权限判定使用。

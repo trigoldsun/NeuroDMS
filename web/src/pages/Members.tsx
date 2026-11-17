@@ -533,7 +533,7 @@ function CreateMember({ depts, roles, classLevels, onClose, onDone }:
               ) : <span className="hint">当前档位不含密级功能</span>}
             </div>
             <div className="field">
-              <label>封顶（可授权上限）</label>
+              <label>封顶（可授出的最高档位，1–6）</label>
               {hasClass ? (
                 <select value={f.ceiling} onChange={(e) => setF({ ...f, ceiling: Number(e.target.value) })}>
                   {classLevels.map((v) => <option key={v} value={v}>{v} · {levelText[v]}</option>)}
@@ -791,7 +791,10 @@ function EditMember({ member, depts, classLevels, onClose, onSaved }:
               onChange={(e) => setF({ ...f, mfaRequired: e.target.checked })} />
             强制邮箱二次验证
           </label>
-          <div className="hint">密级与封顶不能高于你自己的权限；超过会被服务端拒绝。</div>
+          <div className="hint">
+            密级决定他能<b>看到</b>多高的文件；封顶决定他<b>能授出</b>多高的档位（1–6，默认 4 = 管理者档，即默认不能授出所有者档）。
+            两者都不能高于你自己的权限；超过会被服务端拒绝。
+          </div>
           {err && <div className="error-text">{err}</div>}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button type="button" onClick={onClose}>取消</button>
