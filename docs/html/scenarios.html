@@ -37,7 +37,7 @@
     <h1>把每一步交到对的人手上</h1>
     <p class="subtitle">七个高频场景，每个场景讲清三件事：谁做、怎么做、什么情况下会被拦下来。</p>
     <div class="meta">
-      <span class="chip v">V1.14.2</span>
+      <span class="chip v">V1.14.3</span>
       <span class="chip">适用 <b>所有登录用户（含外部协作者）</b></span>
       <span class="chip">配套 <b>角色能力</b> · <b>管理员手册</b></span>
       <button class="chip" type="button" data-print style="cursor:pointer;font-family:inherit">打印 / 存为 PDF</button>
@@ -421,6 +421,7 @@
       <li>到「文件 → 该空间 → 权限」给一位同事授「管理者」，并确认他的密级不低于这份文件；</li>
       <li>需要所有者确认的文件如果没有密级足够的其他所有者，可把第一层审批人改为空间所有者本人（此时只需一层）；</li>
       <li>或者把文件密级降到阈值以下（走降密审批），之后新建的链接不再需要审批——<b>已 pending 的链接不会自动放行</b>，需要重建。</li>
+      <li><b>怎么提交降密申请</b>：打开文件的「设置密级」面板，点一个<b>低于当前</b>的档位，面板会展开申请表单；填写理由（必填，写入审计）后点「提交降密申请」。安全管理员在「管理台 → 降密审批」处置，通过后密级才真正下调。同一文件同时只能有一条待审批申请。</li>
     </ol>
     <div class="warn">
       <p><b>没有通知</b>：待审批不会主动提醒任何人。需要线下约定"谁每天看一次外发审批"，或者把审批人拉进交付流程。</p>
@@ -611,8 +612,8 @@
 </div>
 
 <footer class="foot">
-  <span>NeuroDMS · 用户手册 · 场景操作 V1.14.2</span>
-  <span>网页版 v1.14.2 · 源文件 docs/29-用户手册-场景操作-v1.14.2.md</span>
+  <span>NeuroDMS · 用户手册 · 场景操作 V1.14.3</span>
+  <span>网页版 v1.14.3 · 源文件 docs/29-用户手册-场景操作-v1.14.3.md</span>
 </footer>
 
 <button class="totop" type="button" aria-label="回到顶部">
