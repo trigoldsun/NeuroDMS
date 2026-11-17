@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -35,6 +36,11 @@ type shareApprover struct {
 	Classification int      `json:"classification"`
 	// Eligible 仅对 owners 有意义：所有者密级不够时仍列出，但不可选。
 	Eligible bool `json:"eligible"`
+	// IneligibleReason 说明"为什么不可选"。
+	//
+	// 没有它时前端只能显示一个灰掉的人，管理员无法判断是密级不够、
+	// 还是账号停用——于是反复试参数（报告里就是这样耗掉一轮复测的）。
+	IneligibleReason string `json:"ineligibleReason,omitempty"`
 }
 
 type shareApprovalPlan struct {
@@ -225,6 +231,9 @@ func (a *API) resolveShareApprovalPlan(ctx context.Context, c auth.Claims, objec
 				continue
 			}
 			o.Eligible = o.Classification >= plan.ObjectClass
+			if !o.Eligible {
+				o.IneligibleReason = fmt.Sprintf("密级 %d 低于文件密级 %d，需先提密", o.Classification, plan.ObjectClass)
+			}
 			plan.Owners = append(plan.Owners, o)
 		}
 		return nil

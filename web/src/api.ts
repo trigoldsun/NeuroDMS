@@ -779,6 +779,9 @@ export function listIntegrations(kind: string): Promise<{
   items: IntegrationSettings[]
   providers: IntegrationProvider[]
   secretAvailable: boolean
+  // 仅 sms 有：租户没配通道时是否还有平台默认通道可用。
+  // 缺了它，界面会把"四家全未配置"读成"短信不可用"。
+  platformFallback?: boolean
 }> {
   return api(`/v1/admin/integrations?kind=${encodeURIComponent(kind)}`)
 }

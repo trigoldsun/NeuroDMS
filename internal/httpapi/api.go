@@ -708,6 +708,15 @@ func writeAuthErr(w http.ResponseWriter, r *http.Request, err error) {
 			auth.ErrSMSUnavailable.Error(), hint)
 	case errors.Is(err, auth.ErrCodeInvalid):
 		write(http.StatusUnauthorized, "SMS_CODE_INVALID")
+	case errors.Is(err, auth.ErrTooManyCodes):
+		// 这是**限流**，不是故障。
+		//
+		// 此前它落到下面的 default，被包装成 500"处理失败"：用户以为是系统坏了，
+		// 运维也无法从状态码区分"发太频繁"与"链路异常"（实测连续 6 次必现）。
+		// 覆盖场景：MFA 验证码、改密验证码、手机号验证都走这里。
+		w.Header().Set("Retry-After", "60")
+		writeErrHint(w, r, http.StatusTooManyRequests, "CODE_TOO_FREQUENT",
+			auth.ErrTooManyCodes.Error(), "请等待一分钟后重试，或改用口令登录")
 	default:
 		writeErr(w, r, http.StatusInternalServerError, "INTERNAL", "处理失败")
 	}

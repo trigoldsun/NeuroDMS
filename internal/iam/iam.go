@@ -906,3 +906,56 @@ func contains(list []string, v string) bool {
 	}
 	return false
 }
+
+// Unlock 清除账号的登录失败计数与锁定截止时间。
+//
+// 为什么必须有这个动作：连续输错 5 次会锁 30 分钟，登录报错里写着
+// "联系管理员提前解锁"——但在没有此方法之前，管理员除了等待无能为力，
+// 提示指向一个不存在的操作。
+//
+// 解锁等于给可能的爆破者追加尝试次数，属安全相关动作，调用方必须写审计。
+// 返回的 bool 表示"调用前确实处于锁定态"，供界面如实提示（避免把
+// "本来就没锁"说成"已解锁"）。
+func (s *Service) Unlock(ctx context.Context, tenantID, actorID, userID string) (Member, bool, error) {
+	if actorID == userID {
+		return Member{}, false, fmt.Errorf("%w: 不能解锁自己，需由他人复核", ErrSelfTarget)
+	}
+	var out Member
+	var wasLocked bool
+	err := db.WithTenant(ctx, s.pool, tenantID, func(tx pgx.Tx) error {
+		actor, e := actorOf(ctx, tx, actorID)
+		if e != nil {
+			return e
+		}
+		if !actor.IsSysAdmin() {
+			return ErrForbidden
+		}
+		if _, e := getMember(ctx, tx, userID); e != nil {
+			return e
+		}
+		// 用 CTE 读"改之前是否锁定"：UPDATE 之后再 RETURNING 拿到的是新值，
+		// 那时 locked_until 已被置空，无法区分"真解锁"与"本来就没事"。
+		if e := tx.QueryRow(ctx, `
+			WITH prev AS (
+				SELECT id, (locked_until IS NOT NULL AND locked_until > now()) AS was
+				  FROM app_user WHERE id = $1
+			)
+			UPDATE app_user a
+			   SET failed_attempts = 0, locked_until = NULL, updated_at = now()
+			  FROM prev
+			 WHERE a.id = prev.id
+			RETURNING prev.was`, userID).Scan(&wasLocked); e != nil {
+			return e
+		}
+		m, e := getMember(ctx, tx, userID)
+		if e != nil {
+			return e
+		}
+		out = m
+		return nil
+	})
+	if err != nil {
+		return Member{}, false, err
+	}
+	return out, wasLocked, nil
+}

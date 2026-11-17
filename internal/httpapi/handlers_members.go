@@ -21,6 +21,8 @@ func (a *API) registerMembers(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/admin/members/{id}", a.requireRole(rbac.SysAdmin)(a.handleMemberGet))
 	mux.HandleFunc("PATCH /v1/admin/members/{id}", a.requireRole(rbac.SysAdmin)(a.handleMemberUpdate))
 	mux.HandleFunc("POST /v1/admin/members/{id}/status", a.requireRole(rbac.SysAdmin)(a.handleMemberStatus))
+	// 提前解锁：登录报错里写着"联系管理员提前解锁"，此前没有对应端点。
+	mux.HandleFunc("POST /v1/admin/members/{id}/unlock", a.requireRole(rbac.SysAdmin)(a.handleMemberUnlock))
 	mux.HandleFunc("POST /v1/admin/members/{id}/password", a.requireRole(rbac.SysAdmin)(a.handleMemberPassword))
 	mux.HandleFunc("DELETE /v1/admin/members/{id}", a.requireRole(rbac.SysAdmin)(a.handleMemberDelete))
 	// 角色授予/撤销复用既有路径（前端与既有测试都在用）
@@ -295,6 +297,28 @@ func (a *API) handleMemberUpdate(w http.ResponseWriter, r *http.Request) {
 		Detail: auditDiff(beforeSnap, memberSnapshot(m)),
 	})
 	writeOK(w, r, m)
+}
+
+// handleMemberUnlock 提前解除"连续失败被锁"的状态。
+//
+// 与停用/启用分开：解锁不改状态、不吊销会话，只是把 failed_attempts 与
+// locked_until 清零——它是"恢复登录能力"，不是"改变账号状态"。
+func (a *API) handleMemberUnlock(w http.ResponseWriter, r *http.Request) {
+	c, _ := claimsFrom(r.Context())
+	id, ok := memberID(w, r)
+	if !ok {
+		return
+	}
+	m, wasLocked, err := a.IAM.Unlock(r.Context(), c.TenantID, c.Subject, id)
+	if err != nil {
+		a.iamErr(w, r, c.TenantID, "admin.member.unlock", id, err)
+		return
+	}
+	a.emitLogged(r, c.TenantID, AuditEntry{
+		ActorID: c.Subject, Action: "admin.member.unlock", ObjectID: id, Result: "ok",
+		Detail: map[string]any{"wasLocked": wasLocked},
+	})
+	writeOK(w, r, map[string]any{"unlocked": wasLocked, "member": m})
 }
 
 func (a *API) handleMemberStatus(w http.ResponseWriter, r *http.Request) {

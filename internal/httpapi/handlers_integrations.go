@@ -83,11 +83,17 @@ func (a *API) handleIntegrationList(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusInternalServerError, "INTERNAL", "读取凭证失败")
 		return
 	}
-	writeOK(w, r, map[string]any{
+	// platformFallback 只对 sms 有意义：租户没配通道时系统会走平台默认通道，
+	// 只显示租户配置会让人误判"短信不可用"（实测发生过：四家全"未配置"但能发）。
+	out := map[string]any{
 		"kind": kind, "items": items, "count": len(items),
 		"secretAvailable": st.Available(),
 		"providers":       st.Registry().ByKind(kind),
-	})
+	}
+	if kind == "sms" && a.SMS != nil {
+		out["platformFallback"] = a.SMS.PlatformReady()
+	}
+	writeOK(w, r, out)
 }
 
 func (a *API) handleIntegrationSave(w http.ResponseWriter, r *http.Request) {

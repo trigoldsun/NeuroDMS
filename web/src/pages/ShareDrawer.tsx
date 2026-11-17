@@ -91,6 +91,10 @@ export default function ShareDrawer({
   const [allowSave, setAllowSave] = useState(false)
   const [allowPrint, setAllowPrint] = useState(false)
   const [watermark, setWatermark] = useState(true)
+  // 手动要求审批：密级没到阈值时，发起人也可以主动加一道审批。
+  // 服务端从 1.11.2 起支持 req.requireApproval（此前手动勾选会建出无人可批的死链），
+  // 但界面一直没有这个勾选框——手册却写着"创建时显式勾选"。
+  const [manualApproval, setManualApproval] = useState(false)
   const [requireVerify, setRequireVerify] = useState(false)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
@@ -115,6 +119,7 @@ export default function ShareDrawer({
 
   useEffect(() => { void loadPlan() }, [loadPlan])
 
+  const needApproval = !!plan?.requireApproval || manualApproval
   const chosen = plan?.approvers.find((a) => a.id === approverId)
   const ownerChoices = (plan?.owners ?? []).filter((o) => o.eligible)
 
@@ -122,7 +127,7 @@ export default function ShareDrawer({
   // 前端不再判断具体等级——阈值是管理员可配的，写死数字会与实际规则脱节。
   // 第一层审批人本身就是所有者时无需第二次确认；发起人本人是所有者时跳过，
   // 否则会变成"要求他审批自己"的死循环。
-  const needOwner = !!plan?.requireApproval
+  const needOwner = needApproval
     && !!plan?.twoLayer
     && !!chosen
     && !chosen.isOwner
@@ -137,7 +142,7 @@ export default function ShareDrawer({
     }
   }, [needOwner, ownerChoices.length, ownerChoices[0]?.id])
 
-  const approvalBlocked = !!plan?.requireApproval && (
+  const approvalBlocked = !!plan && needApproval && (
     plan.approvers.length === 0 ||
     !approverId ||
     noOwnerAvailable ||
@@ -160,7 +165,8 @@ export default function ShareDrawer({
         requireVerify,
         notifyEmails: recipients,
       }
-      if (plan?.requireApproval) {
+      if (needApproval) {
+        payload.requireApproval = true
         payload.approverId = approverId
         if (needOwner && ownerApproverId) payload.ownerApproverId = ownerApproverId
       }
@@ -268,10 +274,12 @@ export default function ShareDrawer({
               </div>
             )}
 
-            {plan?.requireApproval && (
+            {needApproval && plan && (
               <div className="card pad" style={{ marginBottom: 10 }}>
                 <div style={{ fontWeight: 'bold', marginBottom: 6 }}>
-                  需要审批（文件密级 {plan.objectClass} ≥ 阈值 {plan.minClass}）
+                  {plan?.requireApproval
+                    ? `需要审批（文件密级 ${plan.objectClass} ≥ 阈值 ${plan.minClass}）`
+                    : '需要审批（你手动要求）'}
                 </div>
                 {plan.approvers.length === 0 ? (
                   <div className="banner danger" style={{ margin: 0 }}>
@@ -437,6 +445,16 @@ export default function ShareDrawer({
               <input type="checkbox" checked={requireVerify} onChange={(e) => setRequireVerify(e.target.checked)} />
               <span>要求邮箱验证（收件人会用其邮箱接收验证码）</span>
             </label>
+            {!plan?.requireApproval && (
+              <label style={{ display: 'flex', gap: 6, alignItems: 'center', margin: '6px 0' }}>
+                <input
+                  type="checkbox"
+                  checked={manualApproval}
+                  onChange={(e) => setManualApproval(e.target.checked)}
+                />
+                <span>需要审批（由他人放行后才可用；本文件密级未达自动审批阈值）</span>
+              </label>
+            )}
 
             {err && <div className="error" role="alert">{err}</div>}
             <button
@@ -446,7 +464,7 @@ export default function ShareDrawer({
               style={{ width: '100%', marginTop: 8 }}
             >
               {busy ? '正在创建…'
-                : plan?.requireApproval ? '提交审批并生成链接'
+                : needApproval ? '提交审批并生成链接'
                   : recipients.length > 0 ? '创建链接并发送邮件' : '创建链接'}
             </button>
           </>

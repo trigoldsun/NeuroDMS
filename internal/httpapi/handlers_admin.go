@@ -29,6 +29,9 @@ func (a *API) registerAdmin(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /v1/admin/users/{id}", a.requireRole(rbac.SysAdmin)(a.handleDeleteUser))
 	// 审计数据只给审计管理员：系统管理员能改配置，让他同时能读审计就等于取消独立性。
 	mux.HandleFunc("GET /v1/admin/audit/events", a.requireRole(rbac.Auditor)(a.handleAuditEvents))
+	// 审计健康度：断流过一次（11-15 10:50 → 11-16 20:06 CST），当时唯一的发现方式是
+	// "翻列表发现最后一条很旧"。这里给出可被界面与监控直接采集的数字。
+	mux.HandleFunc("GET /v1/admin/audit/health", a.requireRole(rbac.Auditor)(a.handleAuditHealth))
 	mux.HandleFunc("GET /v1/admin/audit/verify", a.requireRole(rbac.Auditor)(a.handleAuditVerify))
 }
 
@@ -247,6 +250,29 @@ func (a *API) handleAdminSummary(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleAuditEvents 审计查询（只读）。
+// handleAuditHealth 返回审计链的写入健康度。
+//
+// 三个数就够判断：最近一次写入时间、近 1 小时条数、近 24 小时条数。
+// 不复用 events 接口：查一次 max + 两个 count 比拉 100 条便宜得多，
+// 而且这两个计数可以被监控系统直接采集。
+func (a *API) handleAuditHealth(w http.ResponseWriter, r *http.Request) {
+	c, _ := claimsFrom(r.Context())
+	var latest *time.Time
+	var last1h, last24h int
+	err := db.WithTenant(r.Context(), a.Pool, c.TenantID, func(tx pgx.Tx) error {
+		return tx.QueryRow(r.Context(), `SELECT max(created_at),
+			       count(*) FILTER (WHERE created_at > now() - interval '1 hour'),
+			       count(*) FILTER (WHERE created_at > now() - interval '24 hours')
+			  FROM audit_event`).Scan(&latest, &last1h, &last24h)
+	})
+	if err != nil {
+		a.logErr("读取审计健康度失败", "err", err)
+		writeErr(w, r, http.StatusInternalServerError, "INTERNAL", "读取审计健康度失败")
+		return
+	}
+	writeOK(w, r, map[string]any{"latestAt": latest, "last1h": last1h, "last24h": last24h})
+}
+
 func (a *API) handleAuditEvents(w http.ResponseWriter, r *http.Request) {
 	c, _ := claimsFrom(r.Context())
 	q := r.URL.Query()

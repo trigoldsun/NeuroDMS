@@ -179,6 +179,23 @@ type DlgState =
   | { kind: 'delete'; node: Node }
   | null
 
+// 预览能力来自服务端能力目录（/v1/meta/formats），前端**不维护自己的白名单**：
+// 两处规则必然漂移，而"不该进转换流程的文件进了转换流程"正是这种漂移的症状。
+// 缓存在模块级：一次会话内扩展名能力不会变，重复请求没有意义。
+let formatsCache: Map<string, string> | null = null
+async function previewModeOf(name: string): Promise<string> {
+  if (!formatsCache) {
+    const d = await api<{ groups?: { items?: { ext: string; preview: string }[] }[] }>('/v1/meta/formats')
+    const m = new Map<string, string>()
+    for (const g of d.groups ?? []) {
+      for (const it of g.items ?? []) m.set(it.ext.toLowerCase(), it.preview)
+    }
+    formatsCache = m
+  }
+  const hit = name.toLowerCase().match(/\.[a-z0-9]+$/)
+  return formatsCache.get(hit ? hit[0] : '') ?? 'none'
+}
+
 export default function Files({ spaceId, folderId }: { spaceId: string; folderId: string }) {
   const [me, setMe] = useState<Me | null>(null)
   const [spaces, setSpaces] = useState<SpaceLite[]>([])
@@ -697,9 +714,26 @@ export default function Files({ spaceId, folderId }: { spaceId: string; folderId
   }
 
   function openNode(n: Node) {
-    if (n.kind === 'folder') navigate(filesPath(activeSpace, n.id))
-    else if (isPlayable(n.mime, n.name)) setMediaTarget(n)
-    else window.open(previewPath(n.id), '_blank', 'noopener')
+    if (n.kind === 'folder') {
+      navigate(filesPath(activeSpace, n.id))
+      return
+    }
+    if (isPlayable(n.mime, n.name)) {
+      setMediaTarget(n)
+      return
+    }
+    // 先问服务端"这个扩展名能不能预览"，再决定是否打开预览页。
+    // 以前直接打开：压缩包等 preview=none 的类型会落到服务端的"转换失败"分支，
+    // 用户看到的是"转换失败，请下载后查看"，误以为文件坏了或服务异常。
+    void previewModeOf(n.name)
+      .then((mode) => {
+        if (mode === 'none') {
+          flash('该格式不支持在线预览，请下载后查看')
+          return
+        }
+        window.open(previewPath(n.id), '_blank', 'noopener')
+      })
+      .catch(() => window.open(previewPath(n.id), '_blank', 'noopener'))
   }
 
   function openDlg(state: DlgState, initial = '') {

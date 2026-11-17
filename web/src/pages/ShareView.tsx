@@ -362,9 +362,31 @@ export default function ShareView({ token }: { token: string }) {
               : <audio src={contentUrl} controls controlsList="nodownload" style={{ width: '100%' }} />
           )}
           {textBody && (
-            <pre className="preview-text" style={{ userSelect: ticket.allowSave ? 'text' : 'none' }}>
-              {textBody}
-            </pre>
+            // 水印内容含票据前缀与时间：票据能反查到审计（服务端记录了该票据的 IP 与动作），
+            // 所以它确实能"溯源"，不是装饰。声明与实现从此一致。
+            <div style={{ position: 'relative' }}>
+              <pre className="preview-text" style={{ userSelect: ticket.allowSave ? 'text' : 'none' }}>
+                {textBody}
+              </pre>
+              {ticket.watermark && (
+                <div
+                  aria-hidden="true"
+                  style={{
+                    position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none',
+                    display: 'flex', flexWrap: 'wrap', gap: '34px 46px',
+                    alignContent: 'center', justifyContent: 'center',
+                    transform: 'rotate(-24deg)', opacity: 0.14,
+                    fontSize: 12, lineHeight: 1.2, color: '#000', userSelect: 'none',
+                  }}
+                >
+                  {Array.from({ length: 40 }).map((_, i) => (
+                    <span key={i} style={{ whiteSpace: 'nowrap' }}>
+                      {watermarkText}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
         {!contentUrl && !textBody && !msg && (
@@ -419,6 +441,10 @@ export default function ShareView({ token }: { token: string }) {
     }
   }, [ticket?.allowSave, ticket?.allowPrint, info, contentUrl, textBody])
 
+  // 水印文本：票据前缀 + 时间。固定一分钟粒度，避免每次渲染都变。
+  const watermarkText = info
+    ? `${String(info.ticket || '').slice(0, 8)} · ${new Date().toLocaleString('zh-CN', { hour12: false })}`
+    : ''
   const wide = !!(contentUrl || textBody || (phase === 'ready' && info))
 
   return (

@@ -133,6 +133,14 @@ func (s *Service) Check(ctx context.Context, tenantID, phone, code string) (bool
 
 // Configured 判断该租户此刻是否具备**可用**的短信通道。
 //
+// PlatformReady 报告平台默认通道是否已装配。
+//
+// 为什么要单独暴露：管理台的「短信通道」页只列**租户级**四家通道，
+// 于是出现"四家全未配置、标签写着不可用，但短信其实能发"的情况
+// （实际走平台默认通道）。界面需要一个字段说明"还有兜底"，
+// 否则运维会按标签判断功能不可用，或反过来以为配置生效了。
+func (s *Service) PlatformReady() bool { return s.platform != nil }
+
 // local 模式还要求有 HMAC 密钥：没有密钥时通道"能发不能验"，
 // 报"已就绪"会让设置页打开一个注定失败的开关。
 func (s *Service) Configured(ctx context.Context, tenantID string) bool {

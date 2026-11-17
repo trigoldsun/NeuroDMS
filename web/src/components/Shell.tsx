@@ -248,8 +248,19 @@ export function Shell({
           <button className="user-card" onClick={() => onOpenAccount?.()}>
             <Avatar name={me?.displayName || me?.username || '?'} size={28} />
             <span className="who">
-              <b>{me?.displayName || me?.username || '未登录'}</b>
-              <small>密级 {me?.classification ?? 0} · 账户设置</small>
+              {/* me 未就绪时不渲染"未登录 / 密级 0"：密级是安全语义，
+                  先显示 0 会误导用户对自身可见范围的判断（实测会持续数秒）。 */}
+              {me ? (
+                <>
+                  <b>{me.displayName || me.username}</b>
+                  <small>密级 {me.classification ?? 0} · 账户设置</small>
+                </>
+              ) : (
+                <>
+                  <b style={{ opacity: 0.5 }}>加载中…</b>
+                  <small style={{ opacity: 0.5 }}>账户设置</small>
+                </>
+              )}
             </span>
             <Icon name="chevronR" size={14} />
           </button>

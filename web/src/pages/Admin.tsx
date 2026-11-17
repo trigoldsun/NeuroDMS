@@ -135,6 +135,10 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
   const [summary, setSummary] = useState<Summary | null>(null)
   const [roles, setRoles] = useState<RoleDef[]>([])
   const [events, setEvents] = useState<AuditEvent[]>([])
+  // 审计健康度：断流过一次，当时只能靠"翻列表发现最后一条很旧"。这里做成常显数字。
+  const [auditHealth, setAuditHealth] = useState<
+    { latestAt?: string | null; last1h: number; last24h: number } | null
+  >(null)
   const [auditFilter, setAuditFilter] = useState({ action: '', result: '' })
   // 展开的是哪一条（按 seq）：审计要能就地看到改前改后，而不是再点一次跳转
   const [openAudit, setOpenAudit] = useState<number | null>(null)
@@ -250,6 +254,10 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
         q.set('limit', '100')
         const d = await api<{ items: AuditEvent[] }>(`/v1/admin/audit/events?${q.toString()}`)
         setEvents(d.items ?? [])
+        // 顺手取健康度：同一个 tab 上就能回答"审计是不是还在写"。
+        const h = await api<{ latestAt?: string | null; last1h: number; last24h: number }>(
+          '/v1/admin/audit/health')
+        setAuditHealth(h)
       }
       if (tab === 'class' || tab === 'policy' || tab === 'approval') {
         // 密级相关页要知道"这个租户有没有密级能力"，否则会给出一套可编辑但
@@ -554,6 +562,30 @@ export default function Admin({ tab: urlTab }: { tab: string }) {
 
           {tab === 'audit' && (
             <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {auditHealth && (() => {
+                const latest = auditHealth.latestAt ? new Date(auditHealth.latestAt) : null
+                const mins = latest ? Math.floor((Date.now() - latest.getTime()) / 60000) : null
+                // 15 分钟无写入就提示：不是"一定断流"（可能确实没业务），但值得看一眼。
+                const stale = mins === null || mins > 15
+                return (
+                  <div
+                    className={`hint`}
+                    style={{
+                      padding: '8px 10px', borderRadius: 6,
+                      border: '1px solid ' + (stale ? 'var(--danger, #c0392b)' : 'var(--line)'),
+                      color: stale ? 'var(--danger, #c0392b)' : undefined,
+                    }}
+                  >
+                    <b>审计链健康</b>
+                    {' · '}
+                    最近写入：{latest ? latest.toLocaleString('zh-CN', { hour12: false }) : '从未写入'}
+                    {mins !== null && `（${mins} 分钟前）`}
+                    {' · '}近 1 小时 {auditHealth.last1h} 条
+                    {' · '}近 24 小时 {auditHealth.last24h} 条
+                    {stale && ' —— 超过 15 分钟无写入，若非无业务操作请检查审计写入链路'}
+                  </div>
+                )
+              })()}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                 <input
                   placeholder="按动作筛选（可留空）"

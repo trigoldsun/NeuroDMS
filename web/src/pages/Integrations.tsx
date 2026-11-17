@@ -28,6 +28,8 @@ export default function Integrations() {
   const [saved, setSaved] = useState<Record<string, IntegrationSettings>>({})
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const [secretAvailable, setSecretAvailable] = useState(true)
+  // 平台默认通道是否装配（仅 sms）：租户四家全"未配置"时，短信其实仍可能能发。
+  const [platformFallback, setPlatformFallback] = useState(false)
   const [results, setResults] = useState<Record<string, IntegrationTestResult>>({})
   const [busy, setBusy] = useState('')
   const [msg, setMsg] = useState('')
@@ -51,6 +53,7 @@ export default function Integrations() {
       setSaved(map)
       setProviders(r.providers ?? [])
       setSecretAvailable(r.secretAvailable)
+      setPlatformFallback(!!r.platformFallback)
       // 用已保存的非密字段回填；密钥永远留空
       const d: Record<string, Draft> = {}
       for (const p of r.providers ?? []) {
@@ -173,6 +176,17 @@ export default function Integrations() {
         </div>
 
         {msg && <div className="hint" style={{ marginBottom: 10 }}>{msg}</div>}
+
+        {kind === 'sms' && platformFallback && !Object.values(saved).some((s) => s.active) && (
+          <div className="card" style={{ padding: 12, marginBottom: 12 }}>
+            <b>当前生效通道：平台默认通道</b>
+            <div className="hint" style={{ marginTop: 4 }}>
+              下面四家是<strong>租户自有</strong>通道，全部未配置时系统会走平台默认通道发送。
+              也就是说：这里显示"未配置"<strong>不等于</strong>短信不可用。
+              要确认实际可用性，请用「测试发送」，或直接观察一次发码结果。
+            </div>
+          </div>
+        )}
         {err && <div className="error-text" style={{ marginBottom: 10 }}>{err}</div>}
 
         {current && current.status !== 'available' && (
