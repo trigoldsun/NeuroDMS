@@ -348,7 +348,10 @@ export default function Members({ roles, meId, meClass }: { roles: RoleDef[]; me
       )}
 
       {editing && (
+        // key 必须随成员变化：抽屉不卸载时 useState 不会重新取初值，
+        // 连续点两个成员的「编辑」会把上一个成员的数据写到新目标上（数据污染）。
         <EditMember
+          key={editing.id}
           member={editing}
           depts={depts}
           classLevels={classLevels}

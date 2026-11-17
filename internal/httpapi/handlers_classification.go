@@ -196,7 +196,7 @@ func (a *API) handleSetClass(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case errors.Is(err, errNeedApproval):
-		writeErr(w, r, http.StatusConflict, "NEED_APPROVAL", "降密需提交申请并通过审批，请使用 /classification/requests")
+		writeErr(w, r, http.StatusConflict, "NEED_APPROVAL", "降密需在密级面板提交申请，由安全管理员审批后生效")
 		return
 	case errors.Is(err, classification.ErrAboveSelf):
 		_ = a.emit(r, c.TenantID, AuditEntry{

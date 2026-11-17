@@ -574,11 +574,34 @@ func (a *API) auditLogin(r *http.Request, tenantID, username string, err error) 
 }
 
 func decode(w http.ResponseWriter, r *http.Request, v any) bool {
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(v); err != nil {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	// 拒绝未知字段。
+	//
+	// 此前用宽松解码，拼错的或不支持的字段会被静默丢弃并返回 200：
+	// 典型后果是 `PATCH /v1/admin/members/{id} {"status":"disabled"}` 看起来成功、
+	// 实际状态没变；`effect:"deny"` 同样被吞。**写入被静默忽略比报错更危险**，
+	// 调用方以为生效了。宁可 400 把字段名说清楚。
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(v); err != nil {
+		if msg, ok := unknownFieldMsg(err); ok {
+			writeErr(w, r, http.StatusBadRequest, "INVALID_ARGUMENT", msg)
+			return false
+		}
 		writeErr(w, r, http.StatusBadRequest, "INVALID_ARGUMENT", "请求体不是合法 JSON")
 		return false
 	}
 	return true
+}
+
+// unknownFieldMsg 把 encoding/json 的 `json: unknown field "x"` 转成可照做的提示。
+// 直接把英文原文抛给用户没有价值，但字段名必须保留——那是唯一能定位问题的线索。
+func unknownFieldMsg(err error) (string, bool) {
+	const prefix = `json: unknown field `
+	msg := err.Error()
+	if !strings.HasPrefix(msg, prefix) {
+		return "", false
+	}
+	return "请求体包含不支持的字段：" + strings.TrimPrefix(msg, prefix) + "（请检查字段名，或该字段在当前版本尚未支持）", true
 }
 
 func writeOK(w http.ResponseWriter, r *http.Request, data any) {

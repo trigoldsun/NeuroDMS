@@ -221,6 +221,11 @@ export default function Files({ spaceId, folderId }: { spaceId: string; folderId
   const [shareTarget, setShareTarget] = useState<Node | null>(null)
   const [versionTarget, setVersionTarget] = useState<Node | null>(null)
   const [classTarget, setClassTarget] = useState<Node | null>(null)
+  // 降密申请：服务端有端点（POST /v1/nodes/{id}/classification/requests），
+  // 但界面一直没有提交入口——点低档位只会收到 409，用户无从下手。
+  const [reqLevel, setReqLevel] = useState<number | null>(null)
+  const [reqReason, setReqReason] = useState('')
+  const [reqBusy, setReqBusy] = useState(false)
   const [moveOpen, setMoveOpen] = useState(false)
   const [versions, setVersions] = useState<VersionLite[]>([])
   const [aclSummary, setAclSummary] = useState<AclSummary | null>(null)
@@ -665,6 +670,29 @@ export default function Files({ spaceId, folderId }: { spaceId: string; folderId
       void loadNodes(activeSpace, parentId)
     } catch (err) {
       flash(err instanceof HttpError ? err.message : '定密失败')
+    }
+  }
+
+  // 提交降密申请：理由必填（会写入审计），审批由安全管理员在「降密审批」页处理。
+  async function submitClassRequest(node: Node) {
+    if (reqLevel === null) return
+    const reason = reqReason.trim()
+    if (!reason) return
+    setReqBusy(true)
+    try {
+      await api(`/v1/nodes/${node.id}/classification/requests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ toLevel: reqLevel, reason }),
+      })
+      flash('已提交降密申请，等待安全管理员审批')
+      setReqLevel(null)
+      setReqReason('')
+      setClassTarget(null)
+    } catch (err) {
+      flash(err instanceof HttpError ? err.message : '提交降密申请失败')
+    } finally {
+      setReqBusy(false)
     }
   }
 
@@ -1440,15 +1468,49 @@ export default function Files({ spaceId, folderId }: { spaceId: string; folderId
                   key={l.level}
                   className={l.level === (classTarget.classification ?? 0) ? 'primary' : ''}
                   style={{ justifyContent: 'space-between', display: 'flex', textAlign: 'left', height: 'auto', padding: '9px 12px' }}
-                  onClick={() => void onSetClass(classTarget, l.level)}
+                  onClick={() => {
+                    const cur = classTarget.classification ?? 0
+                    if (l.level < cur) {
+                      // 降密必须走审批：不发 PUT，直接进入申请表单
+                      setReqLevel(l.level)
+                      setReqReason('')
+                    } else {
+                      void onSetClass(classTarget, l.level)
+                    }
+                  }}
                 >
                   <span><span className={`badge cls-${l.level}`}>{l.name}</span> <span className="hint" style={{ marginLeft: 6 }}>等级 {l.level}</span></span>
                   <span className="hint" style={{ maxWidth: '52%', textAlign: 'right' }}>{l.description}</span>
                 </button>
               ))}
             </div>
-            <div style={{ marginTop: 'auto' }}>
-              <button onClick={() => setClassTarget(null)}>关闭</button>
+            {reqLevel !== null && (
+              <div className="banner" style={{ background: 'var(--surface-2)', marginTop: 8, display: 'block' }}>
+                <div style={{ marginBottom: 6 }}>
+                  <b>申请降低到「{classLabels.find((x) => x.level === reqLevel)?.name ?? reqLevel + ' 级'}」</b>
+                  <span className="hint"> —— 需安全管理员审批后生效</span>
+                </div>
+                <textarea
+                  value={reqReason}
+                  onChange={(e) => setReqReason(e.target.value)}
+                  rows={3}
+                  placeholder="请说明降低密级的理由（必填，会写入审计，审批人据此判断）"
+                  style={{ width: '100%', resize: 'vertical' }}
+                />
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <button
+                    className="primary"
+                    disabled={!reqReason.trim() || reqBusy}
+                    onClick={() => void submitClassRequest(classTarget)}
+                  >
+                    {reqBusy ? '提交中…' : '提交降密申请'}
+                  </button>
+                  <button onClick={() => { setReqLevel(null); setReqReason('') }}>取消</button>
+                </div>
+              </div>
+            )}
+            <div style={{ marginTop: reqLevel === null ? 'auto' : 8 }}>
+              <button onClick={() => { setReqLevel(null); setReqReason(''); setClassTarget(null) }}>关闭</button>
             </div>
           </aside>
         </>

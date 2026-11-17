@@ -134,11 +134,10 @@ export default function ShareView({ token }: { token: string }) {
       const code = body?.code as string | undefined
 
       if (resp.status === 410) return setPhase('gone')
-      // 428 是当前状态码（需要前置条件）；411 兼容旧服务端的响应
-      if (code === 'PASSWORD_REQUIRED' || resp.status === 428 || resp.status === 411) return setPhase('password')
-      // 邮箱验证：428 现在两个关卡共用（口令 / 验证），**必须按 code 判断**，
-      // 只看状态码会把"要口令"误认成"要验证码"。
+      // 428 被两个关卡共用（要口令 / 要邮箱验证），**必须先按 code 分流**。
+      // 反过来先判状态码，会把"要验证"一律拦成口令门，verify 分支永远不可达。
       if (code === 'VERIFY_REQUIRED') return setPhase('verify')
+      if (code === 'PASSWORD_REQUIRED' || resp.status === 428 || resp.status === 411) return setPhase('password')
       if (resp.status === 403 && code === 'PASSWORD_WRONG') {
         setMsg('口令不正确')
         return setPhase('wrong-password')
@@ -193,7 +192,9 @@ export default function ShareView({ token }: { token: string }) {
         body: JSON.stringify({ email, code }),
       })
       const body = await resp.json().catch(() => ({}))
-      if (body?.code === 'PASSWORD_REQUIRED' || resp.status === 428 || resp.status === 411) return setPhase('password')
+      // 这里同样不能把 428 一律当口令门：验证码错误时服务端仍会回 428 + VERIFY_REQUIRED，
+      // 那样会把用户弹回口令输入页，验证流程再也走不完。
+      if (body?.code === 'PASSWORD_REQUIRED' || resp.status === 411) return setPhase('password')
       if (!resp.ok) {
         setMsg(body?.message ?? '验证码不正确或已失效')
         return
