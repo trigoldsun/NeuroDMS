@@ -8,7 +8,7 @@ module.exports = {
   BASE_URL: 'https://ndms.neurongene.cn',
   // 服务端据此判断"是不是小程序通道"：只有已验证手机号的账号才能进。
   CHANNEL: 'mp',
-  VERSION: '1.14.0',
+  VERSION: '1.14.1',
   // 登录前的兜底名称：同一域名下是多租户，未登录时无法知道属于哪个组织，
   // 所以这里只能给一个与租户无关的产品名。登录拿到 tenantSlug 之后，
   // 一律用 /v1/tenant/branding 的 productName 覆盖（见 services/meta.js）。

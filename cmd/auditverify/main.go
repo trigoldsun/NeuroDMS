@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -116,6 +117,18 @@ func main() {
 }
 
 // verifyChain 复算哈希链。
+// normalizeIP 与写入端/导出端保持一致：inet 文本可能带 /32 或 /128 掩码，
+// 而哈希是对裸地址算的。校验器独立实现，因此这条规则必须自己再写一遍。
+func normalizeIP(s string) string {
+	switch {
+	case strings.HasSuffix(s, "/32"):
+		return strings.TrimSuffix(s, "/32")
+	case strings.HasSuffix(s, "/128"):
+		return strings.TrimSuffix(s, "/128")
+	}
+	return s
+}
+
 func verifyChain(events []bundleEvent) []string {
 	var problems []string
 	sort.Slice(events, func(i, j int) bool { return events[i].Seq < events[j].Seq })
@@ -134,7 +147,7 @@ func verifyChain(events []bundleEvent) []string {
 		body, err := json.Marshal(chainRecord{
 			Seq: e.Seq, ActorID: e.ActorID, ActorType: e.ActorType, Action: e.Action,
 			ObjType: e.ObjectType, ObjID: e.ObjectID, Result: e.Result, Detail: detail,
-			IP: e.IP, RequestID: e.RequestID,
+			IP: normalizeIP(e.IP), RequestID: e.RequestID,
 			CreatedAt: created.UTC().Truncate(time.Microsecond).Format(time.RFC3339Nano),
 		})
 		if err != nil {

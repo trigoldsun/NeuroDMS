@@ -80,6 +80,10 @@ func Export(ctx context.Context, pool *pgxpool.Pool, tenantID string, from, to t
 			return nil, err
 		}
 		_ = json.Unmarshal(detail, &e.Detail)
+		// 必须与列表接口一样做这一步：ip::text 会补 /32 或 /128，
+		// 而哈希是对"裸地址"算的。漏掉这一步，导出的证据包 100% 校验失败
+		// （与 audit.go 里 normalizeIPText 注释描述的是同一个坑，这里曾经漏用）。
+		e.IP = normalizeIPText(e.IP)
 		e.CreatedAt = createdAt.UTC().Format(time.RFC3339Nano)
 		b.Events = append(b.Events, e)
 	}
