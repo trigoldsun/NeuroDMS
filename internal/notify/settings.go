@@ -424,12 +424,24 @@ func (s Settings) Dispatcher() (*Dispatcher, error) {
 // 租户也没法在界面上把它改成自己的品牌。
 //
 // brand 来自租户品牌（管理台「系统设置 · 品牌与名称」），为空时退回产品名。
-func DefaultFromName(brand string) string {
-	brand = strings.TrimSpace(brand)
-	if brand == "" {
-		brand = "NeuroDMS"
+func DefaultFromName(brand string) string { return BrandDisplayName(brand) }
+
+// BrandDisplayName 把租户品牌名补成发件人显示名：**企业名 + "文档中心"**。
+//
+// 三条规则，避免历史上出现过的问题：
+//   - 空品牌 → "NeuroDMS文档中心"（不能让显示名退化成邮箱地址）；
+//   - 已经以"文档中心"/"文档管理系统"结尾 → 原样返回。曾经有租户把品牌名
+//     直接填成"文档中心"，无脑拼接会变成"文档中心文档中心"；
+//   - 其余情况追加"文档中心"（如"森莘科创" → "森莘科创文档中心"）。
+func BrandDisplayName(brand string) string {
+	b := strings.TrimSpace(brand)
+	if b == "" {
+		b = "NeuroDMS"
 	}
-	return "【" + brand + "文档管理系统】"
+	if strings.HasSuffix(b, "文档中心") || strings.HasSuffix(b, "文档管理系统") {
+		return b
+	}
+	return b + "文档中心"
 }
 
 // formatFrom 组装 From 头。非 ASCII 显示名必须 RFC 2047 编码，

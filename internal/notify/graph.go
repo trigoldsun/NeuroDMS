@@ -92,12 +92,16 @@ func (s *GraphSender) Send(ctx context.Context, m Message) error {
 		},
 		"saveToSentItems": true,
 	}
-	if strings.TrimSpace(s.cfg.FromName) != "" {
+	fromName := strings.TrimSpace(m.FromName)
+	if fromName == "" {
+		fromName = strings.TrimSpace(s.cfg.FromName)
+	}
+	if fromName != "" {
 		// 只改显示名，不改地址：Graph 不允许把 from 设成非发件人邮箱
 		payload["message"].(map[string]any)["from"] = map[string]any{
 			"emailAddress": map[string]any{
 				"address": s.cfg.Sender,
-				"name":    s.cfg.FromName,
+				"name":    fromName,
 			},
 		}
 	}

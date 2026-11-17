@@ -125,7 +125,7 @@ func TestBrandingDrivesMailFromName(t *testing.T) {
 
 	// 先读默认：显示名由系统名称生成
 	_, body := getJSON(t, srv.URL+"/v1/admin/mail", tok)
-	if got, _ := dataMap(t, body)["effectiveFromName"].(string); !contains(got, "文档管理系统") {
+	if got, _ := dataMap(t, body)["effectiveFromName"].(string); !contains(got, "文档中心") {
 		t.Fatalf("应给出默认发件人显示名，实际 %q", got)
 	}
 
@@ -137,7 +137,7 @@ func TestBrandingDrivesMailFromName(t *testing.T) {
 	}
 
 	_, body = getJSON(t, srv.URL+"/v1/admin/mail", tok)
-	if got, _ := dataMap(t, body)["effectiveFromName"].(string); got != "【森莘文档管理系统】" {
+	if got, _ := dataMap(t, body)["effectiveFromName"].(string); got != "森莘文档中心" {
 		t.Fatalf("发件人显示名应跟随系统名称，实际 %q", got)
 	}
 }

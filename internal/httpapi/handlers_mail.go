@@ -249,9 +249,13 @@ func (a *API) handleTestMail(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
 	defer cancel()
+	// 测试邮件的发件名与主题也用品牌显示名：硬编码 "NeuroDMS" 会让客户在
+	// 租户品牌下收到一封"看起来不是自己系统发的"测试信。
+	dispName := notify.BrandDisplayName(s.FromName)
 	msg := notify.Message{
-		To:      to,
-		Subject: "NeuroDMS 邮件通道测试",
+		To:       to,
+		FromName: dispName,
+		Subject:  dispName + " 邮件通道测试",
 		Text: fmt.Sprintf("这是一封测试邮件。\n\n如果你在 %s 收到它，说明当前邮件配置可用。\n通道：%s\n发件人：%s\n",
 			time.Now().Format("2006-01-02 15:04:05"), channel, firstNonEmpty(s.FromAddr, s.GraphSender)),
 		ReplyTo: s.ReplyTo,

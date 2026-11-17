@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"mime"
 	"net"
+	"net/mail"
 	"net/smtp"
 	"strconv"
 	"strings"
@@ -57,6 +58,14 @@ func NewSMTPSender(cfg SMTPConfig) (*SMTPSender, error) {
 }
 
 // Name 实现 Sender。
+// addrOf 取出 From 串里的纯地址（"名字 <a@b>" 或 "a@b"）。
+func addrOf(from string) string {
+	if a, err := mail.ParseAddress(from); err == nil {
+		return a.Address
+	}
+	return from
+}
+
 func (s *SMTPSender) Name() string { return "smtp" }
 
 // Send 发送一封邮件。
@@ -64,7 +73,13 @@ func (s *SMTPSender) Send(ctx context.Context, m Message) error {
 	if err := validate(m); err != nil {
 		return err
 	}
-	raw := BuildMIME(s.cfg.From, m)
+	// 显示名优先用消息自带的（按租户品牌），其次用通道配置里的 from 串。
+	// 平台默认通道只在配置里放了地址，不覆盖的话收件人只会看到一个邮箱。
+	from := s.cfg.From
+	if name := strings.TrimSpace(m.FromName); name != "" {
+		from = formatFrom(name, addrOf(s.cfg.From))
+	}
+	raw := BuildMIME(from, m)
 
 	addr := net.JoinHostPort(s.cfg.Host, strconv.Itoa(s.cfg.Port))
 	dialer := &net.Dialer{Timeout: s.cfg.Timeout}

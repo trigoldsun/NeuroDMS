@@ -47,15 +47,19 @@ func (m *CodeMailer) SendCode(ctx context.Context, tenantID, to, purpose, code s
 			brand = b
 		}
 	}
+	// 显示名与主题统一走同一规则（企业名 + 文档中心），
+	// 避免"发件人一个名字、主题另一个名字"。
+	display := notify.BrandDisplayName(brand)
 	msg := notify.Message{
-		To:      to,
-		Subject: "【" + brand + "】验证码",
+		To:       to,
+		FromName: display,
+		Subject:  "【" + display + "】验证码",
 		Text: fmt.Sprintf("您在%s的验证码是 %s，%d 分钟内有效。\n如非本人操作，请忽略本邮件。",
-			brand, code, 10),
+			display, code, 10),
 		HTML: fmt.Sprintf(
 			`<p>您在 <strong>%s</strong> 的验证码是 <strong style="font-size:20px;letter-spacing:2px">%s</strong></p>`+
 				`<p style="color:#666">10 分钟内有效。如非本人操作，请忽略本邮件。</p>`,
-			html.EscapeString(brand), code),
+			html.EscapeString(display), code),
 	}
 	return m.Direct.SendSync(ctx, tenantID, msg, purpose, nil)
 }
